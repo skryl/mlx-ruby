@@ -40,6 +40,8 @@ build = JSON.parse(File.read(BUILD_FILE))
 build_ok = build.fetch("checks").values.all?
 
 summary = {
+  "top_level_missing_in_ruby" => api.fetch("diff").fetch("top_level_missing_in_ruby").length,
+  "top_level_extra_in_ruby" => api.fetch("diff").fetch("top_level_extra_in_ruby").length,
   "core_missing_in_ruby" => api.fetch("diff").fetch("core_missing_in_ruby").length,
   "core_extra_in_ruby" => api.fetch("diff").fetch("core_extra_in_ruby").length,
   "array_missing_in_ruby" => api.fetch("diff").fetch("array_missing_in_ruby").length,
@@ -47,15 +49,30 @@ summary = {
   "signature_missing_from_ruby" => sig.fetch("diff").fetch("missing_from_ruby").length
 }
 
+top_level_module_parity = summary["top_level_missing_in_ruby"].zero?
+core_name_parity = summary["core_missing_in_ruby"].zero?
+array_name_parity = summary["array_missing_in_ruby"].zero?
+core_signature_name_parity = summary["signature_missing_from_ruby"].zero?
+overall_parity =
+  build_ok &&
+  top_level_module_parity &&
+  core_name_parity &&
+  array_name_parity &&
+  core_signature_name_parity
+
 payload = {
   "generated_at" => Time.now.utc.iso8601,
   "summary" => summary,
   "checks" => {
     "build_stability_contract" => build_ok,
-    "core_name_parity" => summary["core_missing_in_ruby"].zero?,
-    "core_signature_name_parity" => summary["signature_missing_from_ruby"].zero?
+    "top_level_module_parity" => top_level_module_parity,
+    "core_name_parity" => core_name_parity,
+    "array_name_parity" => array_name_parity,
+    "core_signature_name_parity" => core_signature_name_parity,
+    "overall_parity" => overall_parity
   },
   "gaps" => {
+    "top_level_missing_in_ruby" => api.fetch("diff").fetch("top_level_missing_in_ruby"),
     "core_missing_in_ruby" => api.fetch("diff").fetch("core_missing_in_ruby"),
     "array_missing_in_ruby" => api.fetch("diff").fetch("array_missing_in_ruby"),
     "signature_missing_from_ruby" => sig.fetch("diff").fetch("missing_from_ruby")
