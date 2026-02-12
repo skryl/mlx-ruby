@@ -45,10 +45,20 @@ class Phase52RandomExtendedTest < Minitest::Test
   end
 
   def test_multivariate_normal
-    mean = MLX::Core.array([0.0, 0.0], MLX::Core.float32)
-    cov = MLX::Core.array([[1.0, 0.0], [0.0, 1.0]], MLX::Core.float32)
+    with_cpu_default_device do
+      mean = MLX::Core.array([0.0, 0.0], MLX::Core.float32)
+      cov = MLX::Core.array([[1.0, 0.0], [0.0, 1.0]], MLX::Core.float32)
 
-    out = MLX::Core.multivariate_normal(mean, cov, [5], MLX::Core.float32)
-    assert_equal [5, 2], out.shape
+      out = MLX::Core.multivariate_normal(mean, cov, [5], MLX::Core.float32)
+      assert_equal [5, 2], out.shape
+    end
+  end
+
+  def with_cpu_default_device
+    previous_device = MLX::Core.default_device
+    MLX::Core.set_default_device(MLX::Core.cpu)
+    yield
+  ensure
+    MLX::Core.set_default_device(previous_device) if previous_device
   end
 end

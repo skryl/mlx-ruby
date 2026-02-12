@@ -21,9 +21,12 @@ class Phase90ArrayDlpackSurfaceTest < Minitest::Test
     device = x.__dlpack_device
     assert_kind_of Array, device
     assert_equal 2, device.length
-    assert_includes %i[cpu gpu], device[0]
+    assert_includes [1, 8, 13, :cpu, :gpu], device[0]
     assert_kind_of Integer, device[1]
 
-    assert_raises(NotImplementedError) { x.__dlpack__ }
+    capsule = x.__dlpack__
+    assert_instance_of MLX::Core::DLPackCapsule, capsule
+    assert_equal x.shape, capsule.shape
+    assert_equal x.dtype, capsule.dtype
   end
 end

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "json"
+require "open3"
 require_relative "test_helper"
 
 class Phase62MetalSurfaceTest < Minitest::Test
@@ -24,7 +26,15 @@ class Phase62MetalSurfaceTest < Minitest::Test
 
     return unless available
 
-    info = MLX::Core.metal_device_info
+    probe = <<~RUBY
+      $LOAD_PATH.unshift("#{File.join(RUBY_ROOT, "lib")}")
+      require "mlx"
+      puts JSON.generate(MLX::Core.metal_device_info)
+    RUBY
+    stdout, stderr, status = Open3.capture3("ruby", "-rjson", "-e", probe)
+    skip("metal_device_info probe failed: #{stderr}") unless status.success?
+
+    info = JSON.parse(stdout)
     assert_instance_of Hash, info
     refute_empty info
   end

@@ -545,11 +545,18 @@ static mx::array tensor_array_from_ruby(VALUE value, const std::optional<mx::Dty
   std::vector<double> data;
   infer_shape_and_flatten(value, 0, shape, data);
 
-  mx::array a(data.begin(), shape, mx::float64);
-  if (dtype.has_value()) {
-    a = mx::astype(std::move(a), dtype.value());
-  } else {
-    a = mx::astype(std::move(a), mx::float32);
+  mx::Dtype target_dtype = dtype.value_or(mx::float32);
+  mx::Dtype build_dtype = target_dtype;
+
+  // MLX does not support float64 on GPU. Build with float32 and cast only
+  // when a different target dtype was explicitly requested.
+  if (build_dtype == mx::float64) {
+    build_dtype = mx::float32;
+  }
+
+  mx::array a(data.begin(), shape, build_dtype);
+  if (target_dtype != build_dtype) {
+    a = mx::astype(std::move(a), target_dtype);
   }
   return a;
 }
@@ -1776,14 +1783,19 @@ static VALUE array_alloc(VALUE klass) {
 }
 
 static VALUE array_initialize(int argc, VALUE* argv, VALUE self) {
-  VALUE value;
-  VALUE dtype;
-  rb_scan_args(argc, argv, "11", &value, &dtype);
+  try {
+    VALUE value;
+    VALUE dtype;
+    rb_scan_args(argc, argv, "11", &value, &dtype);
 
-  ArrayWrapper* wrapper = nullptr;
-  TypedData_Get_Struct(self, ArrayWrapper, &array_data_type, wrapper);
-  wrapper->array = array_from_ruby(value, optional_dtype_from_value(dtype));
-  return self;
+    ArrayWrapper* wrapper = nullptr;
+    TypedData_Get_Struct(self, ArrayWrapper, &array_data_type, wrapper);
+    wrapper->array = array_from_ruby(value, optional_dtype_from_value(dtype));
+    return self;
+  } catch (const std::exception& error) {
+    raise_std_exception(error);
+    return Qnil;
+  }
 }
 
 static VALUE array_ndim(VALUE self) {
@@ -2082,10 +2094,15 @@ static VALUE array_aref(VALUE self, VALUE index) {
 }
 
 static VALUE core_array(int argc, VALUE* argv, VALUE) {
-  VALUE value;
-  VALUE dtype;
-  rb_scan_args(argc, argv, "11", &value, &dtype);
-  return array_wrap(array_from_ruby(value, optional_dtype_from_value(dtype)));
+  try {
+    VALUE value;
+    VALUE dtype;
+    rb_scan_args(argc, argv, "11", &value, &dtype);
+    return array_wrap(array_from_ruby(value, optional_dtype_from_value(dtype)));
+  } catch (const std::exception& error) {
+    raise_std_exception(error);
+    return Qnil;
+  }
 }
 
 static VALUE core_broadcast_shapes(int argc, VALUE* argv, VALUE) {

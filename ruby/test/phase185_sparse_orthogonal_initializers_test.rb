@@ -25,21 +25,33 @@ class Phase185SparseOrthogonalInitializersTest < Minitest::Test
   end
 
   def test_orthogonal_initializer_returns_orthogonal_matrix_scaled_by_gain
-    ref = MLX::Core.zeros([3, 3], MLX::Core.float32)
-    gain = 1.5
-    init = MLX::NN.orthogonal(gain: gain, dtype: MLX::Core.float32)
+    with_cpu_default_device do
+      ref = MLX::Core.zeros([3, 3], MLX::Core.float32)
+      gain = 1.5
+      init = MLX::NN.orthogonal(gain: gain, dtype: MLX::Core.float32)
 
-    q = init.call(ref)
-    qtq = MLX::Core.matmul(q.T, q).to_a
+      q = init.call(ref)
+      qtq = MLX::Core.matmul(q.T, q).to_a
 
-    3.times do |i|
-      3.times do |j|
-        if i == j
-          assert_in_delta gain * gain, qtq[i][j], 1e-2
-        else
-          assert_in_delta 0.0, qtq[i][j], 1e-2
+      3.times do |i|
+        3.times do |j|
+          if i == j
+            assert_in_delta gain * gain, qtq[i][j], 1e-2
+          else
+            assert_in_delta 0.0, qtq[i][j], 1e-2
+          end
         end
       end
     end
+  end
+
+  private
+
+  def with_cpu_default_device
+    previous_device = MLX::Core.default_device
+    MLX::Core.set_default_device(MLX::Core.cpu)
+    yield
+  ensure
+    MLX::Core.set_default_device(previous_device) if previous_device
   end
 end

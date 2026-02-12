@@ -7,9 +7,12 @@ class Phase55LinalgDecompositionsTest < Minitest::Test
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
+    @previous_device = MLX::Core.default_device
+    MLX::Core.set_default_device(MLX::Core.cpu)
   end
 
   def teardown
+    MLX::Core.set_default_device(@previous_device) if defined?(@previous_device) && @previous_device
     $LOAD_PATH.delete(File.join(RUBY_ROOT, "lib"))
   end
 
