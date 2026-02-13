@@ -1,10 +1,19 @@
 # frozen_string_literal: true
 
 require "rake"
+require "rake/clean"
 require "rake/file_list"
 require "rake/testtask"
+require "rbconfig"
 require "timeout"
-require_relative "tasks/benchmark_task"
+
+CLEAN.include(
+  "ext/mlx/build",
+  "ext/mlx/Makefile",
+  "ext/mlx/native.o",
+  "ext/mlx/native.bundle",
+  "ext/mlx/native.bundle.dSYM"
+)
 
 def strict_test_timeout_seconds
   value = ENV.fetch("MLX_TEST_TIMEOUT", "10").to_i
@@ -83,7 +92,21 @@ else
   end
 end
 
+desc "Build native extension."
+task :build do
+  ext_dir = File.expand_path("ext/mlx", __dir__)
+  make = ENV.fetch("MAKE", RbConfig::CONFIG["MAKE"] || "make")
+
+  sh RbConfig.ruby, "extconf.rb", chdir: ext_dir
+  sh make, chdir: ext_dir
+end
+
 namespace :benchmark do
+  def self.task_class
+    require_relative "tasks/benchmark_task"
+    BenchmarkTask
+  end
+
   def self.options
     raw_device = ENV.fetch("DEVICE", "gpu").downcase
     compute_device = raw_device == "metal" ? "gpu" : raw_device
@@ -107,31 +130,31 @@ namespace :benchmark do
 
   desc "Compare Ruby and Python transformer implementations."
   task :transformer do
-    task = BenchmarkTask.new(**options)
+    task = task_class.new(**options)
     task.run(model: :transformer)
   end
 
   desc "Compare Ruby and Python CNN implementations."
   task :cnn do
-    task = BenchmarkTask.new(**options)
+    task = task_class.new(**options)
     task.run(model: :cnn)
   end
 
   desc "Compare Ruby and Python MLP implementations."
   task :mlp do
-    task = BenchmarkTask.new(**options)
+    task = task_class.new(**options)
     task.run(model: :mlp)
   end
 
   desc "Compare Ruby and Python RNN implementations."
   task :rnn do
-    task = BenchmarkTask.new(**options)
+    task = task_class.new(**options)
     task.run(model: :rnn)
   end
 
   desc "Compare Ruby and Python GPT-2 implementation (Karpathy tiny-shakespeare full training loop)."
   task :karpathy_gpt2 do
-    task = BenchmarkTask.new(**options)
+    task = task_class.new(**options)
     task.run(model: :karpathy_gpt2)
   end
 
