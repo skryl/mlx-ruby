@@ -371,20 +371,6 @@ ruby -e 'require "rbconfig"; puts RbConfig::CONFIG["host_cpu"]'
 
 CI currently runs on `ubuntu-22.04` and `macos-14` with Ruby `3.3`.
 
-## Citing MLX
-
-If MLX is useful in your research, you can cite:
-
-```text
-@software{mlx2023,
-  author = {Awni Hannun and Jagrit Digani and Angelos Katharopoulos and Ronan Collobert},
-  title = {{MLX}: Efficient and flexible machine learning on Apple silicon},
-  url = {https://github.com/ml-explore},
-  version = {0.0},
-  year = {2023},
-}
-```
-
 ## License
 
-`mlx` gem is distributed under the MIT license (see `mlx/LICENSE`).
+`mlx` gem is distributed under the MIT license (see `LICENSE`).
