@@ -30,7 +30,7 @@ class DslTrainerUnitTest < Minitest::Test
   end
 
   class FakeModel
-    attr_reader :checkpoints
+    attr_reader :checkpoints, :step
 
     def initialize(losses)
       @step = FakeStep.new(losses)
@@ -45,6 +45,20 @@ class DslTrainerUnitTest < Minitest::Test
     def save_checkpoint(path, optimizer:, metadata:)
       @checkpoints << { path: path, optimizer: optimizer, metadata: metadata }
       path
+    end
+  end
+
+  class OneShotDataset
+    def initialize(batches)
+      @batches = batches
+      @consumed = false
+    end
+
+    def each
+      return if @consumed
+
+      @consumed = true
+      @batches.each { |batch| yield batch }
     end
   end
 
@@ -248,6 +262,127 @@ class DslTrainerUnitTest < Minitest::Test
     assert_equal 2.0, report.fetch("best_metric")
     assert_equal 2.0, report.fetch("epochs")[0].fetch("monitor_value")
     assert_equal 3.0, report.fetch("epochs")[1].fetch("monitor_value")
+  end
+
+  def test_fit_supports_train_transform_for_raw_batches
+    model = FakeModel.new([FakeLoss.new(1.0), FakeLoss.new(2.0)])
+    trainer = MLX::DSL::Trainer.new(model: model, optimizer: :opt) { 0 }
+
+    trainer.fit(
+      ["a", "b"],
+      epochs: 1,
+      train_transform: lambda do |batch, epoch:, batch_index:, kind:, trainer:|
+        {
+          x: "#{batch}-#{epoch}-#{batch_index}-#{kind}",
+          who: trainer.class.name
+        }
+      end
+    )
+
+    assert_equal [[], { x: "a-0-0-train", who: "MLX::DSL::Trainer" }], model.step.calls[0]
+    assert_equal [[], { x: "b-0-1-train", who: "MLX::DSL::Trainer" }], model.step.calls[1]
+  end
+
+  def test_fit_report_supports_validation_transform
+    model = FakeModel.new([FakeLoss.new(7.0), FakeLoss.new(8.0)])
+    trainer = MLX::DSL::Trainer.new(model: model, optimizer: :opt) { |x:| x.to_f }
+
+    report = trainer.fit_report(
+      [{ x: 0.0 }],
+      epochs: 2,
+      validation_data: ->(epoch:) { [[1.0], [3.0]] },
+      validation_reduce: :mean,
+      validation_transform: ->(batch, epoch:) { { x: batch.fetch(0) + epoch } },
+      monitor: :val_loss
+    )
+
+    assert_equal 2.0, report.fetch("epochs")[0].fetch("val_loss")
+    assert_equal 3.0, report.fetch("epochs")[1].fetch("val_loss")
+  end
+
+  def test_dataset_factory_supports_mixed_positional_and_keyword_signature
+    model = FakeModel.new([FakeLoss.new(1.0), FakeLoss.new(2.0)])
+    trainer = MLX::DSL::Trainer.new(model: model, optimizer: :opt) { 0 }
+
+    seen = []
+    dataset = lambda do |epoch, kind:|
+      seen << [epoch, kind]
+      [{ x: epoch + 1 }]
+    end
+
+    report = trainer.fit_report(dataset, epochs: 2)
+
+    assert_equal [[0, :train], [1, :train]], seen
+    assert_equal 2, report.fetch("epochs").length
+  end
+
+  def test_fit_report_can_disable_batch_loss_retention
+    model = FakeModel.new([FakeLoss.new(4.0), FakeLoss.new(2.0)])
+    trainer = MLX::DSL::Trainer.new(model: model, optimizer: :opt) { 0 }
+
+    report = trainer.fit_report(
+      [{ x: 1 }, { x: 2 }],
+      epochs: 1,
+      keep_losses: false
+    )
+
+    assert_equal [], report.fetch("losses")
+    assert_equal false, report.fetch("losses_kept")
+    assert_equal 3.0, report.fetch("epochs")[0].fetch("epoch_loss")
+  end
+
+  def test_strict_data_reuse_raises_for_exhausted_non_rewindable_dataset
+    model = FakeModel.new([FakeLoss.new(1.0)])
+    trainer = MLX::DSL::Trainer.new(model: model, optimizer: :opt) { 0 }
+
+    error = assert_raises(ArgumentError) do
+      trainer.fit_report(
+        OneShotDataset.new([{ x: 1 }]),
+        epochs: 2,
+        strict_data_reuse: true
+      )
+    end
+
+    assert_match(/exhausted/i, error.message)
+  end
+
+  def test_strict_data_reuse_allows_dataset_factory
+    model = FakeModel.new([FakeLoss.new(1.0), FakeLoss.new(2.0)])
+    trainer = MLX::DSL::Trainer.new(model: model, optimizer: :opt) { 0 }
+
+    report = trainer.fit_report(
+      ->(epoch:) { [{ x: epoch }] },
+      epochs: 2,
+      strict_data_reuse: true
+    )
+
+    assert_equal 1, report.fetch("epochs")[0].fetch("batches")
+    assert_equal 1, report.fetch("epochs")[1].fetch("batches")
+  end
+
+  def test_validation_hook_helper_methods_register_callbacks
+    model = FakeModel.new([FakeLoss.new(2.0)])
+    trainer = MLX::DSL::Trainer.new(model: model, optimizer: :opt) { |x:| x.to_f }
+
+    seen = []
+    chained = trainer
+      .before_validation { |ctx| seen << [:before_validation, ctx.fetch(:epoch)] }
+      .after_validation_batch { |ctx| seen << [:after_validation_batch, ctx.fetch(:batch_index), ctx.fetch(:loss_value)] }
+      .after_validation { |ctx| seen << [:after_validation, ctx.fetch(:epoch), ctx.fetch(:val_loss)] }
+
+    assert_same trainer, chained
+
+    trainer.fit_report(
+      [{ x: 0.0 }],
+      epochs: 1,
+      validation_data: [[1.0], [3.0]],
+      validation_transform: ->(batch) { { x: batch.fetch(0) } }
+    )
+
+    assert_includes seen, [:before_validation, 0]
+    assert_includes seen, [:after_validation_batch, 0, 1.0]
+    assert_includes seen, [:after_validation_batch, 1, 3.0]
+    assert_includes seen, [:after_validation, 0, 2.0]
   end
 end
 

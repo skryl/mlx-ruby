@@ -97,7 +97,7 @@ module MLX
           layer(name, factory, &block)
         end
 
-        def param(name, shape:, init: nil, dtype: MLX::Core.float32)
+        def param(name, shape:, init: nil, dtype: UNSET)
           dsl_declarations << {
             kind: :param,
             name: name.to_s,
@@ -107,7 +107,7 @@ module MLX
           }
         end
 
-        def buffer(name, shape:, init: nil, dtype: MLX::Core.float32)
+        def buffer(name, shape:, init: nil, dtype: UNSET)
           dsl_declarations << {
             kind: :buffer,
             name: name.to_s,
@@ -297,7 +297,7 @@ module MLX
 
       def __dsl_build_array(decl, default_fill:)
         shape = __dsl_resolve_shape(decl[:shape])
-        dtype = __dsl_resolve_callable(decl[:dtype])
+        dtype = __dsl_resolve_dtype(decl[:dtype])
         init = decl[:init]
 
         value = if init.nil?
@@ -311,6 +311,25 @@ module MLX
         end
 
         value.is_a?(MLX::Core::Array) ? value : MLX::Core.array(value, dtype)
+      end
+
+      def __dsl_resolve_dtype(dtype)
+        return __dsl_default_dtype if dtype.equal?(UNSET)
+
+        __dsl_resolve_callable(dtype)
+      end
+
+      def __dsl_default_dtype
+        if defined?(MLX::Core) && MLX::Core.respond_to?(:float32)
+          return MLX::Core.float32
+        end
+
+        error_class = if defined?(MLX::Core) && defined?(MLX::Core::NativeUnavailableError)
+          MLX::Core::NativeUnavailableError
+        else
+          RuntimeError
+        end
+        raise error_class, "MLX native extension is required to initialize DSL params/buffers"
       end
 
       def __dsl_resolve_shape(shape)

@@ -20,12 +20,26 @@ module TestSupport
     makefile_path = File.join(ext_dir, "Makefile")
     bundle_path = File.join(ext_dir, "native.#{RbConfig::CONFIG.fetch('DLEXT', 'bundle')}")
 
+    if reuse_loadable_native_bundle_without_sources?(bundle_path)
+      @native_built = true
+      return
+    end
+
     if native_build_required?(bundle_path)
       run_cmd!(%w[ruby extconf.rb], ext_dir) if makefile_stale?(makefile_path)
       run_cmd!(%w[make], ext_dir)
     end
 
     @native_built = true
+  end
+
+  def reuse_loadable_native_bundle_without_sources?(bundle_path)
+    return false if ENV["MLX_RUBY_FORCE_REBUILD"] == "1"
+    return false unless native_build_required?(bundle_path)
+    return false unless native_bundle_loadable?(bundle_path)
+    return false if native_rebuild_sources_available?
+
+    true
   end
 
   def makefile_stale?(makefile_path)
@@ -40,6 +54,26 @@ module TestSupport
     return true unless File.exist?(bundle_path)
 
     File.mtime(bundle_path) < newest_native_input_mtime
+  end
+
+  def native_bundle_loadable?(bundle_path)
+    return false unless File.exist?(bundle_path)
+
+    begin
+      require bundle_path
+    rescue LoadError
+      begin
+        require File.join(RUBY_ROOT, "ext", "mlx", "native")
+      rescue LoadError
+        return false
+      end
+    end
+
+    defined?(MLX::Native) && MLX::Native.respond_to?(:loaded?) && MLX::Native.loaded?
+  end
+
+  def native_rebuild_sources_available?
+    File.exist?(File.join(REPO_ROOT, "mlx", "CMakeLists.txt"))
   end
 
   def newest_native_input_mtime

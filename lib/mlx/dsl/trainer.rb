@@ -7,6 +7,9 @@ module MLX
         before_fit
         before_epoch
         after_batch
+        before_validation
+        after_validation_batch
+        after_validation
         after_epoch
         checkpoint
         after_fit
@@ -49,18 +52,26 @@ module MLX
         metric: nil,
         validation_data: nil,
         validation_reduce: nil,
+        train_transform: nil,
+        validation_transform: nil,
         checkpoint_path: nil,
         save_best: false,
         monitor_mode: :min,
         patience: nil,
         min_delta: 0.0,
+        keep_losses: true,
+        strict_data_reuse: false,
         metadata: {}
       )
+        keep_losses = !!keep_losses
+        strict_data_reuse = !!strict_data_reuse
         losses = []
         epoch_rows = []
         best_metric = nil
         stale_epochs = 0
         stopped_early = false
+        previous_train_batches = nil
+        previous_validation_batches = nil
         monitor_name = monitor.to_s
         patience_value = __dsl_normalize_patience(patience)
         min_delta_value = __dsl_normalize_min_delta(min_delta)
@@ -86,8 +97,15 @@ module MLX
           __dsl_dataset_for_epoch(dataset, epoch: epoch, kind: :train).each do |batch|
             break if !limit.nil? && index >= limit
 
+            batch = __dsl_apply_batch_transform(
+              train_transform,
+              batch,
+              epoch: epoch,
+              batch_index: index,
+              kind: :train
+            )
             loss = __dsl_run_batch(batch)
-            losses << loss
+            losses << loss if keep_losses
             scalar = __dsl_loss_scalar(loss)
             epoch_losses << scalar unless scalar.nil?
             emit(
@@ -102,21 +120,73 @@ module MLX
             )
             index += 1
           end
+          __dsl_validate_data_reuse!(
+            strict: strict_data_reuse,
+            dataset: dataset,
+            kind: :train,
+            epoch: epoch,
+            previous_batches: previous_train_batches,
+            current_batches: index
+          )
+          previous_train_batches = index
 
           epoch_metric = __dsl_reduce_values(epoch_losses, reduce)
           validation_losses = []
           validation_batch_count = 0
           val_metric = nil
           unless validation_data.nil?
+            emit(
+              :before_validation,
+              {
+                epoch: epoch,
+                model: @model,
+                monitor_name: monitor_name
+              }
+            )
             __dsl_with_eval_mode do
               __dsl_dataset_for_epoch(validation_data, epoch: epoch, kind: :validation).each do |batch|
+                batch = __dsl_apply_batch_transform(
+                  validation_transform,
+                  batch,
+                  epoch: epoch,
+                  batch_index: validation_batch_count,
+                  kind: :validation
+                )
                 loss = __dsl_run_validation_batch(batch)
                 scalar = __dsl_loss_scalar(loss)
                 validation_losses << scalar unless scalar.nil?
+                emit(
+                  :after_validation_batch,
+                  {
+                    epoch: epoch,
+                    batch_index: validation_batch_count,
+                    loss: loss,
+                    loss_value: scalar,
+                    model: @model
+                  }
+                )
                 validation_batch_count += 1
               end
             end
+            __dsl_validate_data_reuse!(
+              strict: strict_data_reuse,
+              dataset: validation_data,
+              kind: :validation,
+              epoch: epoch,
+              previous_batches: previous_validation_batches,
+              current_batches: validation_batch_count
+            )
+            previous_validation_batches = validation_batch_count
             val_metric = __dsl_reduce_values(validation_losses, validation_reducer)
+            emit(
+              :after_validation,
+              {
+                epoch: epoch,
+                model: @model,
+                val_loss: val_metric,
+                validation_batches: validation_batch_count
+              }
+            )
           end
 
           monitor_value = __dsl_monitor_value(
@@ -196,6 +266,7 @@ module MLX
 
         payload = {
           "losses" => losses,
+          "losses_kept" => keep_losses,
           "epochs" => epoch_rows,
           "monitor_name" => monitor_name,
           "epochs_ran" => epoch_rows.length,
@@ -318,6 +389,36 @@ module MLX
         value
       end
 
+      def __dsl_apply_batch_transform(transform, batch, epoch:, batch_index:, kind:)
+        return batch if transform.nil?
+        unless transform.respond_to?(:call)
+          raise ArgumentError, "#{kind} transform must respond to #call"
+        end
+
+        values = {
+          batch: batch,
+          epoch: epoch,
+          batch_index: batch_index,
+          kind: kind,
+          trainer: self
+        }
+        return transform.call(batch) unless transform.respond_to?(:parameters)
+
+        params = transform.parameters
+        return transform.call(batch) if params.empty?
+
+        args = __dsl_build_positional_args(
+          params,
+          values,
+          [[:batch, batch], [:epoch, epoch], [:batch_index, batch_index], [:kind, kind], [:trainer, self]],
+          "batch transform"
+        )
+        kwargs = __dsl_build_keyword_args(params, values, "batch transform")
+        return transform.call(*args) if kwargs.empty?
+
+        transform.call(*args, **kwargs)
+      end
+
       def __dsl_normalize_min_delta(min_delta)
         value = min_delta.to_f
         raise ArgumentError, "min_delta must be non-negative" if value.negative?
@@ -408,35 +509,85 @@ module MLX
         end
 
         source
+      rescue StandardError => e
+        raise ArgumentError, "#{kind} dataset could not rewind for epoch #{epoch}: #{e.message}"
       end
 
       def __dsl_call_dataset_factory(factory, epoch:, kind:)
         return factory.call unless factory.respond_to?(:parameters)
 
         params = factory.parameters
-        kwargs = {
+        values = {
           epoch: epoch,
           trainer: self,
           kind: kind
         }
+        return factory.call(epoch) if params.empty?
 
-        if params.any? { |type, _name| type == :keyrest }
-          return factory.call(**kwargs)
-        end
+        args = __dsl_build_positional_args(
+          params,
+          values,
+          [[:epoch, epoch], [:kind, kind], [:trainer, self]],
+          "dataset factory"
+        )
+        kwargs = __dsl_build_keyword_args(params, values, "dataset factory")
+        return factory.call(*args) if kwargs.empty?
 
-        accepted_kwargs = kwargs.each_with_object({}) do |(name, value), out|
-          accepts = params.any? do |type, param_name|
-            (type == :key || type == :keyreq) && param_name == name
+        factory.call(*args, **kwargs)
+      end
+
+      def __dsl_build_positional_args(params, values, fallback_pairs, label)
+        queue = fallback_pairs.dup
+        args = []
+        params.each do |type, name|
+          next unless type == :req || type == :opt
+
+          if !name.nil? && values.key?(name)
+            args << values.fetch(name)
+            queue.reject! { |key, _value| key == name }
+            next
           end
-          out[name] = value if accepts
-        end
-        return factory.call(**accepted_kwargs) if accepted_kwargs.any?
 
-        if params.any? { |type, _name| type == :req || type == :opt || type == :rest }
-          return factory.call(epoch)
+          if queue.empty?
+            raise ArgumentError, "#{label} has unsupported required positional argument: #{name.inspect}" if type == :req
+            break
+          end
+
+          _key, value = queue.shift
+          args << value
+        end
+        args
+      end
+
+      def __dsl_build_keyword_args(params, values, label)
+        return values.dup if params.any? { |type, _name| type == :keyrest }
+
+        required_keys = params.each_with_object([]) do |(type, name), out|
+          out << name if type == :keyreq
+        end
+        missing = required_keys.reject { |name| values.key?(name) }
+        unless missing.empty?
+          raise ArgumentError, "#{label} requires unsupported keyword argument(s): #{missing.map(&:inspect).join(", ")}"
         end
 
-        factory.call
+        accepted_keys = params.each_with_object([]) do |(type, name), out|
+          out << name if type == :key || type == :keyreq
+        end
+
+        values.each_with_object({}) do |(name, value), out|
+          out[name] = value if accepted_keys.include?(name)
+        end
+      end
+
+      def __dsl_validate_data_reuse!(strict:, dataset:, kind:, epoch:, previous_batches:, current_batches:)
+        return unless strict
+        return if dataset.nil? || dataset.respond_to?(:call)
+        return unless epoch.positive?
+        return unless previous_batches.to_i.positive? && current_batches.to_i.zero?
+        return if dataset.respond_to?(:rewind)
+
+        raise ArgumentError,
+              "#{kind} dataset appears exhausted across epochs; pass a factory like ->(epoch:) { ... }"
       end
 
       def __dsl_with_eval_mode

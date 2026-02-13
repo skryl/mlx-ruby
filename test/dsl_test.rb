@@ -114,6 +114,20 @@ class DslTest < Minitest::Test
     end
   end
 
+  class DslOneShotDataset
+    def initialize(batches)
+      @batches = batches
+      @consumed = false
+    end
+
+    def each
+      return if @consumed
+
+      @consumed = true
+      @batches.each { |batch| yield batch }
+    end
+  end
+
   def test_model_declarations_build_layers_and_options
     model = DslClassifier.new(in_dim: 4, out_dim: 2, hidden_dim: 6)
     assert_instance_of MLX::NN::Sequential, model.net
@@ -272,6 +286,94 @@ class DslTest < Minitest::Test
     losses = trainer.fit(dataset, epochs: 2)
     assert_equal 4, losses.length
     assert_equal [[0, 0], [0, 1], [1, 0], [1, 1]], events
+  end
+
+  def test_trainer_fit_report_supports_train_transform_and_keep_losses_false
+    model = DslAffine.new(in_dim: 1, out_dim: 1)
+    optimizer = MLX::Optimizers::SGD.new(learning_rate: 0.05)
+    seen = []
+
+    trainer = model.trainer(optimizer: optimizer) do |x:, y:|
+      pred = model.call(x)
+      MLX::NN.mse_loss(pred, y, reduction: "mean")
+    end
+
+    report = trainer.fit_report(
+      [[1.0, 0.0], [2.0, 0.0]],
+      epochs: 1,
+      keep_losses: false,
+      train_transform: lambda do |batch, epoch:, batch_index:, kind:, trainer:|
+        seen << [epoch, batch_index, kind, trainer.class.name]
+        {
+          x: MLX::Core.array([[batch[0]]], MLX::Core.float32),
+          y: MLX::Core.array([[batch[1]]], MLX::Core.float32)
+        }
+      end
+    )
+
+    assert_equal false, report.fetch("losses_kept")
+    assert_equal [], report.fetch("losses")
+    assert_equal 2, report.fetch("epochs")[0].fetch("batches")
+    assert_equal [[0, 0, :train, "MLX::DSL::Trainer"], [0, 1, :train, "MLX::DSL::Trainer"]], seen
+  end
+
+  def test_trainer_fit_report_supports_validation_transform_and_val_monitor
+    model = DslAffine.new(in_dim: 1, out_dim: 1)
+    optimizer = MLX::Optimizers::SGD.new(learning_rate: 0.01)
+
+    trainer = model.trainer(optimizer: optimizer) do |x:, y:|
+      pred = model.call(x)
+      MLX::NN.mse_loss(pred, y, reduction: "mean")
+    end
+
+    report = trainer.fit_report(
+      [
+        {
+          x: MLX::Core.array([[1.0]], MLX::Core.float32),
+          y: MLX::Core.array([[0.0]], MLX::Core.float32)
+        }
+      ],
+      epochs: 1,
+      validation_data: [[1.0, 0.0], [3.0, 0.0]],
+      validation_transform: lambda do |batch, epoch:|
+        {
+          x: MLX::Core.array([[batch[0] + epoch]], MLX::Core.float32),
+          y: MLX::Core.array([[batch[1]]], MLX::Core.float32)
+        }
+      end,
+      monitor: :val_loss,
+      monitor_mode: :min
+    )
+
+    epoch_row = report.fetch("epochs")[0]
+    assert_equal "val_loss", report.fetch("monitor_name")
+    refute_nil epoch_row.fetch("val_loss")
+    assert_in_delta epoch_row.fetch("val_loss"), epoch_row.fetch("monitor_value"), 1e-6
+    assert_equal 2, epoch_row.fetch("validation_batches")
+  end
+
+  def test_trainer_strict_data_reuse_raises_for_exhausted_dataset
+    model = DslAffine.new(in_dim: 1, out_dim: 1)
+    optimizer = MLX::Optimizers::SGD.new(learning_rate: 0.01)
+
+    trainer = model.trainer(optimizer: optimizer) do |x:, y:|
+      pred = model.call(x)
+      MLX::NN.mse_loss(pred, y, reduction: "mean")
+    end
+
+    one_shot = DslOneShotDataset.new(
+      [
+        {
+          x: MLX::Core.array([[1.0]], MLX::Core.float32),
+          y: MLX::Core.array([[0.0]], MLX::Core.float32)
+        }
+      ]
+    )
+
+    error = assert_raises(ArgumentError) do
+      trainer.fit_report(one_shot, epochs: 2, strict_data_reuse: true)
+    end
+    assert_match(/exhausted/i, error.message)
   end
 
   private

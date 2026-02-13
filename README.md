@@ -321,7 +321,7 @@ end
 trainer.before_epoch { |ctx| puts "epoch=#{ctx[:epoch]}" }
 trainer.after_batch { |ctx| puts "batch=#{ctx[:batch_index]} loss=#{ctx[:loss_value]}" }
 
-train_data = ->(epoch:) { shuffled_batches_for(epoch) }
+train_data = ->(epoch, kind:) { shuffled_batches_for(epoch, split: kind) }
 validation_data = ->(epoch:) { heldout_batches_for(epoch) }
 
 losses = trainer.fit(train_data, epochs: 2)
@@ -330,17 +330,27 @@ report = trainer.fit_report(
   train_data,
   epochs: 5,
   reduce: :mean,
+  strict_data_reuse: true,
+  train_transform: ->(batch, epoch:, batch_index:) { collate_train(batch, epoch: epoch, batch_index: batch_index) },
   validation_data: validation_data,
   validation_reduce: :mean,
+  validation_transform: ->(batch, epoch:) { collate_eval(batch, epoch: epoch) },
   monitor: :val_loss,
   monitor_mode: :min,
   checkpoint_path: "checkpoints/epoch-%{epoch}-monitor-%{monitor}.bin",
   save_best: true,
+  keep_losses: false,
   metadata: { "run" => "exp-42" }
 )
 
 puts "#{report['monitor_name']}=#{report['best_metric']}"
 ```
+
+Runnable DSL examples:
+
+- `examples/dsl/streaming_factory.rb`
+- `examples/dsl/validation_monitor.rb`
+- `examples/dsl/memory_friendly_reporting.rb`
 
 For non-linear graph composition, the DSL also supports branch/merge helpers:
 

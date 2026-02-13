@@ -287,6 +287,104 @@ report = trainer.fit_report(
 )
 ```
 
+## Phase 13: Enumerable and Batch Pipeline Ergonomics
+
+### Deliverables
+
+1. Safer multi-epoch behavior for single-pass datasets:
+   - `strict_data_reuse:` option to detect exhausted non-rewindable datasets across epochs
+   - clear error pointing users to dataset factories
+2. Batch transforms/collation hooks:
+   - `train_transform:`
+   - `validation_transform:`
+   - supports transforms that receive `batch`, `epoch`, `batch_index`, `kind`, and `trainer`
+3. Hardened dataset factory signatures:
+   - support positional, keyword, and mixed signatures (e.g. `->(epoch, kind:)`)
+   - explicit errors when required parameters are unsupported
+4. Optional per-batch loss retention:
+   - `keep_losses:` control for long-running jobs
+   - preserves epoch-level reporting while avoiding unbounded `losses` arrays
+
+### Ergonomics Target
+
+```ruby
+train_data = ->(epoch, kind:) { stream_train_batches(epoch, kind: kind) }
+val_data = ->(epoch:) { stream_validation_batches(epoch) }
+
+report = trainer.fit_report(
+  train_data,
+  epochs: 20,
+  strict_data_reuse: true,
+  train_transform: ->(batch, epoch:, batch_index:) { collate_train(batch, epoch, batch_index) },
+  validation_data: val_data,
+  validation_transform: ->(batch, epoch:) { collate_val(batch, epoch) },
+  monitor: :val_loss,
+  keep_losses: false
+)
+```
+
+## Phase 14: Validation Lifecycle Hooks
+
+### Deliverables
+
+1. Add validation hook events on `MLX::DSL::Trainer`:
+   - `before_validation`
+   - `after_validation_batch`
+   - `after_validation`
+2. Expose hook shorthand methods matching the above events.
+3. Include validation hook context fields:
+   - `epoch`
+   - `batch_index` (for per-batch hook)
+   - `loss` and `loss_value`
+   - reduced `val_loss` for `after_validation`
+
+### Ergonomics Target
+
+```ruby
+trainer.before_validation { |ctx| puts "epoch=#{ctx[:epoch]} val:start" }
+trainer.after_validation_batch { |ctx| puts "val_batch=#{ctx[:batch_index]} loss=#{ctx[:loss_value]}" }
+trainer.after_validation { |ctx| puts "val_loss=#{ctx[:val_loss]}" }
+```
+
+## Phase 15: Native Integration Coverage For Data Ergonomics
+
+### Deliverables
+
+1. Add integration tests to `test/dsl_test.rb` for:
+   - `train_transform`
+   - `validation_transform`
+   - `strict_data_reuse`
+   - `keep_losses: false`
+2. Ensure new assertions run against real `MLX::Core::Array` and optimizer flows.
+3. Keep tests deterministic and fast (small toy datasets).
+
+## Phase 16: Runnable DSL Examples
+
+### Deliverables
+
+1. Add `examples/dsl/` scripts for:
+   - streaming per-epoch dataset factory
+   - validation monitoring (`monitor: :val_loss`)
+   - long-running memory-friendly reporting (`keep_losses: false`)
+2. Keep examples executable via `bundle exec ruby examples/dsl/<name>.rb`.
+3. Reference examples from `README.md`.
+
+## Phase 17: No-Native Load Resilience
+
+### Deliverables
+
+1. Remove eager native-dependent defaults in DSL class macros where possible.
+2. Ensure requiring DSL files does not raise when native extension is unavailable.
+3. Prefer lazy dtype/default resolution at runtime instead of class definition time.
+
+## Phase 18: Test Helper Rebuild Policy
+
+### Deliverables
+
+1. Reduce unnecessary forced rebuilds in `test/test_helper.rb`.
+2. When a loadable native bundle already exists, avoid rebuild attempts that require unavailable source trees.
+3. Preserve explicit rebuild behavior when `MLX_RUBY_FORCE_REBUILD=1`.
+
 ## Red/Green Execution Plan
 
 1. Add tests for each DSL behavior in `test/dsl_test.rb` (red).
