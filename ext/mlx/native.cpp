@@ -564,7 +564,7 @@ static mx::array scalar_array_from_ruby(VALUE value, const std::optional<mx::Dty
     return cast_if_needed(std::move(a), dtype);
   }
   if (RB_INTEGER_TYPE_P(value)) {
-    auto a = mx::array(NUM2LL(value));
+    auto a = mx::array(static_cast<int64_t>(NUM2LL(value)), mx::int64);
     return cast_if_needed(std::move(a), dtype);
   }
   if (RB_FLOAT_TYPE_P(value)) {
