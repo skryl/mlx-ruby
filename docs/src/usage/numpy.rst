@@ -4,8 +4,8 @@ Conversion to Other Array Frameworks
 ====================================
 
 MLX arrays can interoperate with frameworks that support buffer sharing/DLPack.
-Use a Ruby-backed bridge (for example :doc:`ruby-dlpack` if you use one) to
-convert between MLX arrays and arrays in other ecosystems.
+Use a Ruby-backed bridge (for example a DLPack adapter) to convert between
+MLX arrays and arrays in other ecosystems.
 
 From MLX to another framework
 -------------------------------
@@ -63,4 +63,3 @@ For TensorFlow workflows, follow your tensor bridge's DLPack/array conversion AP
   # TensorFlow tensor -> external buffer -> MLX
   # x_tf = ...
   # x = mx.array(Bridge.from_tensor(x_tf))
-
