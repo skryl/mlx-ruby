@@ -26,8 +26,8 @@ work.
 
     require "mlx"
     mx = MLX::Core
-    a = mx.random.uniform(shape=(512, 512))
-    b = mx.random.uniform(shape=(512, 512))
+    a = mx.random.uniform(shape: [512, 512])
+    b = mx.random.uniform(shape: [512, 512])
     mx.eval(a, b)
 
     trace_file = "mlx_trace.gputrace"
@@ -36,8 +36,9 @@ work.
     # that the path trace_file does not already exist.
     mx.metal.start_capture(trace_file)
 
-    for _ in range(10):
+    10.times do
       mx.eval(mx.add(a, b))
+    end
 
     mx.metal.stop_capture()
 

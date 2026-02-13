@@ -39,9 +39,9 @@ A distributed program in MLX is as simple as:
 
     require "mlx"
     mx = MLX::Core
-    world = mx.distributed.init()
+    world = mx.distributed.init
     x = mx.distributed.all_sum(mx.ones(10))
-    print(world.rank(), x)
+    puts "#{world.rank} #{x}"
 
 The program above sums the array ``mx.ones(10)`` across all
 distributed processes. However, when this script is run with ``ruby`` only
@@ -55,10 +55,11 @@ distributed setting similar to the one below:
     require "mlx"
     mx = MLX::Core
     x = ...
-    world = mx.distributed.init()
+    world = mx.distributed.init
     # No need for the check we can simply do x = mx.distributed.all_sum(x)
-    if world.size() > 1:
-        x = mx.distributed.all_sum(x)
+    if world.size > 1
+      x = mx.distributed.all_sum(x)
+    end
 
 Running Distributed Programs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -105,17 +106,17 @@ The following examples aim to clarify the backend initialization logic in MLX:
 .. code:: ruby
 
     # Case 1: Initialize MPI regardless if it was possible to initialize the ring backend
-    world = mx.distributed.init(backend="mpi")
-    world2 = mx.distributed.init()  # subsequent calls return the MPI backend!
+    world = mx.distributed.init(backend: "mpi")
+    world2 = mx.distributed.init  # subsequent calls return the MPI backend!
 
     # Case 2: Initialize any backend
-    world = mx.distributed.init(backend="any")  # equivalent to no arguments
-    world2 = mx.distributed.init()  # same as above
+    world = mx.distributed.init(backend: "any")  # equivalent to no arguments
+    world2 = mx.distributed.init  # same as above
 
     # Case 3: Initialize both backends at the same time
-    world_mpi = mx.distributed.init(backend="mpi")
-    world_ring = mx.distributed.init(backend="ring")
-    world_any = mx.distributed.init()  # same as MPI because it was initialized first!
+    world_mpi = mx.distributed.init(backend: "mpi")
+    world_ring = mx.distributed.init(backend: "ring")
+    world_any = mx.distributed.init  # same as MPI because it was initialized first!
 
 Distributed Program Examples
 ----------------------------

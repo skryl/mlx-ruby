@@ -135,12 +135,13 @@ expected. For example:
 
 .. code-block:: ruby
 
-   def fun(x, idx):
-       x[idx] = 2.0
-       return x.sum()
+   def fun(x, idx)
+     x[idx] = 2.0
+     x.sum
+   end
 
-   dfdx = mx.grad(fun)(mx.array([1.0, 2.0, 3.0]), mx.array([1]))
-   print(dfdx)  # Prints: array([1, 0, 1], dtype=float32)
+   dfdx = mx.grad(method(:fun)).call(mx.array([1.0, 2.0, 3.0]), mx.array([1]))
+   puts dfdx # Prints: array([1, 0, 1], dtype=float32)
 
 In the above ``dfdx`` will have the correct gradient, namely zeros at ``idx``
 and ones elsewhere.

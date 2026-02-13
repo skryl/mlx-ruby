@@ -118,11 +118,11 @@ distributed layers.
 
   x = ... # some (4, 2) model input: batch size 4, feature size 2
 
-  l1 = nn.AllToShardedLinear(2, 2, bias=False)   # initialize the layer
-  l1_out = l1(x) # (4, 1) output
+  l1 = MLX::NN::AllToShardedLinear.new(2, 2, bias: false) # initialize the layer
+  l1_out = l1.call(x) # (4, 1) output
 
-  l2 = nn.ShardedToAllLinear(2, 2, bias=False)
-  l2_out = l2(l1_out) # (4, 2) output
+  l2 = MLX::NN::ShardedToAllLinear.new(2, 2, bias: false)
+  l2_out = l2.call(l1_out) # (4, 2) output
 
 .. raw:: html
 
@@ -189,7 +189,7 @@ To implement sharding in our Llama inference, we use :func:`shard_linear
 <mlx.nn.layers.distributed.shard_linear>` to get sharded linear layers with
 distributed communication. This is easier than using :func:`shard_inplace
 <mlx.nn.layers.distributed.shard_inplace>` and implementing the steps manually
-in the :code:`__call__` function.
+in the :code:`call` method.
 
 The following code shows how to shard the Attention block. The Q, K, and V
 projection layers are converted to all-to-sharded layers, while the output
@@ -199,14 +199,15 @@ adjusted to account for the sharding:
 .. code-block:: ruby
 
   # ... in Attention class
-  def shard(self, group: mx.distributed.Group)
-    self.n_heads = self.n_heads // group.size()
-    self.n_kv_heads = self.n_kv_heads // group.size()
+  def shard(group)
+    @n_heads = @n_heads / group.size
+    @n_kv_heads = @n_kv_heads / group.size
 
-    self.wq = nn.layers.distributed.shard_linear(self.wq, "all-to-sharded", group=group)
-    self.wk = nn.layers.distributed.shard_linear(self.wk, "all-to-sharded", group=group)
-    self.wv = nn.layers.distributed.shard_linear(self.wv, "all-to-sharded", group=group)
-    self.wo = nn.layers.distributed.shard_linear(self.wo, "sharded-to-all", group=group)
+    @wq = nn.layers.distributed.shard_linear(@wq, "all-to-sharded", group: group)
+    @wk = nn.layers.distributed.shard_linear(@wk, "all-to-sharded", group: group)
+    @wv = nn.layers.distributed.shard_linear(@wv, "all-to-sharded", group: group)
+    @wo = nn.layers.distributed.shard_linear(@wo, "sharded-to-all", group: group)
+  end
 
 Similarly, the FeedForward block is sharded by converting the gate (w1) and up
 (w3) projections to all-to-sharded layers, and the down projection (w2) to
@@ -215,10 +216,11 @@ a sharded-to-all layer:
 .. code-block:: ruby
 
   # ... in FeedForward class
-  def shard(self, group: mx.distributed.Group)
-    self.w1 = nn.layers.distributed.shard_linear(self.w1, "all-to-sharded", group=group)
-    self.w2 = nn.layers.distributed.shard_linear(self.w2, "sharded-to-all", group=group)
-    self.w3 = nn.layers.distributed.shard_linear(self.w3, "all-to-sharded", group=group)
+  def shard(group)
+    @w1 = nn.layers.distributed.shard_linear(@w1, "all-to-sharded", group: group)
+    @w2 = nn.layers.distributed.shard_linear(@w2, "sharded-to-all", group: group)
+    @w3 = nn.layers.distributed.shard_linear(@w3, "all-to-sharded", group: group)
+  end
 
 Finally, in our :code:`load_model` function, we need to apply our sharding
 functions to all transformer layers when using multiple devices:
@@ -226,11 +228,13 @@ functions to all transformer layers when using multiple devices:
 .. code-block:: ruby
 
   # ... in load_model function
-  if world.size() > 1
+  if world.size > 1
     # convert Linear layers in Transformer/FFN to appropriate Sharded Layers
     model.layers.each do |layer|
-        layer.attention.shard(group=world)
-        layer.feed_forward.shard(group=world)
+      layer.attention.shard(world)
+      layer.feed_forward.shard(world)
+    end
+  end
 
 This allows us to use the LLaMA inference file as normal when running
 :code:`ruby llama.rb`, but now we can also run it across two (or more)

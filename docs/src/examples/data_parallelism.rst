@@ -27,11 +27,13 @@ dataset, and optimizer initialization.
     def step(model, x, y)
         loss, grads = loss_grad_fn(model, x, y)
         optimizer.update(model, grads)
-        return loss
+        loss
+    end
 
     dataset.each do |x, y|
         loss = step(model, x, y)
-        mx.eval(loss, model.parameters())
+        mx.eval(loss, model.parameters)
+    end
 
 All we have to do to average the gradients across machines is perform an
 :func:`all_sum` and divide by the size of the :class:`Group`. Namely we
@@ -40,7 +42,8 @@ have to :func:`MLX::Utils.tree_map` the gradients with following function.
 .. code:: ruby
 
     def all_avg(x)
-        return mx.distributed.all_sum(x) / mx.distributed.init().size()
+        mx.distributed.all_sum(x) / mx.distributed.init.size
+    end
 
 Putting everything together our training loop step looks as follows with
 everything else remaining the same.
@@ -50,19 +53,21 @@ everything else remaining the same.
     # Ruby: implement tree_map on nested structures via MLX utilities
 
     def all_reduce_grads(grads)
-        N = mx.distributed.init().size()
-        if N == 1
-            return grads
-        return MLX::Utils.tree_map(
-            lambda x: mx.distributed.all_sum(x) / N,
+        world_size = mx.distributed.init.size
+        return grads if world_size == 1
+
+        MLX::Utils.tree_map(
+            ->(x) { mx.distributed.all_sum(x) / world_size },
             grads
         )
+    end
 
     def step(model, x, y)
         loss, grads = loss_grad_fn(model, x, y)
         grads = all_reduce_grads(grads)  # <--- This line was added
         optimizer.update(model, grads)
-        return loss
+        loss
+    end
 
 Using ``nn.average_gradients``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -82,10 +87,12 @@ almost identical to the example above:
 
     def step(model, x, y)
         loss, grads = loss_grad_fn(model, x, y)
-        grads = mx.nn.average_gradients(grads)  # <---- This line was added
+        grads = MLX::NN.average_gradients(grads)  # <---- This line was added
         optimizer.update(model, grads)
-        return loss
+        loss
+    end
 
     dataset.each do |x, y|
         loss = step(model, x, y)
-        mx.eval(loss, model.parameters())
+        mx.eval(loss, model.parameters)
+    end

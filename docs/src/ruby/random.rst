@@ -11,8 +11,9 @@ For example, you can generate random numbers with:
 
 .. code-block:: ruby
 
-  for _ in range(3):
-    print(mx.random.uniform())
+  3.times do
+    puts mx.random.uniform
+  end
 
 which will print a sequence of unique pseudo random numbers. Alternatively you
 can explicitly set the key:
@@ -20,8 +21,9 @@ can explicitly set the key:
 .. code-block:: ruby
 
   key = mx.random.key(0)
-  for _ in range(3):
-    print(mx.random.uniform(key=key))
+  3.times do
+    puts mx.random.uniform(key: key)
+  end
 
 which will yield the same pseudo random number at each iteration.
 

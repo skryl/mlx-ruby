@@ -16,8 +16,9 @@ You can do that in MLX directly:
 
     require "mlx"
     mx = MLX::Core
-    def simple_axpby(x: mx.array, y: mx.array, alpha: float, beta: float) -> mx.array:
-        return alpha * x + beta * y
+    def simple_axpby(x, y, alpha, beta)
+      alpha * x + beta * y
+    end
 
 This function performs that operation while leaving the implementation and
 function transformations to MLX.
@@ -719,16 +720,15 @@ Let's look at a simple script and its results:
 
     require "mlx"
     mx = MLX::Core
-  # mx = MLX::Core
-  # axpby(...) comes from the local extension module built in this example.
+    # axpby(...) comes from the local extension module built in this example.
 
     a = mx.ones((3, 4))
     b = mx.ones((3, 4))
-    c = axpby(a, b, 4.0, 2.0, stream=mx.cpu)
+    c = axpby(a, b, 4.0, 2.0, stream: mx.cpu)
 
-    print(f"c shape: {c.shape}")
-    print(f"c dtype: {c.dtype}")
-    print(f"c is correct: {mx.all(c == 6.0).item()}")
+    puts "c shape: #{c.shape}"
+    puts "c dtype: #{c.dtype}"
+    puts "c is correct: #{mx.all(c == 6.0).item}"
 
 Output:
 
@@ -747,42 +747,46 @@ with the naive :meth:`simple_axpby` we first defined.
 .. code-block:: ruby
 
     require "mlx"
+    require "benchmark"
     mx = MLX::Core
-  # Ruby: import from another module is not supported directly in this snippet
-  mlx_sample_extensions import axpby
-    import time
+    # Replace this with your extension's loader/setup:
+    # require "mlx_sample_extensions"
+    # axpby = MLXSampleExtensions.method(:axpby)
 
-    def simple_axpby(x: mx.array, y: mx.array, alpha: float, beta: float) -> mx.array:
-        return alpha * x + beta * y
+    def simple_axpby(x, y, alpha, beta)
+      alpha * x + beta * y
+    end
 
-    M = 4096
-    N = 4096
+    m = 4096
+    n = 4096
 
-    x = mx.random.normal((M, N))
-    y = mx.random.normal((M, N))
+    x = mx.random.normal((m, n))
+    y = mx.random.normal((m, n))
     alpha = 4.0
     beta = 2.0
 
     mx.eval(x, y)
 
     def bench(f)
-        # Warm up
-        range(5).each do |i|
-            z = f(x, y, alpha, beta)
-            mx.eval(z)
+      # Warm up
+      5.times do
+        z = f.call(x, y, alpha, beta)
+        mx.eval(z)
+      end
 
-        # Timed run
-        s = time.perf_counter()
-        range(100).each do |i|
-            z = f(x, y, alpha, beta)
-            mx.eval(z)
-        e = time.perf_counter()
-        return 1000 * (e - s) / 100
+      elapsed = Benchmark.realtime do
+        100.times do
+          z = f.call(x, y, alpha, beta)
+          mx.eval(z)
+        end
+      end
+      1000.0 * elapsed / 100.0
+    end
 
-    simple_time = bench(simple_axpby)
+    simple_time = bench(method(:simple_axpby))
     custom_time = bench(axpby)
 
-    print(f"Simple axpby: {simple_time:.3f} ms | Custom axpby: {custom_time:.3f} ms")
+    puts format("Simple axpby: %.3f ms | Custom axpby: %.3f ms", simple_time, custom_time)
 
 The results are ``Simple axpby: 1.559 ms | Custom axpby: 0.774 ms``. We see
 modest improvements right away!
