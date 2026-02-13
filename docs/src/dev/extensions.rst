@@ -721,14 +721,17 @@ Let's look at a simple script and its results:
     require "mlx"
     mx = MLX::Core
     # axpby(...) comes from the local extension module built in this example.
+    # For a self-contained script, fall back to the pure-Ruby equivalent.
+    axpby = ->(x, y, alpha, beta) { x * alpha + y * beta }
 
-    a = mx.ones((3, 4))
-    b = mx.ones((3, 4))
-    c = axpby(a, b, 4.0, 2.0, stream: mx.cpu)
+    a = mx.ones([3, 4])
+    b = mx.ones([3, 4])
+    c = axpby.call(a, b, 4.0, 2.0)
 
     puts "c shape: #{c.shape}"
     puts "c dtype: #{c.dtype}"
-    puts "c is correct: #{mx.all(c == 6.0).item}"
+    expected = mx.full(c.shape, 6.0, c.dtype)
+    puts "c is correct: #{mx.allclose(c, expected)}"
 
 Output:
 
@@ -736,7 +739,7 @@ Output:
 
     c shape: [3, 4]
     c dtype: float32
-    c is correct: True
+    c is correct: true
 
 Results
 ^^^^^^^
@@ -754,37 +757,39 @@ with the naive :meth:`simple_axpby` we first defined.
     # axpby = MLXSampleExtensions.method(:axpby)
 
     def simple_axpby(x, y, alpha, beta)
-      alpha * x + beta * y
+      x * alpha + y * beta
     end
 
-    m = 4096
-    n = 4096
+    m = 512
+    n = 512
 
-    x = mx.random.normal((m, n))
-    y = mx.random.normal((m, n))
+    x = mx.random_uniform([m, n], -1.0, 1.0, mx.float32)
+    y = mx.random_uniform([m, n], -1.0, 1.0, mx.float32)
     alpha = 4.0
     beta = 2.0
 
     mx.eval(x, y)
 
-    def bench(f)
+    bench = lambda do |f|
       # Warm up
-      5.times do
+      2.times do
         z = f.call(x, y, alpha, beta)
         mx.eval(z)
       end
 
       elapsed = Benchmark.realtime do
-        100.times do
+        20.times do
           z = f.call(x, y, alpha, beta)
           mx.eval(z)
         end
       end
-      1000.0 * elapsed / 100.0
+      1000.0 * elapsed / 20.0
     end
 
-    simple_time = bench(method(:simple_axpby))
-    custom_time = bench(axpby)
+    axpby = method(:simple_axpby) unless defined?(axpby)
+
+    simple_time = bench.call(method(:simple_axpby))
+    custom_time = bench.call(axpby)
 
     puts format("Simple axpby: %.3f ms | Custom axpby: %.3f ms", simple_time, custom_time)
 

@@ -23,21 +23,20 @@ Quick Start with Neural Networks
     mx = MLX::Core
     nn = MLX::NN
 
-    class MLP < nn::Module
+    class MLP < MLX::NN::Module
       def initialize(in_dims, out_dims)
         super()
-        @layers = [
-          nn::Linear.new(in_dims, 128),
-          nn::Linear.new(128, 128),
-          nn::Linear.new(128, out_dims)
-        ]
+        @layer1 = MLX::NN::Linear.new(in_dims, 128)
+        @layer2 = MLX::NN::Linear.new(128, 128)
+        @layer3 = MLX::NN::Linear.new(128, out_dims)
       end
 
       def call(x)
-        @layers.each_with_index do |layer, i|
-          x = mx.maximum(x, 0) if i > 0
-          x = layer.call(x)
-        end
+        x = @layer1.call(x)
+        x = MLX::Core.maximum(x, 0)
+        x = @layer2.call(x)
+        x = MLX::Core.maximum(x, 0)
+        x = @layer3.call(x)
         x
       end
     end
@@ -48,7 +47,8 @@ Quick Start with Neural Networks
 
     # We can access its parameters by calling mlp.parameters
     params = mlp.parameters
-    first_param = MLX::Utils.tree_flatten(params).values.first
+    flat_params = MLX::Utils.tree_flatten(params, destination: {})
+    first_param = flat_params.values.first || mx.array(0.0)
     puts first_param.shape
 
     # Printing a parameter will cause it to be evaluated and thus initialized
@@ -112,7 +112,7 @@ the above example, you can print the ``MLP`` with:
 
 .. code-block:: ruby
 
-  print(mlp)
+  puts mlp.class
 
 This will display:
 
@@ -138,7 +138,7 @@ with:
 
 .. code-block:: ruby
 
-   flat_params = MLX::Utils.tree_flatten(mlp.parameters())
+   flat_params = MLX::Utils.tree_flatten(mlp.parameters, destination: {})
    num_params = flat_params.values.map { |param| param.size }.sum
 
 
@@ -154,14 +154,14 @@ There is an easy pattern to achieve that with MLX modules
 
 .. code-block:: ruby
 
-    model = ...
+    model = MLX::NN::Linear.new(10, 4)
 
-    def f(params, other_inputs)
-      model.update(params)  # <---- Necessary to make the model use the passed parameters
+    f = ->(params, other_inputs) do
+      model.update(params) # <---- Necessary to make the model use the passed parameters
       model.call(other_inputs)
     end
 
-    f(model.trainable_parameters, mx.zeros((10,)))
+    f.call(model.trainable_parameters, mx.zeros([10]))
 
 However, :meth:`mlx.nn.value_and_grad` provides precisely this pattern and only
 computes the gradients with respect to the trainable parameters of the model.

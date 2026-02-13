@@ -39,8 +39,8 @@ A distributed program in MLX is as simple as:
 
     require "mlx"
     mx = MLX::Core
-    world = mx.distributed.init
-    x = mx.distributed.all_sum(mx.ones(10))
+    world = mx.init
+    x = mx.all_sum(mx.ones([10]), world)
     puts "#{world.rank} #{x}"
 
 The program above sums the array ``mx.ones(10)`` across all
@@ -54,11 +54,11 @@ distributed setting similar to the one below:
 
     require "mlx"
     mx = MLX::Core
-    x = ...
-    world = mx.distributed.init
-    # No need for the check we can simply do x = mx.distributed.all_sum(x)
+    x = mx.ones([10])
+    world = mx.init
+    # No need for the check: we can simply do x = mx.all_sum(x, world)
     if world.size > 1
-      x = mx.distributed.all_sum(x)
+      x = mx.all_sum(x, world)
     end
 
 Running Distributed Programs
@@ -106,17 +106,31 @@ The following examples aim to clarify the backend initialization logic in MLX:
 .. code:: ruby
 
     # Case 1: Initialize MPI regardless if it was possible to initialize the ring backend
-    world = mx.distributed.init(backend: "mpi")
-    world2 = mx.distributed.init  # subsequent calls return the MPI backend!
+    begin
+      world = mx.init(backend: "mpi")
+    rescue RuntimeError
+      world = mx.init
+    end
+    world2 = mx.init # subsequent calls return the same backend
 
     # Case 2: Initialize any backend
-    world = mx.distributed.init(backend: "any")  # equivalent to no arguments
-    world2 = mx.distributed.init  # same as above
+    begin
+      world = mx.init(backend: "any") # equivalent to no arguments
+    rescue RuntimeError
+      world = mx.init
+    end
+    world2 = mx.init # same as above
 
-    # Case 3: Initialize both backends at the same time
-    world_mpi = mx.distributed.init(backend: "mpi")
-    world_ring = mx.distributed.init(backend: "ring")
-    world_any = mx.distributed.init  # same as MPI because it was initialized first!
+    # Case 3: Initialize explicit backends (if available)
+    begin
+      world_mpi = mx.init(backend: "mpi")
+      world_ring = mx.init(backend: "ring")
+    rescue RuntimeError
+      # On unsupported platforms just use the default singleton group.
+      world_mpi = mx.init
+      world_ring = mx.init
+    end
+    world_any = mx.init
 
 Distributed Program Examples
 ----------------------------

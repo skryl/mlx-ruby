@@ -74,13 +74,13 @@ the gradient with respect to the first argument:
    y = mx.array([1.5, -1.5])
 
    # Computes the gradient of loss_fn with respect to w:
-   grad_fn = mx.grad(loss_fn)
+   grad_fn = mx.grad(method(:loss_fn))
    dloss_dw = grad_fn.call(w, x, y)
    # Prints array(-1, dtype=float32)
    print(dloss_dw)
 
    # To get the gradient with respect to x we can do:
-   grad_fn = mx.grad(loss_fn, argnums: 1)
+   grad_fn = mx.grad(method(:loss_fn), 1)
    dloss_dx = grad_fn.call(w, x, y)
    # Prints array([-1, 1], dtype=float32)
    print(dloss_dx)
@@ -94,7 +94,7 @@ should use :func:`value_and_grad`. Continuing the above example:
 .. code-block:: ruby
 
    # Computes the gradient of loss_fn with respect to w:
-   loss_and_grad_fn = mx.value_and_grad(loss_fn)
+   loss_and_grad_fn = mx.value_and_grad(method(:loss_fn))
    loss, dloss_dw = loss_and_grad_fn.call(w, x, y)
 
    # Prints array(1, dtype=float32)
@@ -113,23 +113,24 @@ way to do that is the following:
 
 .. code-block:: ruby
 
-   def loss_fn(params, x, y)
-      w, b = params["weight"], params["bias"]
-      h = w * x + b
-      return mx.mean(mx.square(h - y))
+  def loss_fn(params, x, y)
+     w, b = params["weight"], params["bias"]
+     h = w * x + b
+     mx.mean(mx.square(h - y))
+  end
 
-   params = {"weight": mx.array(1.0), "bias": mx.array(0.0)}
-   x = mx.array([0.5, -0.5])
-   y = mx.array([1.5, -1.5])
+  params = {"weight" => mx.array(1.0), "bias" => mx.array(0.0)}
+  x = mx.array([0.5, -0.5])
+  y = mx.array([1.5, -1.5])
 
    # Computes the gradient of loss_fn with respect to both the
    # weight and bias:
-   grad_fn = mx.grad(loss_fn)
-   grads = grad_fn.call(params, x, y)
+   grad_fn = mx.grad(method(:loss_fn))
+  grads = grad_fn.call(params, x, y)
 
    # Prints
    # {'weight': array(-1, dtype=float32), 'bias': array(0, dtype=float32)}
-   print(grads)
+  puts(grads)
 
 Notice the tree structure of the parameters is preserved in the gradients.
 
@@ -158,20 +159,21 @@ A naive way to add the elements from two sets of vectors is with a loop:
 
 .. code-block:: ruby
 
-  xs = mx.random.uniform(shape: [4096, 100])
-  ys = mx.random.uniform(shape: [100, 4096])
+  xs = mx.random_uniform([256, 32], 0.0, 1.0, mx.float32)
+  ys = mx.random_uniform([32, 256], 0.0, 1.0, mx.float32)
 
   def naive_add(xs, ys)
-    xs.shape[0].times.map { |i| xs[i] + ys[:, i] }
+    xs.shape[0].times.map { |i| xs[i] + mx.take(ys, i, 1) }
   end
 
 Instead you can use :func:`vmap` to automatically vectorize the addition:
 
 .. code-block:: ruby
 
+   # docs-test: timeout=30
    # Vectorize over the second dimension of x and the
    # first dimension of y
-   vmap_add = mx.vmap(->(x, y) { x + y }, in_axes: [0, 1])
+   vmap_add = mx.vmap(->(x, y) { x + y }, [0, 1])
 
 The ``in_axes`` parameter can be used to specify which dimensions of the
 corresponding input to vectorize over. Similarly, use ``out_axes`` to specify
@@ -184,10 +186,10 @@ Let's time these two different versions:
   require "benchmark"
 
   naive_seconds = Benchmark.realtime do
-    100.times { mx.eval(*naive_add(xs, ys)) }
+    10.times { mx.eval(*naive_add(xs, ys)) }
   end
   vmap_seconds = Benchmark.realtime do
-    100.times { mx.eval(vmap_add.call(xs, ys)) }
+    10.times { mx.eval(vmap_add.call(xs, ys)) }
   end
 
   puts naive_seconds

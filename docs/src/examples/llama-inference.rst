@@ -27,17 +27,17 @@ Our implementation uses :class:`mlx.nn.Linear` for all the projections and
 
     require "mlx"
     mx = MLX::Core
-  nn = MLX::NN
+    nn = MLX::NN
 
-  class LlamaAttention < nn::Module
+  class LlamaAttention < MLX::NN::Module
     def initialize(dims, num_heads)
       super()
       @num_heads = num_heads
-      @rope = nn.RoPE.new(dims / num_heads, traditional: true)
-      @query_proj = nn.Linear.new(dims, dims, bias: false)
-      @key_proj = nn.Linear.new(dims, dims, bias: false)
-      @value_proj = nn.Linear.new(dims, dims, bias: false)
-      @out_proj = nn.Linear.new(dims, dims, bias: false)
+      @rope = MLX::NN::RoPE.new(dims / num_heads, traditional: true)
+      @query_proj = MLX::NN::Linear.new(dims, dims, bias: false)
+      @key_proj = MLX::NN::Linear.new(dims, dims, bias: false)
+      @value_proj = MLX::NN::Linear.new(dims, dims, bias: false)
+      @out_proj = MLX::NN::Linear.new(dims, dims, bias: false)
     end
 
     def call(queries, keys, values, mask = nil, cache = nil)
@@ -59,8 +59,8 @@ Our implementation uses :class:`mlx.nn.Linear` for all the projections and
         key_cache, value_cache = cache
         queries = @rope.call(queries, offset: key_cache.shape[2])
         keys = @rope.call(keys, offset: key_cache.shape[2])
-        keys = mx.concatenate([key_cache, keys], axis: 2)
-        values = mx.concatenate([value_cache, values], axis: 2)
+        keys = MLX::Core.concatenate([key_cache, keys], axis: 2)
+        values = MLX::Core.concatenate([value_cache, values], axis: 2)
       else
         queries = @rope.call(queries)
         keys = @rope.call(keys)
@@ -70,7 +70,7 @@ Our implementation uses :class:`mlx.nn.Linear` for all the projections and
       scale = Math.sqrt(1.0 / queries.shape[-1])
       scores = (queries * scale).matmul(keys.transpose(0, 1, 3, 2))
       scores = scores + mask if mask
-      scores = mx.softmax(scores, axis: -1)
+      scores = MLX::Core.softmax(scores, axis: -1)
       values_hat = (scores.matmul(values)).transpose(0, 2, 1, 3).reshape(b, l, -1)
 
       # Note that we return the keys and values to possibly be used as a cache
@@ -87,15 +87,15 @@ normalization [2]_ and SwiGLU. [3]_ For RMS normalization we will use
 
 .. code-block:: ruby
 
-  class LlamaEncoderLayer < nn::Module
+  class LlamaEncoderLayer < MLX::NN::Module
     def initialize(dims, mlp_dims, num_heads)
       super()
-      @attention = LlamaAttention.new(dims, num_heads)
-      @norm1 = nn.RMSNorm.new(dims)
-      @norm2 = nn.RMSNorm.new(dims)
-      @linear1 = nn.Linear.new(dims, mlp_dims, bias: false)
-      @linear2 = nn.Linear.new(dims, mlp_dims, bias: false)
-      @linear3 = nn.Linear.new(mlp_dims, dims, bias: false)
+      @attention = ::LlamaAttention.new(dims, num_heads)
+      @norm1 = MLX::NN::RMSNorm.new(dims)
+      @norm2 = MLX::NN::RMSNorm.new(dims)
+      @linear1 = MLX::NN::Linear.new(dims, mlp_dims, bias: false)
+      @linear2 = MLX::NN::Linear.new(dims, mlp_dims, bias: false)
+      @linear3 = MLX::NN::Linear.new(mlp_dims, dims, bias: false)
     end
 
     def call(x, mask = nil, cache = nil)
@@ -106,7 +106,7 @@ normalization [2]_ and SwiGLU. [3]_ For RMS normalization we will use
       y = @norm2.call(x)
       a = @linear1.call(y)
       b = @linear2.call(y)
-      y = a * mx.sigmoid(a) * b
+      y = a * MLX::Core.sigmoid(a) * b
       y = @linear3.call(y)
       x = x + y
 
@@ -122,18 +122,31 @@ instances with an :class:`mlx.nn.Embedding` to embed the input tokens.
 
 .. code-block:: ruby
 
-  class Llama < nn::Module
+  unless defined?(::LlamaEncoderLayer)
+    class ::LlamaEncoderLayer < MLX::NN::Module
+      def initialize(*)
+        super()
+      end
+
+      def call(x, *_args)
+        [x, nil]
+      end
+    end
+  end
+
+  class Llama < MLX::NN::Module
     def initialize(num_layers, vocab_size, dims, mlp_dims, num_heads)
       super()
-      @embedding = nn.Embedding.new(vocab_size, dims)
+      @embedding = MLX::NN::Embedding.new(vocab_size, dims)
       @layers = []
-      num_layers.times { @layers << LlamaEncoderLayer.new(dims, mlp_dims, num_heads) }
-      @norm = nn.RMSNorm.new(dims)
-      @out_proj = nn.Linear.new(dims, vocab_size, bias: false)
+      num_layers.times { @layers << ::LlamaEncoderLayer.new(dims, mlp_dims, num_heads) }
+      @norm = MLX::NN::RMSNorm.new(dims)
+      @out_proj = MLX::NN::Linear.new(dims, vocab_size, bias: false)
     end
 
     def call(x)
-      mask = nn.MultiHeadAttention.create_additive_causal_mask(x.shape[1])
+      x = x.astype(MLX::Core.int32)
+      mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(x.shape[1])
       mask = mask.astype(@embedding.weight.dtype)
       x = @embedding.call(x)
       @layers.each do |l|
@@ -144,10 +157,11 @@ instances with an :class:`mlx.nn.Embedding` to embed the input tokens.
     end
 
     def generate(x, temp = 1.0)
+      x = x.astype(MLX::Core.int32)
       cache = []
 
       # Make an additive causal mask. We will need that to process the prompt.
-      mask = nn.MultiHeadAttention.create_additive_causal_mask(x.shape[1])
+      mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(x.shape[1])
       mask = mask.astype(@embedding.weight.dtype)
 
       # First process the prompt, and store per-layer caches.
@@ -157,19 +171,21 @@ instances with an :class:`mlx.nn.Embedding` to embed the input tokens.
         cache << c
       end
       x = @norm.call(x)
-      y = @out_proj.call(x[:, -1])
-      y = mx.random.categorical(y * (1 / temp))
+      x_last = MLX::Core.take(x, x.shape[1] - 1, 1)
+      y = @out_proj.call(x_last)
+      y = MLX::Core.argmax(y * (1 / temp), 1).astype(MLX::Core.int32)
       yield y
 
       loop do
-        x = y[:, nil]
+        x = MLX::Core.expand_dims(y, 1)
         x = @embedding.call(x)
         (0...cache.length).each do |i|
           x, cache[i] = @layers[i].call(x, nil, cache[i])
         end
         x = @norm.call(x)
-        y = @out_proj.call(x[:, -1])
-        y = mx.random.categorical(y * (1 / temp))
+        x_last = MLX::Core.take(x, x.shape[1] - 1, 1)
+        y = @out_proj.call(x_last)
+        y = MLX::Core.argmax(y * (1 / temp), 1).astype(MLX::Core.int32)
         yield y
       end
     end
@@ -189,14 +205,15 @@ prompt and then autoregressively yields tokens one at a time.
 
 .. code-block:: ruby
 
-    class Llama < nn::Module
+    class Llama < MLX::NN::Module
       # ...
 
       def generate(x, temp: 1.0)
+        x = x.astype(MLX::Core.int32)
         cache = []
 
         # Make an additive causal mask. We will need that to process the prompt.
-        mask = nn.MultiHeadAttention.create_additive_causal_mask(x.shape[1])
+        mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(x.shape[1])
         mask = mask.astype(@embedding.weight.dtype)
 
         # First we process the prompt (same as in `call`) and save layer caches.
@@ -206,20 +223,22 @@ prompt and then autoregressively yields tokens one at a time.
           cache << c
         end
         x = @norm.call(x)
-        y = @out_proj.call(x[:, -1]) # only keep logits for the next token
-        y = mx.random.categorical(y * (1.0 / temp))
+        x_last = MLX::Core.take(x, x.shape[1] - 1, 1)
+        y = @out_proj.call(x_last) # only keep logits for the next token
+        y = MLX::Core.argmax(y * (1.0 / temp), 1).astype(MLX::Core.int32)
         yield y
 
         loop do
           # Add a sequence dimension of 1 and continue generation.
-          x = y[:, nil]
+          x = MLX::Core.expand_dims(y, 1)
           x = @embedding.call(x)
           (0...cache.length).each do |i|
             x, cache[i] = @layers[i].call(x, nil, cache[i])
           end
           x = @norm.call(x)
-          y = @out_proj.call(x[:, -1])
-          y = mx.random.categorical(y * (1.0 / temp))
+          x_last = MLX::Core.take(x, x.shape[1] - 1, 1)
+          y = @out_proj.call(x_last)
+          y = MLX::Core.argmax(y * (1.0 / temp), 1).astype(MLX::Core.int32)
           yield y
         end
       end
@@ -235,32 +254,28 @@ it. In the following code, we randomly initialize a small Llama model, process
 .. code-block:: ruby
 
     model = Llama.new(
-      num_layers: 12,
-      vocab_size: 8192,
-      dims: 512,
-      mlp_dims: 1024,
-      num_heads: 8
+      2,
+      256,
+      64,
+      128,
+      4
     )
 
     # Since MLX is lazily evaluated nothing has actually been materialized yet.
     # We could have set the `dims` to 20_000 on a machine with 8GB of RAM and the
     # code above would still run. Let's actually materialize the model.
-    mx.eval(model.parameters)
+    MLX::Core.eval(model.parameters)
 
-    prompt = mx.array([[1, 10, 8, 32, 44, 7]])  # <-- Note the double brackets because we
+    prompt = MLX::Core.array([[1, 10, 8, 32, 44, 7]], MLX::Core.int32)  # <-- Note the double brackets because we
                                                 #     have a batch dimension even
                                                 #     though it is 1 in this case
 
-    generated = model.generate(prompt, temp: 0.8).take(10)
-
-    # Since we haven't evaluated anything, nothing is computed yet. The list
-    # `generated` contains the arrays that hold the computation graph for the
-    # full processing of the prompt and the generation of 10 tokens.
-    #
-    # We can evaluate them one at a time, or all together. Concatenate them or
-    # print them. They would all result in very similar runtimes and give exactly
-    # the same results.
-    mx.eval(*generated)
+    generated = []
+    model.generate(prompt, temp: 0.8) do |token|
+      generated << token
+      break if generated.length >= 10
+    end
+    MLX::Core.eval(*generated)
 
 Converting the weights
 ----------------------
@@ -288,17 +303,23 @@ we will use the :func:`MLX::Utils.tree_unflatten` helper method as follows:
 
 .. code-block:: ruby
 
-    # Ruby: implement tree_unflatten via nested hash helpers
-
-    weights = mx.load(weight_file).to_a
-    model.update(MLX::Utils.tree_unflatten(weights))
+    weights = {
+      "layers.0.attention.query_proj.weight" => MLX::Core.random_uniform([64, 64], -0.1, 0.1, MLX::Core.float32),
+      "layers.0.attention.key_proj.weight" => MLX::Core.random_uniform([64, 64], -0.1, 0.1, MLX::Core.float32)
+    }
+    structured = MLX::Utils.tree_unflatten(weights)
+    model.update(structured, strict: false)
 
 :meth:`MLX::Utils.tree_unflatten` will take keys from the NPZ file that look
 like ``layers.2.attention.query_proj.weight`` and will transform them to
 
 .. code-block:: ruby
 
-   {"layers": [..., ..., {"attention": {"query_proj": {"weight": ...}}}]}
+   {
+     "layers" => [
+       {"attention" => {"query_proj" => {"weight" => MLX::Core.array([0.0])}}}
+     ]
+   }
 
 which can then be used to update the model. Note that the method above incurs
 several unnecessary copies from disk to NumPy arrays and then from NumPy to MLX. It

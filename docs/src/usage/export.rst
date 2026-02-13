@@ -37,29 +37,35 @@ scalar arrays. We can then import the function and run it:
 
   add_fun = mx.import_function("add.mlxfn")
 
-  out, = add_fun.call(mx.array(1.0), mx.array(2.0))
+  out = add_fun.call(mx.array(1.0), mx.array(2.0))
   # Prints: array(3, dtype=float32)
   puts out
 
-  out, = add_fun.call(mx.array(1.0), mx.array(3.0))
+  out = add_fun.call(mx.array(1.0), mx.array(3.0))
   # Prints: array(4, dtype=float32)
   puts out
 
-  # Raises an exception
-  add_fun.call(mx.array(1), mx.array(3.0))
+  begin
+    add_fun.call(mx.array(1), mx.array(3.0))
+  rescue RuntimeError => e
+    puts e.message
+  end
 
-  # Raises an exception
-  add_fun.call(mx.array([1.0, 2.0]), mx.array(3.0))
+  begin
+    add_fun.call(mx.array([1.0, 2.0]), mx.array(3.0))
+  rescue RuntimeError => e
+    puts e.message
+  end
 
 Notice the third and fourth calls to ``add_fun`` raise exceptions because the
 shapes and types of the inputs are different than the shapes and types of the
 example inputs we exported the function with.
 
-Also notice that even though the original ``fun`` returns a single output
-array, the imported function always returns a tuple of one or more arrays.
+For a single-output function, the imported function returns a single
+``mlx.core.array``.
 
-The inputs to :func:`export_function` and to an imported function can be
-specified as variable positional arguments or as a tuple of arrays:
+The inputs to :func:`export_function` and an imported function are specified as
+positional arguments and optional keyword arguments:
 
 .. code-block:: ruby
 
@@ -73,16 +79,10 @@ specified as variable positional arguments or as a tuple of arrays:
   # Both arguments to fun are positional
   mx.export_function("add.mlxfn", method(:fun), x, y)
 
-  # Same as above
-  mx.export_function("add.mlxfn", method(:fun), [x, y])
-
   imported_fun = mx.import_function("add.mlxfn")
 
   # Ok
-  out, = imported_fun.call(x, y)
-
-  # Also ok
-  out, = imported_fun.call([x, y])
+  out = imported_fun.call(x, y)
 
 You can pass example inputs to functions as positional or keyword arguments. If
 you use keyword arguments to export the function, then you have to use the same
@@ -90,9 +90,12 @@ keyword arguments when calling the imported function.
 
 .. code-block:: ruby
 
-  def fun(x, y)
+  def fun(x, y:)
     x + y
   end
+
+  x = mx.array(1.0)
+  y = mx.array(1.0)
 
   # One argument to fun is positional, the other is a kwarg
   mx.export_function("add.mlxfn", method(:fun), x, y: y)
@@ -100,16 +103,21 @@ keyword arguments when calling the imported function.
   imported_fun = mx.import_function("add.mlxfn")
 
   # Ok
-  out, = imported_fun.call(x, y: y)
+  out = imported_fun.call(x, y: y)
 
-  # Also ok
-  out, = imported_fun.call([x], {"y" => y})
+  begin
+    # Raises since the keyword argument is missing
+    imported_fun.call(x, y)
+  rescue StandardError => e
+    puts e.message
+  end
 
-  # Raises since the keyword argument is missing
-  out, = imported_fun.call(x, y)
-
-  # Raises since the keyword argument has the wrong key
-  out, = imported_fun.call(x, z: y)
+  begin
+    # Raises since the keyword argument has the wrong key
+    imported_fun.call(x, z: y)
+  rescue StandardError => e
+    puts e.message
+  end
 
 
 Exporting Modules
@@ -126,7 +134,7 @@ in the exported function. Here's an example:
 
    call = ->(x) { model.call(x) }
 
-   mx.export_function("model.mlxfn", call, mx.zeros(4))
+   mx.export_function("model.mlxfn", call, mx.zeros([4]))
 
 In the above example, the :obj:`mlx.nn.Linear` module is exported. Its
 parameters are also saved to the ``model.mlxfn`` file.
@@ -150,33 +158,39 @@ parameters, pass them as inputs to the ``call`` wrapper:
    model = nn::Linear.new(4, 4)
    mx.eval(model.parameters)
 
-   call = ->(x, params:) do
+   call = ->(x, weight:, bias:) do
      # Set the model's parameters to the input parameters
-     model.update(MLX::Utils.tree_unflatten(params.to_a))
+     model.update({"weight" => weight, "bias" => bias})
      model.call(x)
    end
 
-   params = MLX::Utils.tree_flatten(model.parameters, destination: {})
-   mx.export_function("model.mlxfn", call, mx.zeros(4), params: params)
+   params = model.parameters
+   mx.export_function(
+     "model.mlxfn",
+     call,
+     mx.zeros([4]),
+     weight: params["weight"],
+     bias: params["bias"]
+   )
 
 
 Shapeless Exports
 -----------------
 
 Just like :func:`compile`, functions can also be exported for dynamically shaped
-inputs. Pass ``shapeless: true`` to :func:`export_function` or :func:`exporter`
+inputs. Pass ``true`` as the final argument to :func:`export_function` or :func:`exporter`
 to export a function which can be used for inputs with variable shapes:
 
 .. code-block:: ruby
 
-  mx.export_function("fun.mlxfn", mx.abs, mx.array([0.0]), shapeless: true)
+  mx.export_function("fun.mlxfn", ->(x) { mx.abs(x) }, mx.array([0.0]), true)
   imported_abs = mx.import_function("fun.mlxfn")
 
   # Ok
-  out, = imported_abs.call(mx.array([-1.0]))
+  out = imported_abs.call(mx.array([-1.0]))
 
   # Also ok
-  out, = imported_abs.call(mx.array([-1.0, -2.0]))
+  out = imported_abs.call(mx.array([-1.0, -2.0]))
 
 With ``shapeless: false`` (which is the default), the second call to
 ``imported_abs`` would raise an exception with a shape mismatch.
@@ -205,19 +219,14 @@ a single file by creating an exporting context manager with :func:`exporter`:
     x + constant
   end
 
-  mx.exporter("fun.mlxfn", fun) do |exporter|
-    exporter.call(mx.array(1.0))
-    exporter.call(mx.array(1.0), y: mx.array(0.0))
-  end
+  exporter = mx.exporter("fun.mlxfn", fun)
+  exporter.call(mx.array(1.0), y: mx.array(0.0))
+  exporter.close
 
   imported_function = mx.import_function("fun.mlxfn")
 
-  # Call the function with y: nil
-  out, = imported_function.call(mx.array(1.0))
-  puts out
-
   # Call the function with y specified
-  out, = imported_function.call(mx.array(1.0), y: mx.array(1.0))
+  out = imported_function.call(mx.array(1.0), y: mx.array(1.0))
   puts out
 
 In the above example the function constant data, (i.e. ``constant``), is only
@@ -241,14 +250,14 @@ on imported functions just like regular Ruby functions:
   imported_fun = mx.import_function("sine.mlxfn")
 
   # Take the derivative of the imported function
-  dfdx = mx.grad(->(t) { imported_fun.call(t)[0] })
+  dfdx = mx.grad(->(t) { imported_fun.call(t) })
   # Prints: array(1, dtype=float32)
   puts dfdx.call(x)
 
   # Compile the imported function
   compiled_fun = mx.compile(imported_fun)
   # Prints: array(0, dtype=float32)
-  puts compiled_fun.call(x)[0]
+  puts compiled_fun.call(x)
 
 
 Importing Functions in C++

@@ -26,21 +26,25 @@ work.
 
     require "mlx"
     mx = MLX::Core
-    a = mx.random.uniform(shape: [512, 512])
-    b = mx.random.uniform(shape: [512, 512])
+    a = mx.random_uniform([512, 512], 0.0, 1.0, mx.float32)
+    b = mx.random_uniform([512, 512], 0.0, 1.0, mx.float32)
     mx.eval(a, b)
 
     trace_file = "mlx_trace.gputrace"
 
     # Make sure to run with MTL_CAPTURE_ENABLED=1 and
     # that the path trace_file does not already exist.
-    mx.metal.start_capture(trace_file)
-
-    10.times do
-      mx.eval(mx.add(a, b))
+    if mx.metal_is_available
+      begin
+        mx.metal_start_capture(trace_file)
+        10.times do
+          mx.eval(mx.add(a, b))
+        end
+        mx.metal_stop_capture()
+      rescue RuntimeError
+        # Capture requires MTL_CAPTURE_ENABLED=1 and the Xcode capture layer.
+      end
     end
-
-    mx.metal.stop_capture()
 
 You can open and replay the GPU trace in Xcode. The ``Dependencies`` view
 has a great overview of all operations. Checkout the `Metal debugger

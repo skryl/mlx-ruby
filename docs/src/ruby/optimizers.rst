@@ -13,24 +13,32 @@ model's parameters and the **optimizer state**.
 
 .. code-block:: ruby
 
+    require "mlx"
+    mx = MLX::Core
+    nn = MLX::NN
+    optim = MLX::Optimizers
+
     # Create a model
-    model = MLP.new(num_layers, train_images.shape[-1], hidden_dim, num_classes)
+    model = nn::Linear.new(8, 2)
     mx.eval(model.parameters)
 
+    x = mx.random_uniform([16, 8], 0.0, 1.0, mx.float32)
+    y = mx.randint(0, 2, [16], mx.int32)
+    learning_rate = 1e-1
+
+    loss_fn = ->(model, x, y) { mx.mean(nn.cross_entropy(model.call(x), y)) }
     # Create the gradient function and the optimizer
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
     optimizer = optim::SGD.new(learning_rate: learning_rate)
 
-    num_epochs.times do
-      batch_iterate(batch_size, train_images, train_labels).each do |x, y|
-        loss, grads = loss_and_grad_fn.call(model, x, y)
+    3.times do
+      loss, grads = loss_and_grad_fn.call(model, x, y)
 
-        # Update the model with the gradients. So far no computation has happened.
-        optimizer.update(model, grads)
+      # Update the model with the gradients. So far no computation has happened.
+      optimizer.update(model, grads)
 
-        # Compute the new parameters but also the optimizer state.
-        mx.eval(model.parameters, optimizer.state)
-      end
+      # Compute the new parameters but also the optimizer state.
+      mx.eval(loss, model.parameters, optimizer.state)
     end
 
 Saving and Loading
@@ -43,25 +51,35 @@ the saved state. Here's a simple example:
 
    require "mlx"
    mx = MLX::Core
-   # Ruby helpers for nested parameter trees are in MLX::Utils
    optim = MLX::Optimizers
    optimizer = optim::Adam.new(learning_rate: 1e-2)
 
    # Perform some updates with the optimizer
-   model = {"w" : mx.zeros((5, 5))}
-   grads = {"w" : mx.ones((5, 5))}
+   model = {"w" => mx.zeros([5, 5])}
+   grads = {"w" => mx.ones([5, 5])}
    optimizer.update(model, grads)
+   mx.eval(model, optimizer.state)
 
    # Save the state
-   state = MLX::Utils.tree_flatten(optimizer.state, destination: {})
-   mx.save_safetensors("optimizer.safetensors", state)
+   state = optimizer.state
+   serializable = {
+     step: mx.array(state["step"]),
+     learning_rate: mx.array(state["learning_rate"]),
+     m: state["w"]["m"],
+     v: state["w"]["v"]
+   }
+   mx.savez("optimizer_state.npz", **serializable)
 
    # Later on, for example when loading from a checkpoint,
    # recreate the optimizer and load the state
    optimizer = optim::Adam.new(learning_rate: 1e-2)
 
-   state = MLX::Utils.tree_unflatten(mx.load("optimizer.safetensors"))
-   optimizer.state = state
+   loaded = mx.load("optimizer_state.npz")
+   optimizer.state = {
+     "step" => loaded["step"].item,
+     "learning_rate" => loaded["learning_rate"].item,
+     "w" => {"m" => loaded["m"], "v" => loaded["v"]}
+   }
 
 Note, not every optimizer configuation parameter is saved in the state. For
 example, for Adam the learning rate is saved but the ``betas`` and ``eps``

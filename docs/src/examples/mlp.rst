@@ -52,7 +52,7 @@ commonly used loss functions.
 .. code-block:: ruby
 
   def loss_fn(model, x, y)
-      mx.mean(nn.losses.cross_entropy(model.call(x), y))
+    mx.mean(nn.cross_entropy(model.call(x), y))
   end
 
 We also need a function to compute the accuracy of the model on the validation
@@ -61,7 +61,7 @@ set:
 .. code-block:: ruby
 
   def eval_fn(model, x, y)
-      mx.mean(mx.argmax(model.call(x), axis: 1) == y)
+      mx.mean(mx.equal(mx.argmax(model.call(x), 1), y))
   end
 
 Next, setup the problem parameters and load the data. To load the data, you need our
@@ -74,13 +74,15 @@ invoked from a Ruby script in your workflow.
   num_layers = 2
   hidden_dim = 32
   num_classes = 10
-  batch_size = 256
-  num_epochs = 10
+  batch_size = 32
+  num_epochs = 1
   learning_rate = 1e-1
 
-  # Load the data with your preferred Ruby dataset helper
-  # (for example, a Ruby MNIST loader gem):
-  # train_images, train_labels, test_images, test_labels = mnist_data
+  # Small synthetic dataset so the example runs quickly.
+  train_images = mx.random_uniform([256, 28 * 28], 0.0, 1.0, mx.float32)
+  train_labels = mx.randint(0, num_classes, [256], mx.int32)
+  test_images = mx.random_uniform([64, 28 * 28], 0.0, 1.0, mx.float32)
+  test_labels = mx.randint(0, num_classes, [64], mx.int32)
 
 Since we're using SGD, we need an iterator which shuffles and constructs
 minibatches of examples in the training set:
@@ -88,13 +90,14 @@ minibatches of examples in the training set:
 .. code-block:: ruby
 
   def batch_iterate(batch_size, x, y)
-      # Replace this with your preferred random-shuffle helper
-      perm = (0...y.shape[0]).to_a.shuffle
-      # Example assumes `perm` is used to index the mini-batches
-      (0...y.shape[0]).step(batch_size).each do |s|
-          ids = perm[s...(s + batch_size)]
-          yield x[ids], y[ids]
-      end
+    return enum_for(__method__, batch_size, x, y) unless block_given?
+
+    perm = (0...y.shape[0]).to_a.shuffle
+    (0...y.shape[0]).step(batch_size).each do |start|
+      finish = [start + batch_size, y.shape[0]].min
+      ids = mx.array(perm[start...finish], mx.int32)
+      yield mx.take(x, ids, 0), mx.take(y, ids, 0)
+    end
   end
 
 
@@ -109,25 +112,25 @@ Finally, we put it all together by instantiating the model, the
 
   # Get a function which gives the loss and gradient of the
   # loss with respect to the model's trainable parameters
-  loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
+  loss_and_grad_fn = nn.value_and_grad(model, method(:loss_fn))
 
   # Instantiate the optimizer
   optimizer = optim::SGD.new(learning_rate: learning_rate)
 
   num_epochs.times do |e|
-      batch_iterate(batch_size, train_images, train_labels).each do |x, y|
-          loss, grads = loss_and_grad_fn.call(model, x, y)
+    batch_iterate(batch_size, train_images, train_labels).each do |x, y|
+      loss, grads = loss_and_grad_fn.call(model, x, y)
 
-          # Update the optimizer state and model parameters
-          # in a single call
-          optimizer.update(model, grads)
+      # Update the optimizer state and model parameters
+      # in a single call
+      optimizer.update(model, grads)
 
-          # Force a graph evaluation
-          mx.eval(model.parameters, optimizer.state)
-      end
+      # Force a graph evaluation
+      mx.eval(model.parameters, optimizer.state)
+    end
 
-      accuracy = eval_fn(model, test_images, test_labels)
-      puts "Epoch #{e}: Test accuracy #{accuracy.item.round(3)}"
+    accuracy = eval_fn(model, test_images, test_labels)
+    puts "Epoch #{e}: Test accuracy #{accuracy.item.round(3)}"
   end
 
 .. note::
