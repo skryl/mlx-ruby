@@ -2,7 +2,9 @@
 
 [![Build and Test](https://github.com/skryl/mlx-ruby/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/skryl/mlx-ruby/actions/workflows/build_and_test.yml)
 [![RubyGems](https://img.shields.io/gem/v/mlx.svg)](https://rubygems.org/gems/mlx)
-[![Documentation](https://img.shields.io/badge/docs-MLX%20Ruby-blue)](https://skryl.github.io/mlx-ruby/build/html/index.html)
+[![Documentation](https://img.shields.io/badge/docs-MLX%20Ruby-blue)](https://skryl.github.io/mlx-ruby)
+
+[Full Documentation](https://skryl.github.io/mlx-ruby)
 
 Ruby bindings for [MLX](https://github.com/ml-explore/mlx): a NumPy-like array framework for machine learning.
 
@@ -127,6 +129,118 @@ end
 ```
 
 Important: when defining `MLX::NN::Module`, register trainable arrays/submodules with `self.<name> = ...` (not only `@ivar = ...`) so they are tracked in `parameters` and optimized correctly.
+
+### Small CNN (single training step)
+
+```ruby
+require "mlx"
+
+mx = MLX::Core
+
+class SmallCNN < MLX::NN::Module
+  def initialize(num_classes: 10)
+    super()
+    self.conv1 = MLX::NN::Conv2d.new(1, 16, 3, padding: 1)
+    self.conv2 = MLX::NN::Conv2d.new(16, 32, 3, padding: 1)
+    self.relu = MLX::NN::ReLU.new
+    self.pool = MLX::NN::MaxPool2d.new(2, stride: 2)
+    self.fc1 = MLX::NN::Linear.new(32 * 7 * 7, 64)
+    self.fc2 = MLX::NN::Linear.new(64, num_classes)
+  end
+
+  def call(x)
+    y = pool.call(relu.call(conv1.call(x)))
+    y = pool.call(relu.call(conv2.call(y)))
+    y = MLX::Core.reshape(y, [y.shape[0], 32 * 7 * 7])
+    y = relu.call(fc1.call(y))
+    fc2.call(y)
+  end
+end
+
+model = SmallCNN.new(num_classes: 10)
+optimizer = MLX::Optimizers::Adam.new(learning_rate: 1e-3)
+
+loss_and_grad = MLX::NN.value_and_grad(
+  model,
+  lambda do |images, labels|
+    logits = model.call(images)
+    MLX::NN.cross_entropy(logits, labels, reduction: "mean")
+  end
+)
+
+images = mx.random_uniform([4, 28, 28, 1], 0.0, 1.0, mx.float32)
+labels = mx.array([1, 3, 4, 7], mx.int32)
+
+loss, grads = loss_and_grad.call(images, labels)
+optimizer.update(model, grads)
+mx.eval(loss, model.parameters, optimizer.state)
+puts "cnn_loss=#{loss.item}"
+```
+
+### Karpathy-style nano GPT (single training step)
+
+```ruby
+require "mlx"
+
+mx = MLX::Core
+vocab_size = 65
+seq_len = 32
+batch_size = 4
+dims = 128
+heads = 4
+layers = 2
+
+class NanoGpt < MLX::NN::Module
+  def initialize(vocab_size:, seq_len:, dims:, heads:, layers:)
+    super()
+    self.token_embedding = MLX::NN::Embedding.new(vocab_size, dims)
+    self.pos_embedding = MLX::NN::Embedding.new(seq_len, dims)
+    self.blocks = Array.new(layers) do
+      MLX::NN::TransformerEncoderLayer.new(
+        dims,
+        heads,
+        mlp_dims: dims * 4,
+        dropout: 0.0,
+        norm_first: true
+      )
+    end
+    self.norm = MLX::NN::LayerNorm.new(dims)
+    self.head = MLX::NN::Linear.new(dims, vocab_size)
+    @causal_mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(seq_len)
+  end
+
+  def call(input_ids)
+    positions = MLX::Core.arange(0, input_ids.shape[1], 1, MLX::Core.int32)
+    hidden = MLX::Core.add(token_embedding.call(input_ids), pos_embedding.call(positions))
+    blocks.each { |block| hidden = block.call(hidden, @causal_mask) }
+    head.call(norm.call(hidden))
+  end
+end
+
+tokens = Array.new(batch_size) { Array.new(seq_len) { rand(vocab_size) } }
+targets = tokens.map { |row| row[1..] + [0] }
+
+input_ids = mx.array(tokens, mx.int32)
+target_ids = mx.array(targets, mx.int32)
+
+model = NanoGpt.new(vocab_size: vocab_size, seq_len: seq_len, dims: dims, heads: heads, layers: layers)
+optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-3)
+
+loss_and_grad = MLX::NN.value_and_grad(
+  model,
+  lambda do |ids, labels|
+    logits = model.call(ids)
+    logits2d = MLX::Core.reshape(logits, [batch_size * seq_len, vocab_size])
+    labels1d = MLX::Core.reshape(labels, [batch_size * seq_len])
+    MLX::NN.cross_entropy(logits2d, labels1d, reduction: "mean")
+  end
+)
+
+loss, grads = loss_and_grad.call(input_ids, target_ids)
+optimizer.update(model, grads)
+mx.eval(loss, model.parameters, optimizer.state)
+puts "nanogpt_loss=#{loss.item}"
+```
 
 ## Device selection
 

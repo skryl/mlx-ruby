@@ -44,6 +44,9 @@ breathe_default_project = "mlx"
 
 templates_path = ["_templates"]
 html_static_path = ["_static"]
+exclude_patterns = [
+    "python/**",
+]
 source_suffix = ".rst"
 main_doc = "index"
 highlight_language = "python"
