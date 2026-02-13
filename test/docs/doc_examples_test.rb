@@ -296,8 +296,13 @@ class DocExamplesTest < Minitest::Test
     end
 
     # Running compile snippets with redirected stdout/stderr can be unstable.
+    #
+    # Also avoid Timeout.timeout around compile examples; on some Ruby/Linux
+    # CI combinations this can segfault inside timeout thread cleanup when a
+    # native extension is active.
     if code.include?("mx.compile(") || code.include?("MLX::Core.compile(")
       mode[:skip_capture] = true
+      mode[:timeout_seconds] = nil
     end
 
     mode
