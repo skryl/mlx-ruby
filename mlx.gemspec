@@ -16,8 +16,20 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.1"
 
   spec.files = Dir.chdir(__dir__) do
-    Dir.glob("{lib,ext,mlx}/**/*", File::FNM_DOTMATCH)
+    include_globs = [
+      "lib/**/*",
+      "ext/mlx/extconf.rb",
+      "ext/mlx/native.cpp",
+      "mlx/CMakeLists.txt",
+      "mlx/mlx.pc.in",
+      "mlx/cmake/**/*",
+      "mlx/mlx/**/*"
+    ]
+
+    Dir.glob(include_globs, File::FNM_DOTMATCH)
       .reject { |path| File.directory?(path) }
+      .uniq
+      .sort
   end
   spec.require_paths = ["lib"]
   spec.extensions = ["ext/mlx/extconf.rb"]

@@ -254,6 +254,18 @@ Supported values are `cpu`, `gpu`, or `metal` (`metal` maps to GPU selection whe
 
 ## Development
 
+### Build native extension
+
+```bash
+bundle exec rake build
+```
+
+### Clean native build artifacts
+
+```bash
+bundle exec rake clean
+```
+
 ### Run tests
 
 ```bash
