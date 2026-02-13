@@ -25,12 +25,13 @@ def list_python_files
 end
 
 def list_ruby_files
-  ignored = %w[core.rb version.rb nn/base.rb].freeze
+  ignored = %w[core.rb version.rb nn/base.rb dsl.rb].freeze
   Dir.glob(RUBY_MLX_ROOT.join("**", "*.rb")).filter_map do |path|
     next unless File.file?(path)
 
     rel = Pathname.new(path).relative_path_from(RUBY_MLX_ROOT).to_s
     next if ignored.include?(rel)
+    next if rel.start_with?("dsl/")
 
     rel
   end.compact.sort

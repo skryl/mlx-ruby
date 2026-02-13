@@ -252,6 +252,126 @@ mx.eval(loss, model.parameters, optimizer.state)
 puts "nanogpt_loss=#{loss.item}"
 ```
 
+### Ruby DSL (experimental ergonomic layer)
+
+`MLX::DSL` provides Ruby-style declarations on top of the existing `MLX::NN::Module` behavior.
+
+```ruby
+require "mlx"
+
+class Mlp < MLX::DSL::Model
+  option :in_dim
+  option :hidden_dim, default: 128
+  option :out_dim
+
+  layer :net do
+    sequential do
+      linear in_dim, hidden_dim
+      relu
+      linear hidden_dim, out_dim
+    end
+  end
+
+  def call(x)
+    net.call(x)
+  end
+end
+
+model = Mlp.new(in_dim: 32, out_dim: 10)
+```
+
+You can also mix the DSL into existing `MLX::NN::Module` subclasses:
+
+```ruby
+class Block < MLX::NN::Module
+  include MLX::DSL::ModelMixin
+
+  option :dims, default: 64
+  layer(:proj) { linear dims, dims, bias: false }
+  layer(:norm) { layer_norm dims }
+
+  def call(x)
+    norm.call(proj.call(x))
+  end
+end
+```
+
+`train_step` wraps `value_and_grad` and optimizer updates:
+
+```ruby
+optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-3)
+
+step = model.train_step(optimizer: optimizer, clip_grad_norm: 1.0) do |x:, y:|
+  logits = model.call(x)
+  MLX::NN.cross_entropy(logits, y, reduction: "mean")
+end
+
+step.after_step { |ctx| puts "step=#{ctx[:step]} loss=#{ctx[:loss].item}" }
+loss = step.call(x: batch_x, y: batch_y)
+```
+
+A small trainer wrapper is also available:
+
+```ruby
+trainer = model.trainer(optimizer: optimizer) do |x:, y:|
+  logits = model.call(x)
+  MLX::NN.cross_entropy(logits, y, reduction: "mean")
+end
+
+trainer.before_epoch { |ctx| puts "epoch=#{ctx[:epoch]}" }
+trainer.after_batch { |ctx| puts "batch=#{ctx[:batch_index]} loss=#{ctx[:loss_value]}" }
+
+train_data = ->(epoch:) { shuffled_batches_for(epoch) }
+validation_data = ->(epoch:) { heldout_batches_for(epoch) }
+
+losses = trainer.fit(train_data, epochs: 2)
+
+report = trainer.fit_report(
+  train_data,
+  epochs: 5,
+  reduce: :mean,
+  validation_data: validation_data,
+  validation_reduce: :mean,
+  monitor: :val_loss,
+  monitor_mode: :min,
+  checkpoint_path: "checkpoints/epoch-%{epoch}-monitor-%{monitor}.bin",
+  save_best: true,
+  metadata: { "run" => "exp-42" }
+)
+
+puts "#{report['monitor_name']}=#{report['best_metric']}"
+```
+
+For non-linear graph composition, the DSL also supports branch/merge helpers:
+
+```ruby
+class ResidualHead < MLX::DSL::Model
+  option :dims, default: 64
+
+  layer :merge do
+    concat(axis: -1) do
+      identity
+      residual do
+        linear dims, dims
+      end
+    end
+  end
+
+  def call(x)
+    merge.call(x)
+  end
+end
+```
+
+Parameter-group optimizers:
+
+```ruby
+grouped = model.optimizer_groups do
+  group(/^encoder\./) { MLX::Optimizers::AdamW.new(learning_rate: 1e-4) }
+  group(nil) { MLX::Optimizers::SGD.new(learning_rate: 1e-2) }
+end
+```
+
 ## Device selection
 
 Default device is chosen at load time. You can override it:
