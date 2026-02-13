@@ -13,8 +13,8 @@ Concretely, when you make an array in MLX you don't have to specify its location
 
 .. code-block:: ruby
 
-  a = mx.random.normal((100,))
-  b = mx.random.normal((100,))
+  a = mx.random_uniform([100], -1.0, 1.0, mx.float32)
+  b = mx.random_uniform([100], -1.0, 1.0, mx.float32)
 
 Both ``a`` and ``b`` live in unified memory.
 
@@ -24,8 +24,8 @@ without needing to move them from one memory location to another. For example:
 
 .. code-block:: ruby
 
-  mx.add(a, b, stream: mx.cpu)
-  mx.add(a, b, stream: mx.gpu)
+  mx.stream(mx.cpu) { mx.add(a, b) }
+  mx.stream(mx.gpu) { mx.add(a, b) }
 
 In the above, both the CPU and the GPU will perform the same add
 operation. The operations can (and likely will) be run in parallel since
@@ -38,8 +38,8 @@ MLX scheduler will automatically manage them. For example:
 
 .. code-block:: ruby
 
-  c = mx.add(a, b, stream: mx.cpu)
-  d = mx.add(a, c, stream: mx.gpu)
+  c = mx.stream(mx.cpu) { mx.add(a, b) }
+  d = mx.stream(mx.gpu) { mx.add(a, c) }
 
 In the above case, the second ``add`` runs on the GPU but it depends on the
 output of the first ``add`` which is running on the CPU. MLX will
@@ -56,9 +56,9 @@ memory can be helpful. Suppose we have the following computation:
 .. code-block:: ruby
 
   def fun(a, b, d1, d2)
-    x = mx.matmul(a, b, stream: d1)
-    500.times do
-      b = mx.exp(b, stream: d2)
+    x = mx.stream(d1) { mx.matmul(a, b) }
+    20.times do
+      b = mx.stream(d2) { mx.exp(b) }
     end
     [x, b]
   end
@@ -67,8 +67,8 @@ which we want to run with the following arguments:
 
 .. code-block:: ruby
 
-  a = mx.random.uniform(shape: [4096, 512])
-  b = mx.random.uniform(shape: [512, 4])
+  a = mx.random_uniform([1024, 256], 0.0, 1.0, mx.float32)
+  b = mx.random_uniform([256, 4], 0.0, 1.0, mx.float32)
 
 The first ``matmul`` operation is a good fit for the GPU since it's more
 compute dense. The second sequence of operations are a better fit for the CPU,

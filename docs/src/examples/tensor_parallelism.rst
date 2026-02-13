@@ -116,7 +116,7 @@ distributed layers.
 
 .. code-block:: ruby
 
-  x = ... # some (4, 2) model input: batch size 4, feature size 2
+  x = MLX::Core.random_uniform([4, 2], 0.0, 1.0, MLX::Core.float32) # some (4, 2) model input
 
   l1 = MLX::NN::AllToShardedLinear.new(2, 2, bias: false) # initialize the layer
   l1_out = l1.call(x) # (4, 1) output
@@ -148,8 +148,8 @@ current process rank:
 
 .. code-block:: ruby
 
-  world = mx.distributed.init()
-  rank = world.rank()
+  world = mx.init
+  rank = world.rank
 
 Next, let's look at the current architecture of the transformer block and see how we can apply tensor parallelism:
 
@@ -198,16 +198,32 @@ adjusted to account for the sharding:
 
 .. code-block:: ruby
 
-  # ... in Attention class
-  def shard(group)
-    @n_heads = @n_heads / group.size
-    @n_kv_heads = @n_kv_heads / group.size
+  class Attention
+    attr_reader :n_heads, :n_kv_heads
 
-    @wq = nn.layers.distributed.shard_linear(@wq, "all-to-sharded", group: group)
-    @wk = nn.layers.distributed.shard_linear(@wk, "all-to-sharded", group: group)
-    @wv = nn.layers.distributed.shard_linear(@wv, "all-to-sharded", group: group)
-    @wo = nn.layers.distributed.shard_linear(@wo, "sharded-to-all", group: group)
+    def initialize(dims, n_heads: 8, n_kv_heads: 8)
+      @n_heads = n_heads
+      @n_kv_heads = n_kv_heads
+      @wq = MLX::NN::Linear.new(dims, dims, bias: false)
+      @wk = MLX::NN::Linear.new(dims, dims, bias: false)
+      @wv = MLX::NN::Linear.new(dims, dims, bias: false)
+      @wo = MLX::NN::Linear.new(dims, dims, bias: false)
+    end
+
+    # This is the same sharding pattern used in Llama attention.
+    def shard(group)
+      @n_heads /= group.size
+      @n_kv_heads /= group.size
+
+      @wq = MLX::NN.shard_linear(@wq, "all-to-sharded", group: group)
+      @wk = MLX::NN.shard_linear(@wk, "all-to-sharded", group: group)
+      @wv = MLX::NN.shard_linear(@wv, "all-to-sharded", group: group)
+      @wo = MLX::NN.shard_linear(@wo, "sharded-to-all", group: group)
+    end
   end
+
+  attention = Attention.new(16)
+  attention.shard(world)
 
 Similarly, the FeedForward block is sharded by converting the gate (w1) and up
 (w3) projections to all-to-sharded layers, and the down projection (w2) to
@@ -215,12 +231,22 @@ a sharded-to-all layer:
 
 .. code-block:: ruby
 
-  # ... in FeedForward class
-  def shard(group)
-    @w1 = nn.layers.distributed.shard_linear(@w1, "all-to-sharded", group: group)
-    @w2 = nn.layers.distributed.shard_linear(@w2, "sharded-to-all", group: group)
-    @w3 = nn.layers.distributed.shard_linear(@w3, "all-to-sharded", group: group)
+  class FeedForward
+    def initialize(dims, hidden_dims)
+      @w1 = MLX::NN::Linear.new(dims, hidden_dims, bias: false)
+      @w2 = MLX::NN::Linear.new(hidden_dims, dims, bias: false)
+      @w3 = MLX::NN::Linear.new(dims, hidden_dims, bias: false)
+    end
+
+    def shard(group)
+      @w1 = MLX::NN.shard_linear(@w1, "all-to-sharded", group: group)
+      @w2 = MLX::NN.shard_linear(@w2, "sharded-to-all", group: group)
+      @w3 = MLX::NN.shard_linear(@w3, "all-to-sharded", group: group)
+    end
   end
+
+  feed_forward = FeedForward.new(16, 64)
+  feed_forward.shard(world)
 
 Finally, in our :code:`load_model` function, we need to apply our sharding
 functions to all transformer layers when using multiple devices:
@@ -228,6 +254,12 @@ functions to all transformer layers when using multiple devices:
 .. code-block:: ruby
 
   # ... in load_model function
+  Layer = Struct.new(:attention, :feed_forward)
+  model = Struct.new(:layers).new([
+    Layer.new(Attention.new(16), FeedForward.new(16, 64)),
+    Layer.new(Attention.new(16), FeedForward.new(16, 64))
+  ])
+
   if world.size > 1
     # convert Linear layers in Transformer/FFN to appropriate Sharded Layers
     model.layers.each do |layer|

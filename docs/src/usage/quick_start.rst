@@ -14,13 +14,10 @@ Import ``mlx.core`` and make an :class:`array`:
   require "mlx"
   mx = MLX::Core
   a = mx.array([1, 2, 3, 4])
-  a.shape
-  [4]
-  a.dtype
-  int32
+  puts a.shape.inspect
+  puts a.dtype
   b = mx.array([1.0, 2.0, 3.0, 4.0])
-  b.dtype
-  float32
+  puts b.dtype
 
 Operations in MLX are lazy. The outputs of MLX operations are not computed
 until they are needed. To force an array to be evaluated use
@@ -34,12 +31,9 @@ automatically evaluate the array.
   c = a + b    # c not yet evaluated
   mx.eval(c)  # evaluates c
   c = a + b
-  print(c)     # Also evaluates c
-  array([2, 4, 6, 8], dtype=float32)
+  puts c      # Also evaluates c
   c = a + b
-  # Ruby example: NumPy is not part of this Ruby page; use your preferred
-  # Ruby array bridge to materialize this value instead.
-  array([2., 4., 6., 8.], dtype=float32)
+  p c.to_a    # => [2.0, 4.0, 6.0, 8.0]
 
 
 See the page on :ref:`Lazy Evaluation <lazy eval>` for more details.
@@ -54,12 +48,9 @@ Transformations can be composed arbitrarily. For example
 .. code-block:: ruby
 
   x = mx.array(0.0)
-  mx.sin(x)
-  array(0, dtype=float32)
-  mx.grad(mx.sin)(x)
-  array(1, dtype=float32)
-  mx.grad(mx.grad(mx.sin))(x)
-  array(-0, dtype=float32)
+  puts mx.sin(x)
+  puts mx.grad(->(t) { mx.sin(t) }).call(x)
+  puts mx.grad(mx.grad(->(t) { mx.sin(t) })).call(x)
 
 Other gradient transformations include :func:`vjp` for vector-Jacobian products
 and :func:`jvp` for Jacobian-vector products.

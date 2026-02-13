@@ -12,7 +12,7 @@ learn MLX. First import the core package and setup some problem metadata:
   mx = MLX::Core
   num_features = 100
   num_examples = 1_000
-  num_iters = 10_000  # iterations of SGD
+  num_iters = 200  # iterations of SGD
   lr = 0.01  # learning rate for SGD
 
 
@@ -25,14 +25,14 @@ We'll generate a synthetic dataset by:
 .. code-block:: ruby
 
   # Ground-truth parameters
-  w_star = mx.random.normal((num_features,))
+  w_star = mx.random_uniform([num_features], -1.0, 1.0, mx.float32)
 
   # Input examples (design matrix)
-  X = mx.random.normal((num_examples, num_features))
+  x_train = mx.random_uniform([num_examples, num_features], -1.0, 1.0, mx.float32)
 
   # Noisy labels
-  eps = 1e-2 * mx.random.normal((num_examples,))
-  y = mx.matmul(X, w_star) + eps
+  eps = mx.random_uniform([num_examples], -1.0, 1.0, mx.float32) * 1e-2
+  y = mx.matmul(x_train, w_star) + eps
 
 
 We will use SGD to find the optimal weights. To start, define the squared loss
@@ -40,8 +40,8 @@ and get the gradient function of the loss with respect to the parameters.
 
 .. code-block:: ruby
 
-  def loss_fn(w)
-    0.5 * mx.mean(mx.square(mx.matmul(X, w) - y))
+  loss_fn = ->(w) do
+    mx.mean(mx.square(mx.matmul(x_train, w) - y)) * 0.5
   end
 
   grad_fn = mx.grad(loss_fn)
@@ -51,11 +51,11 @@ repeatedly update the parameters for ``num_iters`` iterations.
 
 .. code-block:: ruby
 
-  w = 1e-2 * mx.random.normal((num_features,))
+  w = mx.random_uniform([num_features], -1.0, 1.0, mx.float32) * 1e-2
 
   num_iters.times do
     grad = grad_fn.call(w)
-    w = w - lr * grad
+    w = w - grad * lr
     mx.eval(w)
   end
 
@@ -64,10 +64,10 @@ close to the ground truth parameters.
 
 .. code-block:: ruby
 
-  loss = loss_fn(w)
+  loss = mx.mean(mx.square(mx.matmul(x_train, w) - y)) * 0.5
   error_norm = mx.sum(mx.square(w - w_star)).item() ** 0.5
 
-  puts("Loss #{\"%.5f\" % loss.item()}, |w-w*| = #{\"%.5f\" % error_norm}")
+  puts format("Loss %.5f, |w-w*| = %.5f", loss.item, error_norm)
   # Should print something close to: Loss 0.00005, |w-w*| = 0.00364
 
 Full versions of the linear and logistic regression examples are available in the

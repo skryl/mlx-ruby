@@ -15,6 +15,13 @@ From MLX to another framework
   require "mlx"
   mx = MLX::Core
 
+  module Bridge
+    module_function
+    def from_mlx(x)
+      x.to_a
+    end
+  end
+
   x = mx.arange(3)
 
   # Convert MLX -> external framework using its bridging helper
@@ -28,6 +35,7 @@ From another framework back to MLX
 .. code-block:: ruby
 
   # x_other should be an array-like value from your target framework
+  x_other = [1.0, 2.0, 3.0]
   x = mx.array(x_other)
 
 .. note::

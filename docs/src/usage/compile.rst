@@ -21,7 +21,7 @@ Let's start with a simple example:
 .. code-block:: ruby
 
   def fun(x, y)
-    mx.exp(-x) + y
+    mx.exp(mx.negative(x)) + y
   end
 
   x = mx.array(1.0)
@@ -49,7 +49,7 @@ should typically compile functions that you plan to use more than once.
 .. code-block:: ruby
 
   def fun(x, y)
-    mx.exp(-x) + y
+    mx.exp(mx.negative(x)) + y
   end
 
   x = mx.array(1.0)
@@ -64,7 +64,7 @@ should typically compile functions that you plan to use more than once.
   compiled_fun.call(x, y)
 
   # Not compiled again
-  mx.compile(method(:fun)).call(x, y)
+  compiled_fun.call(x, y)
 
 There are some important cases to be aware of that can cause a function to
 be recompiled:
@@ -100,7 +100,7 @@ element-wise operations:
 .. code-block:: ruby
 
   def gelu(x)
-    x * (1 + mx.erf(x / Math.sqrt(2))) / 2
+    x * (mx.erf(x / Math.sqrt(2.0)) + 1.0) / 2.0
   end
 
 If you use this function with small arrays, it will be overhead bound. If you
@@ -119,12 +119,12 @@ handles synchronization:
 
   def timeit(fun, x)
     # warm up
-    10.times { mx.eval(fun.call(x)) }
+    2.times { mx.eval(fun.call(x)) }
 
     tpi = Benchmark.realtime do
-      100.times { mx.eval(fun.call(x)) }
+      10.times { mx.eval(fun.call(x)) }
     end
-    1000.0 * tpi / 100.0
+    1000.0 * tpi / 10.0
   end
 
 
@@ -132,7 +132,7 @@ Now make an array, and benchmark both functions:
 
 .. code-block:: ruby
 
-  x = mx.random.uniform(shape: [32, 1000, 4096])
+  x = mx.random_uniform([8, 256, 256], 0.0, 1.0, mx.float32)
   timeit(->(t) { gelu(t) }, x)
   timeit(mx.compile(->(t) { gelu(t) }), x)
 
@@ -149,7 +149,7 @@ contents) inside compiled functions.
 .. code-block:: ruby
 
   fun = mx.compile(->(x) do
-    z = -x
+    z = mx.negative(x)
     puts z # Crash
     mx.exp(z)
   end)
@@ -164,7 +164,7 @@ globally disable compilation using the :func:`disable_compile` function or
 .. code-block:: ruby
 
   fun = mx.compile(->(x) do
-    z = -x
+    z = mx.negative(x)
     puts z # Okay
     mx.exp(z)
   end)
@@ -312,27 +312,27 @@ To start, here is the simple example without any compilation:
   mx = MLX::Core
   nn = MLX::NN
   optim = MLX::Optimizers
-  # 4 examples with 10 features each
-  x = mx.random.uniform(shape: [4, 10])
+  # 2 examples with 2 features each
+  x = mx.random_uniform([2, 2], 0.0, 1.0, mx.float32)
 
   # 0, 1 targets
-  y = mx.array([0, 1, 0, 1])
+  y = mx.array([0, 1])
 
   # Simple linear model
-  model = nn::Linear.new(10, 1)
+  model = nn::Linear.new(2, 1)
 
   # SGD with momentum
   optimizer = optim::SGD.new(learning_rate: 0.1, momentum: 0.8)
 
-  def loss_fn(model, x, y)
+  loss_fn = ->(model, x, y) do
     logits = model.call(x).squeeze
-    nn.losses.binary_cross_entropy(logits, y)
+    nn.binary_cross_entropy(logits, y)
   end
 
   loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
 
-  # Perform 10 steps of gradient descent
-  10.times do
+  # Perform a few steps of gradient descent
+  3.times do
     loss, grads = loss_and_grad_fn.call(model, x, y)
     optimizer.update(model, grads)
     mx.eval(model.parameters, optimizer.state)
@@ -349,7 +349,7 @@ appropriate input and output captures. Here's the same example but compiled:
   optim = MLX::Optimizers
 
   # 4 examples with 10 features each
-  x = mx.random.uniform(shape: [4, 10])
+  x = mx.random_uniform([4, 10], 0.0, 1.0, mx.float32)
 
   # 0, 1 targets
   y = mx.array([0, 1, 0, 1])
@@ -360,17 +360,18 @@ appropriate input and output captures. Here's the same example but compiled:
   # SGD with momentum
   optimizer = optim::SGD.new(learning_rate: 0.1, momentum: 0.8)
 
-  def loss_fn(model, x, y)
+  loss_fn = ->(model, x, y) do
     logits = model.call(x).squeeze
-    nn.losses.binary_cross_entropy(logits, y)
+    nn.binary_cross_entropy(logits, y)
   end
+
+  loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
 
   # The state that will be captured as input and output
   state = [model.state, optimizer.state]
 
   step = mx.compile(
     ->(x, y) do
-      loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
       loss, grads = loss_and_grad_fn.call(model, x, y)
       optimizer.update(model, grads)
       loss
@@ -379,13 +380,10 @@ appropriate input and output captures. Here's the same example but compiled:
     outputs: state
   )
 
-  # Perform 10 steps of gradient descent
-  10.times do
-    loss = step.call(x, y)
-    # Evaluate the model and optimizer state
-    mx.eval(*state)
-    puts loss
-  end
+  # Perform one step of gradient descent
+  loss = step.call(x, y)
+  mx.eval(model.parameters, optimizer.state)
+  puts loss
 
 
 .. note::
@@ -413,7 +411,7 @@ Compiling transformed functions works just as expected:
 
 .. code-block:: ruby
 
-  grad_fn = mx.grad(mx.exp)
+  grad_fn = mx.grad(->(x) { mx.exp(x) })
 
   compiled_grad_fn = mx.compile(grad_fn)
 
@@ -435,7 +433,7 @@ the most opportunity to optimize the computation graph:
 
 .. code-block:: ruby
 
-  inner = mx.compile(->(x) { mx.exp(-mx.abs(x)) })
+  inner = mx.compile(->(x) { mx.exp(mx.negative(mx.abs(x))) })
 
   outer = ->(x) do
     inner.call(inner.call(x))
@@ -486,17 +484,18 @@ to detect. For example:
 
 .. code-block:: ruby
 
+  # docs-test: expect-error
   def fun(x)
     x.reshape(x.shape[0] * x.shape[1], -1)
   end
 
   compiled_fun = mx.compile(method(:fun), shapeless: true)
 
-  x = mx.random.uniform(shape: [2, 3, 4])
+  x = mx.random_uniform([2, 3, 4], 0.0, 1.0, mx.float32)
 
   out = compiled_fun.call(x)
 
-  x = mx.random.uniform(shape: [5, 5, 3])
+  x = mx.random_uniform([5, 5, 3], 0.0, 1.0, mx.float32)
 
   # Error, can't reshape (5, 5, 3) to (6, -1)
   out = compiled_fun.call(x)
@@ -513,11 +512,11 @@ fix this by using :func:`flatten` to avoid hardcoding the shape of ``x``:
 
   compiled_fun = mx.compile(method(:fun), shapeless: true)
 
-  x = mx.random.uniform(shape: [2, 3, 4])
+  x = mx.random_uniform([2, 3, 4], 0.0, 1.0, mx.float32)
 
   out = compiled_fun.call(x)
 
-  x = mx.random.uniform(shape: [5, 5, 3])
+  x = mx.random_uniform([5, 5, 3], 0.0, 1.0, mx.float32)
 
   # Ok
   out = compiled_fun.call(x)

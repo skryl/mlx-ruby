@@ -34,13 +34,17 @@ used. For example:
 
 .. code-block:: ruby
 
-  def fun(x)
-    a = fun1(x)
-    b = expensive_fun(a)
+  fun1 = ->(x) { mx.exp(x) }
+  expensive_fun = ->(a) { mx.exp(mx.exp(a)) }
+  fun = ->(x) do
+    a = fun1.call(x)
+    b = expensive_fun.call(a)
     [a, b]
   end
 
-  y, _ = fun(x)
+  x = mx.array(1.0)
+  y, _ = fun.call(x)
+  mx.eval(y)
 
 Here, we never actually compute the output of ``expensive_fun``. Use this
 pattern with care though, as the graph of ``expensive_fun`` is still built, and
@@ -59,8 +63,8 @@ This pattern is simple to do in MLX thanks to lazy computation:
 
 .. code-block:: ruby
 
-  model = Model() # no memory used yet
-  model.load_weights("weights_fp16.safetensors")
+  model = MLX::NN::Linear.new(8, 8) # no memory used yet
+  mx.eval(model.parameters)
 
 When to Evaluate
 ----------------
@@ -72,6 +76,8 @@ For example:
 
 .. code-block:: ruby
 
+  a = mx.array(1.0)
+  b = mx.array(2.0)
   100.times do
     a = a + b
     mx.eval(a)
@@ -96,18 +102,31 @@ Here is a concrete example:
 
 .. code-block:: ruby
 
+   model = MLX::NN::Linear.new(4, 1)
+   optimizer = MLX::Optimizers::SGD.new(learning_rate: 0.1)
+   value_and_grad_fn = MLX::NN.value_and_grad(
+     model,
+     ->(model, batch) do
+       x, y = batch
+       MLX::NN.binary_cross_entropy(model.call(x).squeeze, y)
+     end
+   )
+   dataset = [
+     [mx.random_uniform([4, 4], 0.0, 1.0, mx.float32), mx.array([0.0, 1.0, 0.0, 1.0])],
+     [mx.random_uniform([4, 4], 0.0, 1.0, mx.float32), mx.array([1.0, 0.0, 1.0, 0.0])]
+   ]
+
    dataset.each do |batch|
+     # Nothing has been evaluated yet
+     loss, grad = value_and_grad_fn.call(model, batch)
 
-      # Nothing has been evaluated yet
-      loss, grad = value_and_grad_fn.call(model, batch)
+     # Still nothing has been evaluated
+     optimizer.update(model, grad)
 
-      # Still nothing has been evaluated
-      optimizer.update(model, grad)
-
-      # Evaluate the loss and the new parameters which will
-      # run the full gradient computation and optimizer update
-      mx.eval(loss, model.parameters)
-    end
+     # Evaluate the loss and the new parameters which will
+     # run the full gradient computation and optimizer update
+     mx.eval(loss, model.parameters)
+   end
 
 
 An important behavior to be aware of is when the graph will be implicitly
@@ -134,15 +153,20 @@ Here is an example:
 
 .. code-block:: ruby
 
-   def fun(x)
-     h, y = first_layer(x)
-     if y > 0  # An evaluation is done here!
-       z  = second_layer_a(h)
+   first_layer = ->(x) { [x * 2.0, x.sum] }
+   second_layer_a = ->(h) { mx.exp(h) }
+   second_layer_b = ->(h) { h.square }
+
+   fun = ->(x) do
+     h, y = first_layer.call(x)
+     if y.item > 0 # An evaluation is done here!
+       second_layer_a.call(h)
      else
-       z  = second_layer_b(h)
+       second_layer_b.call(h)
      end
-     z
    end
+
+   mx.eval(fun.call(mx.array([1.0, -0.5, 0.25])))
 
 Using arrays for control flow should be done with care. The above example works
 and can even be used with gradient transformations. However, this can be very

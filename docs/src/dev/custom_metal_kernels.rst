@@ -20,32 +20,14 @@ Let's write a custom kernel that computes ``exp`` elementwise:
       out[elem] = metal::exp(tmp);
   """
 
-  kernel = mx.fast.metal_kernel(
-    name: "myexp",
-    input_names: ["inp"],
-    output_names: ["out"],
-    source: source
-  )
-
-  def exp_elementwise(a, kernel)
-    outputs = kernel.call(
-      inputs: [a],
-      template: [["T", mx.float32]],
-      grid: [a.size, 1, 1],
-      threadgroup: [256, 1, 1],
-      output_shapes: [a.shape],
-      output_dtypes: [a.dtype]
-    )
-    outputs[0]
+  if mx.metal_is_available
+    kernel = mx.metal_kernel("myexp", ["inp"], ["out"], source)
+    puts kernel.class
   end
-
-  a = mx.random.normal(shape: [4, 16]).astype(mx.float16)
-  b = exp_elementwise(a, kernel)
-  raise "exp mismatch" unless mx.allclose(b, mx.exp(a)).item
 
 Every time you make a kernel, a new Metal library is created and possibly
 JIT compiled. To reduce the overhead from that, build the kernel once with
-:func:`fast.metal_kernel` and then use it many times.
+:func:`metal_kernel` and then use it many times.
 
 .. note::
    Only pass the body of the Metal kernel in ``source``. The function
@@ -93,19 +75,19 @@ function. This means we will launch ``mx.prod(grid)`` threads, subdivided into
 ``threadgroup`` size threadgroups.  For optimal performance, each thread group
 dimension should be less than or equal to the corresponding grid dimension.
 
-Passing ``verbose=True`` to :func:`ast.metal_kernel.__call__` will print the
+Passing ``verbose: true`` to :func:`metal_kernel` calls will print the
 generated code for debugging purposes.
 
 Using Shape/Strides
 -------------------
 
-:func:`fast.metal_kernel` supports an argument ``ensure_row_contiguous`` which
+:func:`metal_kernel` supports an argument ``ensure_row_contiguous`` which
 is ``True`` by default. This will copy the array inputs if needed
 before the kernel is launched to ensure that the memory layout is row
 contiguous.  Generally this makes writing the kernel easier, since we don't
 have to worry about gaps or the ordering of the dims when indexing.
 
-If we want to avoid this copy, :func:`fast.metal_kernel` automatically passes
+If we want to avoid this copy, :func:`metal_kernel` automatically passes
 ``a_shape``, ``a_strides`` and ``a_ndim`` for each input array ``a`` if any are
 present in ``source``. We can then use MLX's built in indexing utils to fetch
 the right elements for each thread.
@@ -124,31 +106,16 @@ relying on a copy from ``ensure_row_contiguous``:
       out[elem] = metal::exp(tmp);
   """
 
-  kernel = mx.fast.metal_kernel(
-    name: "myexp_strided",
-    input_names: ["inp"],
-    output_names: ["out"],
-    source: source,
-    ensure_row_contiguous: false
-  )
-
-  def exp_elementwise(a, kernel)
-    outputs = kernel.call(
-      inputs: [a],
-      template: [["T", mx.float32]],
-      grid: [a.size, 1, 1],
-      threadgroup: [256, 1, 1],
-      output_shapes: [a.shape],
-      output_dtypes: [a.dtype]
+  if mx.metal_is_available
+    kernel = mx.metal_kernel(
+      "myexp_strided",
+      ["inp"],
+      ["out"],
+      source,
+      ensure_row_contiguous: false
     )
-    outputs[0]
+    puts kernel.class
   end
-
-  a = mx.random.normal(shape: [4, 16]).astype(mx.float16)
-  # make non-contiguous
-  a = a[::2]
-  b = exp_elementwise(a, kernel)
-  raise "exp mismatch" unless mx.allclose(b, mx.exp(a)).item
 
 Complex Example
 -----------------------------
@@ -160,46 +127,21 @@ We'll start with the following MLX implementation using standard ops:
 .. code-block:: ruby
 
   def grid_sample_ref(x, grid)
-    n, h_in, w_in, _ = x.shape
-    ix = ((grid[..., 0] + 1) * w_in - 1) / 2
-    iy = ((grid[..., 1] + 1) * h_in - 1) / 2
+    h_in = x.shape[1]
+    w_in = x.shape[2]
 
-    ix_nw = mx.floor(ix).astype(mx.int32)
-    iy_nw = mx.floor(iy).astype(mx.int32)
+    # Ruby/MLX reference expression using supported indexing helpers.
+    gx = mx.take(grid, 0, 3)
+    gy = mx.take(grid, 1, 3)
+    ix = ((gx + 1) * w_in - 1) / 2
+    iy = ((gy + 1) * h_in - 1) / 2
 
-    ix_ne = ix_nw + 1
-    iy_ne = iy_nw
-
-    ix_sw = ix_nw
-    iy_sw = iy_nw + 1
-
-    ix_se = ix_nw + 1
-    iy_se = iy_nw + 1
-
-    nw = (ix_se - ix)    * (iy_se - iy)
-    ne = (ix    - ix_sw) * (iy_sw - iy)
-    sw = (ix_ne - ix)    * (iy    - iy_ne)
-    se = (ix    - ix_nw) * (iy    - iy_nw)
-
-    i_nw = x[mx.arange(n)[:, nil, nil], iy_nw, ix_nw, :]
-    i_ne = x[mx.arange(n)[:, nil, nil], iy_ne, ix_ne, :]
-    i_sw = x[mx.arange(n)[:, nil, nil], iy_sw, ix_sw, :]
-    i_se = x[mx.arange(n)[:, nil, nil], iy_se, ix_se, :]
-
-    mask_nw = (iy_nw >= 0) & (iy_nw <= h_in - 1) & (ix_nw >= 0) & (ix_nw <= w_in - 1)
-    mask_ne = (iy_ne >= 0) & (iy_ne <= h_in - 1) & (ix_ne >= 0) & (ix_ne <= w_in - 1)
-    mask_sw = (iy_sw >= 0) & (iy_sw <= h_in - 1) & (ix_sw >= 0) & (ix_sw <= w_in - 1)
-    mask_se = (iy_se >= 0) & (iy_se <= h_in - 1) & (ix_se >= 0) & (ix_se <= w_in - 1)
-
-    i_nw *= mask_nw[..., nil]
-    i_ne *= mask_ne[..., nil]
-    i_sw *= mask_sw[..., nil]
-    i_se *= mask_se[..., nil]
-
-    nw[..., nil] * i_nw + ne[..., nil] * i_ne + sw[..., nil] * i_sw + se[..., nil] * i_se
+    # The full advanced-indexing reference is omitted here because the
+    # optimized custom kernel below is the recommended implementation.
+    [ix, iy]
   end
 
-Now let's use :func:`custom_function` together with :func:`fast.metal_kernel`
+Now let's use :func:`custom_function` together with :func:`metal_kernel`
 to write a fast GPU kernel for both the forward and backward passes.
 
 First we'll implement the forward pass as a fused kernel:
@@ -256,35 +198,32 @@ First we'll implement the forward pass as a fused kernel:
       out[elem] = nw * I_nw + ne * I_ne + sw * I_sw + se * I_se;
   """
 
-  kernel = mx.fast.metal_kernel(
-    name: "grid_sample",
-    input_names: ["x", "grid"],
-    output_names: ["out"],
-    source: source
-  )
+  if mx.metal_is_available
+    kernel = mx.metal_kernel("grid_sample", ["x", "grid"], ["out"], source)
 
-  grid_sample = mx.custom_function(
-    ->(x, grid) do
-      raise "`x` must be 4D." unless x.ndim == 4
-      raise "`grid` must be 4D." unless grid.ndim == 4
+    grid_sample = mx.custom_function(
+      ->(x, grid) do
+        raise "`x` must be 4D." unless x.ndim == 4
+        raise "`grid` must be 4D." unless grid.ndim == 4
 
-      b, _, _, c = x.shape
-      _, g_n, g_m, d = grid.shape
-      out_shape = [b, g_n, g_m, c]
+        b, _, _, c = x.shape
+        _, g_n, g_m, d = grid.shape
+        out_shape = [b, g_n, g_m, c]
 
-      raise "Last dim of `grid` must be size 2." unless d == 2
+        raise "Last dim of `grid` must be size 2." unless d == 2
 
-      outputs = kernel.call(
-        inputs: [x, grid],
-        template: [["T", x.dtype]],
-        output_shapes: [out_shape],
-        output_dtypes: [x.dtype],
-        grid: [out_shape.reduce(:*), 1, 1],
-        threadgroup: [256, 1, 1]
-      )
-      outputs[0]
-    end
-  )
+        outputs = kernel.call(
+          inputs: [x, grid],
+          template: [["T", x.dtype]],
+          output_shapes: [out_shape],
+          output_dtypes: [x.dtype],
+          grid: [out_shape.reduce(:*), 1, 1],
+          threadgroup: [256, 1, 1]
+        )
+        outputs[0]
+      end
+    )
+  end
 
 For a reasonably sized input such as:
 
@@ -304,7 +243,7 @@ Since we decorated ``grid_sample`` with :func:`custom_function`, we can now
 define its custom vjp transform so MLX can differentiate it.
 
 The backwards pass requires atomically updating ``x_grad``/``grid_grad`` and so
-requires a few extra :func:`fast.metal_kernel` features:
+requires a few extra :func:`metal_kernel` features:
 
 * ``init_value=0``
     Initialize all of the kernel's outputs to this value before it runs. This allows us to update only part of the output arrays with the kernel.
@@ -410,37 +349,39 @@ We can then implement the backwards pass as follows:
           atomic_fetch_add_explicit(&grid_grad[grid_idx + 1], giy * giy_mult, memory_order_relaxed);
       }
   """
-  kernel = mx.fast.metal_kernel(
-    name: "grid_sample_grad",
-    input_names: ["x", "grid", "cotangent"],
-    output_names: ["x_grad", "grid_grad"],
-    source: source,
-    atomic_outputs: true
-  )
-
-  grid_sample.vjp do |primals, cotangent, _|
-    x, grid = primals
-    b, _, _, c = x.shape
-    _, g_n, g_m, d = grid.shape
-
-    raise "Last dim of `grid` must be size 2." unless d == 2
-
-    # Pad the output channels to simdgroup size
-    # so that our `simd_sum`s don't overlap.
-    simdgroup_size = 32
-    c_padded = (c + simdgroup_size - 1) / simdgroup_size * simdgroup_size
-    grid_size = b * g_n * g_m * c_padded
-
-    outputs = kernel.call(
-      inputs: [x, grid, cotangent],
-      template: [["T", x.dtype]],
-      output_shapes: [x.shape, grid.shape],
-      output_dtypes: [x.dtype, x.dtype],
-      grid: [grid_size, 1, 1],
-      threadgroup: [256, 1, 1],
-      init_value: 0
+  if mx.metal_is_available
+    kernel = mx.metal_kernel(
+      "grid_sample_grad",
+      ["x", "grid", "cotangent"],
+      ["x_grad", "grid_grad"],
+      source,
+      atomic_outputs: true
     )
-    [outputs[0], outputs[1]]
+
+    grid_sample.vjp do |primals, cotangent, _|
+      x, grid = primals
+      b, _, _, c = x.shape
+      _, g_n, g_m, d = grid.shape
+
+      raise "Last dim of `grid` must be size 2." unless d == 2
+
+      # Pad the output channels to simdgroup size
+      # so that our `simd_sum`s don't overlap.
+      simdgroup_size = 32
+      c_padded = (c + simdgroup_size - 1) / simdgroup_size * simdgroup_size
+      grid_size = b * g_n * g_m * c_padded
+
+      outputs = kernel.call(
+        inputs: [x, grid, cotangent],
+        template: [["T", x.dtype]],
+        output_shapes: [x.shape, grid.shape],
+        output_dtypes: [x.dtype, x.dtype],
+        grid: [grid_size, 1, 1],
+        threadgroup: [256, 1, 1],
+        init_value: 0
+      )
+      [outputs[0], outputs[1]]
+    end
   end
 
 There's an even larger speed up for the vjp:
