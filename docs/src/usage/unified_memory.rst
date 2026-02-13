@@ -24,13 +24,17 @@ without needing to move them from one memory location to another. For example:
 
 .. code-block:: ruby
 
-  mx.stream(mx.cpu) { mx.add(a, b) }
-  mx.stream(mx.gpu) { mx.add(a, b) }
+  gpu_available =
+    (mx.respond_to?(:metal_is_available) && mx.metal_is_available) ||
+    (mx.respond_to?(:cuda_is_available) && mx.cuda_is_available)
 
-In the above, both the CPU and the GPU will perform the same add
-operation. The operations can (and likely will) be run in parallel since
-there are no dependencies between them. See :ref:`using_streams` for more
-information the semantics of streams in MLX.
+  mx.stream(mx.cpu) { mx.add(a, b) }
+  mx.stream(mx.gpu) { mx.add(a, b) } if gpu_available
+
+In the above, the CPU always performs the add, and the GPU does too when a GPU
+backend is available. The operations can (and likely will) be run in parallel
+since there are no dependencies between them. See :ref:`using_streams` for
+more information the semantics of streams in MLX.
 
 In the above ``add`` example, there are no dependencies between operations, so
 there is no possibility for race conditions. If there are dependencies, the
@@ -38,8 +42,16 @@ MLX scheduler will automatically manage them. For example:
 
 .. code-block:: ruby
 
+  gpu_available =
+    (mx.respond_to?(:metal_is_available) && mx.metal_is_available) ||
+    (mx.respond_to?(:cuda_is_available) && mx.cuda_is_available)
+
   c = mx.stream(mx.cpu) { mx.add(a, b) }
-  d = mx.stream(mx.gpu) { mx.add(a, c) }
+  d = if gpu_available
+    mx.stream(mx.gpu) { mx.add(a, c) }
+  else
+    mx.stream(mx.cpu) { mx.add(a, c) }
+  end
 
 In the above case, the second ``add`` runs on the GPU but it depends on the
 output of the first ``add`` which is running on the CPU. MLX will
