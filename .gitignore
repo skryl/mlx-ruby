@@ -22,6 +22,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+!lib/
+!lib/mlx/
+!lib/mlx/**/*
 lib64/
 parts/
 sdist/
