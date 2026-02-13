@@ -4,16 +4,16 @@ description: 'Build documentation'
 runs:
   using: "composite"
   steps:
-    - name: Setup machine
-      uses: ./.github/actions/setup-linux
-
     - name: Install dependencies
       shell: bash
       run: |
-        sudo apt-get install -y doxygen
+        sudo apt-get update
+        sudo apt-get install -y doxygen python3-venv python3-pip
+        python3 -m venv .venv
         source .venv/bin/activate
+        python -m pip install --upgrade pip
         pip install -r docs/requirements.txt
-        pip install . -v
+        pip install .
   
     - name: Build documentation
       shell: bash

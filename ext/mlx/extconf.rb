@@ -28,7 +28,9 @@ def rpath_flag(path)
   end
 end
 
-repo_root = File.expand_path("../../..", __dir__)
+repo_root = File.expand_path("../..", __dir__)
+mlx_root = File.join(repo_root, "mlx")
+mlx_include_dir = mlx_root
 ext_root = File.expand_path(__dir__)
 build_root = File.join(ext_root, "build")
 mlx_build_dir = File.join(build_root, "mlx")
@@ -40,7 +42,7 @@ FileUtils.mkdir_p(mlx_build_dir)
 cmake_configure = [
   "cmake",
   "-S",
-  repo_root,
+  mlx_root,
   "-B",
   mlx_build_dir,
   "-DCMAKE_BUILD_TYPE=Release",
@@ -76,7 +78,7 @@ unless configured
 end
 run_or_abort(*cmake_build, chdir: ext_root)
 
-include_dir = repo_root
+include_dir = mlx_include_dir
 lib_dir = File.join(mlx_install_dir, "lib")
 
 abort("missing MLX include dir: #{include_dir}") unless Dir.exist?(include_dir)
