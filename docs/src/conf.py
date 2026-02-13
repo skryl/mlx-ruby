@@ -2,18 +2,16 @@
 
 # -*- coding: utf-8 -*-
 
-import os
-import subprocess
+release = "1.0.0"
+autodoc_mock_imports = ["mlx", "mlx.core"]
 
-import mlx.core as mx
 
 # -- Project information -----------------------------------------------------
 
 project = "MLX"
 copyright = "2023, Apple"
 author = "MLX Contributors"
-version = ".".join(mx.__version__.split(".")[:3])
-release = version
+version = release
 
 # -- General configuration ---------------------------------------------------
 
