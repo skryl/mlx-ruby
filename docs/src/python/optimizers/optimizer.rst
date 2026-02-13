@@ -11,13 +11,13 @@ Optimizer
    .. autosummary::
       :toctree: _autosummary
 
-      Optimizer.state
+      state
    
    .. rubric:: Methods
 
    .. autosummary::
       :toctree: _autosummary
    
-      Optimizer.apply_gradients
-      Optimizer.init
-      Optimizer.update
+      apply_gradients
+      init
+      update

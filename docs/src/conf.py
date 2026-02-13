@@ -27,6 +27,12 @@ extensions = [
 python_use_unqualified_type_names = True
 autosummary_generate = True
 autosummary_filename_map = {"mlx.core.Stream": "stream_class"}
+suppress_warnings = [
+    # CI builds docs without importing a real mlx extension module.
+    "autodoc.mocked_object",
+    # Autosummary-generated leaf pages are intentionally created under _autosummary.
+    "toc.not_included",
+]
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),

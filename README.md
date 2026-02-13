@@ -187,30 +187,6 @@ Benchmark environment variables:
 | `LAYERS` | `4` | Number of layers |
 | `PYTHON` | `python3` | Python executable for cross-language comparison |
 
-### Generate parity artifacts
-
-Artifacts are written to `tools/parity/reports/`.
-
-```bash
-ruby tools/parity/check_build_stability.rb
-ruby tools/parity/generate_api_inventory.rb
-ruby tools/parity/generate_core_signature_inventory.rb
-ruby tools/parity/generate_gap_baseline_artifact.rb
-ruby tools/parity/generate_package_inventory.rb
-ruby tools/parity/generate_package_parity_report.rb
-ruby tools/parity/generate_functional_golden_report.rb
-ruby tools/parity/generate_parity_report.rb
-```
-
-Manifest contract flow:
-
-```bash
-ruby tools/parity/generate_parity_manifest.rb --repo-root "$(pwd)" --output /tmp/parity_manifest.json
-ruby tools/parity/check_parity_manifest.rb --manifest /tmp/parity_manifest.json
-```
-
-Current checked-in consolidated report (`tools/parity/reports/report.json`) has all checks passing and zero missing names in tracked parity categories.
-
 ### Build docs
 
 ```bash
