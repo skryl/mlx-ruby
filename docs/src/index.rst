@@ -61,23 +61,7 @@ are the CPU and GPU.
    :caption: Ruby API Reference
    :maxdepth: 1
 
-   python/array
-   python/data_types
-   python/devices_and_streams
-   python/export
-   python/ops
-   python/random
-   python/transforms
-   python/fast
-   python/fft
-   python/linalg
-   python/metal
-   python/cuda
-   python/memory_management
-   python/nn
-   python/optimizers
-   python/distributed
-   python/tree_utils
+   ruby/api_reference
 
 .. toctree::
    :caption: C++ API Reference

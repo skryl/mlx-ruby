@@ -21,17 +21,8 @@ runs:
         cd docs
         doxygen
         make html
-    
-    - name: Create artifact tar
-      shell: bash
-      run: tar -cf artifact.tar -C docs --dereference build/html index.html
 
-    # Do it manually because upload-pages-artifact requires gtar
-    - name: Upload artifact
-      id: upload-artifact
-      uses: actions/upload-artifact@v5
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
       with:
-        name: github-pages
-        path: artifact.tar
-        retention-days: 1
-        if-no-files-found: error
+        path: docs/build/html
