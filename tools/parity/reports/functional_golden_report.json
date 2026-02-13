@@ -1,0 +1,78 @@
+{
+  "generated_at": "2026-02-13T02:16:13Z",
+  "sections": {
+    "optimizer_loss_module": {
+      "checks": [
+        {
+          "name": "sgd_single_step",
+          "pass": true
+        },
+        {
+          "name": "cross_entropy_known_case",
+          "pass": true
+        },
+        {
+          "name": "module_update_roundtrip",
+          "pass": true
+        }
+      ],
+      "all_pass": true
+    },
+    "layers": {
+      "checks": [
+        {
+          "name": "linear_forward_shape",
+          "pass": true
+        },
+        {
+          "name": "conv2d_known_value",
+          "pass": true
+        },
+        {
+          "name": "transformer_shape",
+          "pass": true
+        },
+        {
+          "name": "upsample_nearest_shape",
+          "pass": true
+        }
+      ],
+      "all_pass": true
+    },
+    "distributed_utils": {
+      "checks": [
+        {
+          "name": "hostfile_from_list",
+          "pass": true
+        },
+        {
+          "name": "dlpack_roundtrip",
+          "pass": true
+        },
+        {
+          "name": "config_parse_ports",
+          "pass": true
+        },
+        {
+          "name": "config_main_dispatch_ethernet",
+          "pass": true
+        },
+        {
+          "name": "launch_script_generation",
+          "pass": true
+        },
+        {
+          "name": "launch_main_print_python",
+          "pass": true
+        },
+        {
+          "name": "shard_inplace_single_rank",
+          "pass": true
+        }
+      ],
+      "all_pass": true
+    }
+  },
+  "all_pass": true,
+  "uncovered_behavior": []
+}

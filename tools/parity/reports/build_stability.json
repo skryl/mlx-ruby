@@ -1,0 +1,9 @@
+{
+  "generated_at": "2026-02-13T04:13:34Z",
+  "checks": {
+    "gguf_disabled": true,
+    "safetensors_disabled": true,
+    "configure_retry_present": true,
+    "retry_cleans_build_root": true
+  }
+}
