@@ -19,28 +19,28 @@ As a first step import the MLX packages we need:
 The model is defined as the ``MLP`` class which inherits from
 :class:`mlx.nn.Module`. We follow the standard idiom to make a new module:
 
-1. Define an ``__init__`` where the parameters and/or submodules are setup. See
+1. Define an ``initialize`` method where the parameters and/or submodules are setup. See
    the :ref:`Module class docs<module_class>` for more information on how
    :class:`mlx.nn.Module` registers parameters.
-2. Define a ``__call__`` where the computation is implemented.
+2. Define a ``call`` method where the computation is implemented.
 
 .. code-block:: ruby
 
-  class MLP < nn::Module
+  class MLP < MLX::NN::Module
     def initialize(num_layers, input_dim, hidden_dim, output_dim)
       super()
       layer_sizes = [input_dim] + [hidden_dim] * num_layers + [output_dim]
       @layers = []
       (0...(layer_sizes.length - 1)).each do |i|
-        @layers << nn.Linear.new(layer_sizes[i], layer_sizes[i + 1])
+        @layers << MLX::NN::Linear.new(layer_sizes[i], layer_sizes[i + 1])
       end
     end
 
     def call(x)
       @layers[0...-1].each do |l|
-        x = mx.maximum(l.(x), 0.0)
+        x = MLX::Core.maximum(l.call(x), 0.0)
       end
-      @layers[-1].(x)
+      @layers[-1].call(x)
     end
   end
 
@@ -51,16 +51,18 @@ commonly used loss functions.
 
 .. code-block:: ruby
 
-  def loss_fn(model, X, y)
-      return mx.mean(nn.losses.cross_entropy(model(X), y))
+  def loss_fn(model, x, y)
+      mx.mean(nn.losses.cross_entropy(model.call(x), y))
+  end
 
 We also need a function to compute the accuracy of the model on the validation
 set:
 
 .. code-block:: ruby
 
-  def eval_fn(model, X, y)
-      return mx.mean(mx.argmax(model(X), axis=1) == y)
+  def eval_fn(model, x, y)
+      mx.mean(mx.argmax(model.call(x), axis: 1) == y)
+  end
 
 Next, setup the problem parameters and load the data. To load the data, you need our
 `MNIST data loader
@@ -85,13 +87,15 @@ minibatches of examples in the training set:
 
 .. code-block:: ruby
 
-  def batch_iterate(batch_size, X, y)
+  def batch_iterate(batch_size, x, y)
       # Replace this with your preferred random-shuffle helper
-      perm = (0...y.shape[0]).to_a
+      perm = (0...y.shape[0]).to_a.shuffle
       # Example assumes `perm` is used to index the mini-batches
       (0...y.shape[0]).step(batch_size).each do |s|
           ids = perm[s...(s + batch_size)]
-          yield X[ids], y[ids]
+          yield x[ids], y[ids]
+      end
+  end
 
 
 Finally, we put it all together by instantiating the model, the
@@ -100,30 +104,31 @@ Finally, we put it all together by instantiating the model, the
 .. code-block:: ruby
 
   # Load the model
-  model = MLP(num_layers, train_images.shape[-1], hidden_dim, num_classes)
-  mx.eval(model.parameters())
+  model = MLP.new(num_layers, train_images.shape[-1], hidden_dim, num_classes)
+  mx.eval(model.parameters)
 
   # Get a function which gives the loss and gradient of the
   # loss with respect to the model's trainable parameters
   loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
 
   # Instantiate the optimizer
-  optimizer = optim.SGD(learning_rate=learning_rate)
+  optimizer = optim::SGD.new(learning_rate: learning_rate)
 
   num_epochs.times do |e|
-      batch_iterate(batch_size, train_images, train_labels).each do |X, y|
-          loss, grads = loss_and_grad_fn(model, X, y)
+      batch_iterate(batch_size, train_images, train_labels).each do |x, y|
+          loss, grads = loss_and_grad_fn.call(model, x, y)
 
           # Update the optimizer state and model parameters
           # in a single call
           optimizer.update(model, grads)
 
           # Force a graph evaluation
-          mx.eval(model.parameters(), optimizer.state)
+          mx.eval(model.parameters, optimizer.state)
+      end
 
       accuracy = eval_fn(model, test_images, test_labels)
-      puts "Epoch #{e}: Test accuracy #{accuracy.item().round(3)}"
-
+      puts "Epoch #{e}: Test accuracy #{accuracy.item.round(3)}"
+  end
 
 .. note::
   The :func:`mlx.nn.value_and_grad` function is a convenience function to get

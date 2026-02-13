@@ -182,61 +182,48 @@ Generation
 ^^^^^^^^^^^
 
 Our ``Llama`` module can be used for training but not inference as the
-``__call__`` method above processes one input, completely ignores the cache and
+``call`` method above processes one input, completely ignores the cache and
 performs no sampling whatsoever. In the rest of this subsection, we will
 implement the inference function as a ruby generator that processes the
 prompt and then autoregressively yields tokens one at a time.
 
 .. code-block:: ruby
 
-    class Llama(nn.Module):
-        ...
+    class Llama < nn::Module
+      # ...
 
-        def generate(self, x, temp=1.0)
-            cache = []
+      def generate(x, temp: 1.0)
+        cache = []
 
-            # Make an additive causal mask. We will need that to process the prompt.
-            mask = nn.MultiHeadAttention.create_additive_causal_mask(x.shape[1])
-            mask = mask.astype(self.embedding.weight.dtype)
+        # Make an additive causal mask. We will need that to process the prompt.
+        mask = nn.MultiHeadAttention.create_additive_causal_mask(x.shape[1])
+        mask = mask.astype(@embedding.weight.dtype)
 
-            # First we process the prompt x the same way as in __call__ but
-            # save the caches in cache
-            x = self.embedding(x)
-            self.layers.each do |l|
-                x, c = l(x, mask=mask)
-                cache.append(c)  # <--- we store the per layer cache in a
-                                 #      simple ruby list
-            x = self.norm(x)
-            y = self.out_proj(x[:, -1])  # <--- we only care about the last logits
-                                         #      that generate the next token
-            y = mx.random.categorical(y * (1/temp))
+        # First we process the prompt (same as in `call`) and save layer caches.
+        x = @embedding.call(x)
+        @layers.each do |layer|
+          x, c = layer.call(x, mask)
+          cache << c
+        end
+        x = @norm.call(x)
+        y = @out_proj.call(x[:, -1]) # only keep logits for the next token
+        y = mx.random.categorical(y * (1.0 / temp))
+        yield y
 
-            # y now has size [1]
-            # Since MLX is lazily evaluated nothing is computed yet.
-            # Calling y.item() would force the computation to happen at
-            # this point but we can also choose not to do that and let the
-            # user choose when to start the computation.
-            yield y
-
-            # Now we parsed the prompt and generated the first token we
-            # need to feed it back into the model and loop to generate the
-            # rest.
-            while True
-                # Unsqueezing the last dimension to add a sequence length
-                # dimension of 1
-                x = y[:, None]
-
-                x = self.embedding(x)
-                range(len(cache)).each do |i|
-                    # We are overwriting the arrays in the cache list. When
-                    # the computation will happen, MLX will be discarding the
-                    # old cache the moment it is not needed anymore.
-                    x, cache[i] = self.layers[i](x, mask=None, cache=cache[i])
-                x = self.norm(x)
-                y = self.out_proj(x[:, -1])
-                y = mx.random.categorical(y * (1/temp))
-
-                yield y
+        loop do
+          # Add a sequence dimension of 1 and continue generation.
+          x = y[:, nil]
+          x = @embedding.call(x)
+          (0...cache.length).each do |i|
+            x, cache[i] = @layers[i].call(x, nil, cache[i])
+          end
+          x = @norm.call(x)
+          y = @out_proj.call(x[:, -1])
+          y = mx.random.categorical(y * (1.0 / temp))
+          yield y
+        end
+      end
+    end
 
 Putting it all together
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -247,18 +234,24 @@ it. In the following code, we randomly initialize a small Llama model, process
 
 .. code-block:: ruby
 
-    model = Llama(num_layers=12, vocab_size=8192, dims=512, mlp_dims=1024, num_heads=8)
+    model = Llama.new(
+      num_layers: 12,
+      vocab_size: 8192,
+      dims: 512,
+      mlp_dims: 1024,
+      num_heads: 8
+    )
 
     # Since MLX is lazily evaluated nothing has actually been materialized yet.
     # We could have set the `dims` to 20_000 on a machine with 8GB of RAM and the
     # code above would still run. Let's actually materialize the model.
-    mx.eval(model.parameters())
+    mx.eval(model.parameters)
 
     prompt = mx.array([[1, 10, 8, 32, 44, 7]])  # <-- Note the double brackets because we
                                                 #     have a batch dimension even
                                                 #     though it is 1 in this case
 
-    generated = [t for i, t in zip(range(10), model.generate(prompt, 0.8))]
+    generated = model.generate(prompt, temp: 0.8).take(10)
 
     # Since we haven't evaluated anything, nothing is computed yet. The list
     # `generated` contains the arrays that hold the computation graph for the
@@ -267,7 +260,7 @@ it. In the following code, we randomly initialize a small Llama model, process
     # We can evaluate them one at a time, or all together. Concatenate them or
     # print them. They would all result in very similar runtimes and give exactly
     # the same results.
-    mx.eval(generated)
+    mx.eval(*generated)
 
 Converting the weights
 ----------------------
@@ -288,7 +281,7 @@ Weight loading and benchmarking
 
 After converting the weights to be compatible to our implementation, all that is
 left is to load them from disk and we can finally use the LLM to generate text.
-We can load numpy format files using the :func:`mlx.core.load` operation.
+We can load NPZ files using the :func:`mlx.core.load` operation.
 
 To create a parameter dictionary from the key/value representation of NPZ files
 we will use the :func:`MLX::Utils.tree_unflatten` helper method as follows:
@@ -297,7 +290,8 @@ we will use the :func:`MLX::Utils.tree_unflatten` helper method as follows:
 
     # Ruby: implement tree_unflatten via nested hash helpers
 
-    model.update(MLX::Utils.tree_unflatten(list(mx.load(weight_file).items())))
+    weights = mx.load(weight_file).to_a
+    model.update(MLX::Utils.tree_unflatten(weights))
 
 :meth:`MLX::Utils.tree_unflatten` will take keys from the NPZ file that look
 like ``layers.2.attention.query_proj.weight`` and will transform them to
@@ -307,7 +301,7 @@ like ``layers.2.attention.query_proj.weight`` and will transform them to
    {"layers": [..., ..., {"attention": {"query_proj": {"weight": ...}}}]}
 
 which can then be used to update the model. Note that the method above incurs
-several unnecessary copies from disk to numpy and then from numpy to MLX. It
+several unnecessary copies from disk to NumPy arrays and then from NumPy to MLX. It
 will be replaced in the future with direct loading to MLX.
 
 You can download the full example code in `mlx-examples`_. Assuming, the

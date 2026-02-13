@@ -24,7 +24,7 @@ We'll generate a synthetic dataset by:
 
 .. code-block:: ruby
 
-  # True parameters
+  # Ground-truth parameters
   w_star = mx.random.normal((num_features,))
 
   # Input examples (design matrix)
@@ -41,7 +41,8 @@ and get the gradient function of the loss with respect to the parameters.
 .. code-block:: ruby
 
   def loss_fn(w)
-      return 0.5 * mx.mean(mx.square(mx.matmul(X, w) - y))
+    0.5 * mx.mean(mx.square(mx.matmul(X, w) - y))
+  end
 
   grad_fn = mx.grad(loss_fn)
 
@@ -52,10 +53,11 @@ repeatedly update the parameters for ``num_iters`` iterations.
 
   w = 1e-2 * mx.random.normal((num_features,))
 
-  range(num_iters).each do |_|
-      grad = grad_fn(w)
-      w = w - lr * grad
-      mx.eval(w)
+  num_iters.times do
+    grad = grad_fn.call(w)
+    w = w - lr * grad
+    mx.eval(w)
+  end
 
 Finally, compute the loss of the learned parameters and verify that they are
 close to the ground truth parameters.

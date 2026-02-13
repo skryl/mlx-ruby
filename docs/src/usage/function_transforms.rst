@@ -66,7 +66,8 @@ the gradient with respect to the first argument:
 .. code-block:: ruby
 
    def loss_fn(w, x, y)
-      return mx.mean(mx.square(w * x - y))
+     mx.mean(mx.square(w * x - y))
+   end
 
    w = mx.array(1.0)
    x = mx.array([0.5, -0.5])
@@ -74,13 +75,13 @@ the gradient with respect to the first argument:
 
    # Computes the gradient of loss_fn with respect to w:
    grad_fn = mx.grad(loss_fn)
-   dloss_dw = grad_fn(w, x, y)
+   dloss_dw = grad_fn.call(w, x, y)
    # Prints array(-1, dtype=float32)
    print(dloss_dw)
 
    # To get the gradient with respect to x we can do:
-   grad_fn = mx.grad(loss_fn, argnums=1)
-   dloss_dx = grad_fn(w, x, y)
+   grad_fn = mx.grad(loss_fn, argnums: 1)
+   dloss_dx = grad_fn.call(w, x, y)
    # Prints array([-1, 1], dtype=float32)
    print(dloss_dx)
 
@@ -94,7 +95,7 @@ should use :func:`value_and_grad`. Continuing the above example:
 
    # Computes the gradient of loss_fn with respect to w:
    loss_and_grad_fn = mx.value_and_grad(loss_fn)
-   loss, dloss_dw = loss_and_grad_fn(w, x, y)
+   loss, dloss_dw = loss_and_grad_fn.call(w, x, y)
 
    # Prints array(1, dtype=float32)
    print(loss)
@@ -124,7 +125,7 @@ way to do that is the following:
    # Computes the gradient of loss_fn with respect to both the
    # weight and bias:
    grad_fn = mx.grad(loss_fn)
-   grads = grad_fn(params, x, y)
+   grads = grad_fn.call(params, x, y)
 
    # Prints
    # {'weight': array(-1, dtype=float32), 'bias': array(0, dtype=float32)}
@@ -157,11 +158,12 @@ A naive way to add the elements from two sets of vectors is with a loop:
 
 .. code-block:: ruby
 
-  xs = mx.random.uniform(shape=(4096, 100))
-  ys = mx.random.uniform(shape=(100, 4096))
+  xs = mx.random.uniform(shape: [4096, 100])
+  ys = mx.random.uniform(shape: [100, 4096])
 
   def naive_add(xs, ys)
-      return [xs[i] + ys[:, i] for i in range(xs.shape[0])]
+    xs.shape[0].times.map { |i| xs[i] + ys[:, i] }
+  end
 
 Instead you can use :func:`vmap` to automatically vectorize the addition:
 
@@ -169,7 +171,7 @@ Instead you can use :func:`vmap` to automatically vectorize the addition:
 
    # Vectorize over the second dimension of x and the
    # first dimension of y
-   vmap_add = mx.vmap(lambda x, y: x + y, in_axes=(0, 1))
+   vmap_add = mx.vmap(->(x, y) { x + y }, in_axes: [0, 1])
 
 The ``in_axes`` parameter can be used to specify which dimensions of the
 corresponding input to vectorize over. Similarly, use ``out_axes`` to specify
@@ -179,10 +181,17 @@ Let's time these two different versions:
 
 .. code-block:: ruby
 
-  import timeit
+  require "benchmark"
 
-  print(timeit.timeit(lambda: mx.eval(naive_add(xs, ys)), number=100))
-  print(timeit.timeit(lambda: mx.eval(vmap_add(xs, ys)), number=100))
+  naive_seconds = Benchmark.realtime do
+    100.times { mx.eval(*naive_add(xs, ys)) }
+  end
+  vmap_seconds = Benchmark.realtime do
+    100.times { mx.eval(vmap_add.call(xs, ys)) }
+  end
+
+  puts naive_seconds
+  puts vmap_seconds
 
 On an M1 Max the naive version takes in total ``5.639`` seconds whereas the
 vectorized version takes only ``0.024`` seconds, more than 200 times faster.

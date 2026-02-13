@@ -21,48 +21,53 @@ Quick Start with Neural Networks
 
     require "mlx"
     mx = MLX::Core
-  nn = MLX::NN
+    nn = MLX::NN
 
-    class MLP(nn.Module):
-        def __init__(self, in_dims: int, out_dims: int):
-            super().__init__()
+    class MLP < nn::Module
+      def initialize(in_dims, out_dims)
+        super()
+        @layers = [
+          nn::Linear.new(in_dims, 128),
+          nn::Linear.new(128, 128),
+          nn::Linear.new(128, out_dims)
+        ]
+      end
 
-            self.layers = [
-                nn.Linear(in_dims, 128),
-                nn.Linear(128, 128),
-                nn.Linear(128, out_dims),
-            ]
-
-        def __call__(self, x):
-            for i, l in enumerate(self.layers):
-                x = mx.maximum(x, 0) if i > 0 else x
-                x = l(x)
-            return x
+      def call(x)
+        @layers.each_with_index do |layer, i|
+          x = mx.maximum(x, 0) if i > 0
+          x = layer.call(x)
+        end
+        x
+      end
+    end
 
     # The model is created with all its parameters but nothing is initialized
     # yet because MLX is lazily evaluated
-    mlp = MLP(2, 10)
+    mlp = MLP.new(2, 10)
 
-    # We can access its parameters by calling mlp.parameters()
-    params = mlp.parameters()
-    print(params["layers"][0]["weight"].shape)
+    # We can access its parameters by calling mlp.parameters
+    params = mlp.parameters
+    first_param = MLX::Utils.tree_flatten(params).values.first
+    puts first_param.shape
 
     # Printing a parameter will cause it to be evaluated and thus initialized
-    print(params["layers"][0])
+    puts first_param
 
     # We can also force evaluate all parameters to initialize the model
-    mx.eval(mlp.parameters())
+    mx.eval(mlp.parameters)
 
     # A simple loss function.
     # NOTE: It doesn't matter how it uses the mlp model. It currently captures
     #       it from the local scope. It could be a positional argument or a
     #       keyword argument.
-    def l2_loss(x, y):
-        y_hat = mlp(x)
-        return (y_hat - y).square().mean()
+    l2_loss = ->(x, y) do
+      y_hat = mlp.call(x)
+      (y_hat - y).square.mean
+    end
 
     # Calling `nn.value_and_grad` instead of `mx.value_and_grad` returns the
-    # gradient with respect to `mlp.trainable_parameters()`
+    # gradient with respect to `mlp.trainable_parameters`
     loss_and_grad = nn.value_and_grad(mlp, l2_loss)
 
 .. _module_class:
@@ -126,7 +131,7 @@ all the parameters in a :class:`Module` do:
 .. code-block:: ruby
 
    # Ruby: implement tree_map on nested structures via MLX utilities
-   shapes = MLX::Utils.tree_map(lambda p: p.shape, mlp.parameters())
+   shapes = MLX::Utils.tree_map(->(p) { p.shape }, mlp.parameters)
 
 As another example, you can count the number of parameters in a :class:`Module`
 with:
@@ -151,11 +156,12 @@ There is an easy pattern to achieve that with MLX modules
 
     model = ...
 
-    def f(params, other_inputs):
-        model.update(params)  # <---- Necessary to make the model use the passed parameters
-        return model(other_inputs)
+    def f(params, other_inputs)
+      model.update(params)  # <---- Necessary to make the model use the passed parameters
+      model.call(other_inputs)
+    end
 
-    f(model.trainable_parameters(), mx.zeros((10,)))
+    f(model.trainable_parameters, mx.zeros((10,)))
 
 However, :meth:`mlx.nn.value_and_grad` provides precisely this pattern and only
 computes the gradients with respect to the trainable parameters of the model.

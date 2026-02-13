@@ -14,22 +14,24 @@ model's parameters and the **optimizer state**.
 .. code-block:: ruby
 
     # Create a model
-    model = MLP(num_layers, train_images.shape[-1], hidden_dim, num_classes)
-    mx.eval(model.parameters())
+    model = MLP.new(num_layers, train_images.shape[-1], hidden_dim, num_classes)
+    mx.eval(model.parameters)
 
     # Create the gradient function and the optimizer
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
-    optimizer = optim.SGD(learning_rate=learning_rate)
+    optimizer = optim::SGD.new(learning_rate: learning_rate)
 
-    for e in range(num_epochs):
-        for X, y in batch_iterate(batch_size, train_images, train_labels):
-            loss, grads = loss_and_grad_fn(model, X, y)
+    num_epochs.times do
+      batch_iterate(batch_size, train_images, train_labels).each do |x, y|
+        loss, grads = loss_and_grad_fn.call(model, x, y)
 
-            # Update the model with the gradients. So far no computation has happened.
-            optimizer.update(model, grads)
+        # Update the model with the gradients. So far no computation has happened.
+        optimizer.update(model, grads)
 
-            # Compute the new parameters but also the optimizer state.
-            mx.eval(model.parameters(), optimizer.state)
+        # Compute the new parameters but also the optimizer state.
+        mx.eval(model.parameters, optimizer.state)
+      end
+    end
 
 Saving and Loading
 ------------------
@@ -43,7 +45,7 @@ the saved state. Here's a simple example:
    mx = MLX::Core
    # Ruby helpers for nested parameter trees are in MLX::Utils
    optim = MLX::Optimizers
-   optimizer = optim.Adam(learning_rate=1e-2)
+   optimizer = optim::Adam.new(learning_rate: 1e-2)
 
    # Perform some updates with the optimizer
    model = {"w" : mx.zeros((5, 5))}
@@ -56,7 +58,7 @@ the saved state. Here's a simple example:
 
    # Later on, for example when loading from a checkpoint,
    # recreate the optimizer and load the state
-   optimizer = optim.Adam(learning_rate=1e-2)
+   optimizer = optim::Adam.new(learning_rate: 1e-2)
 
    state = MLX::Utils.tree_unflatten(mx.load("optimizer.safetensors"))
    optimizer.state = state

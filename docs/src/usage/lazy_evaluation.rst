@@ -35,9 +35,10 @@ used. For example:
 .. code-block:: ruby
 
   def fun(x)
-      a = fun1(x)
-      b = expensive_fun(a)
-      return a, b
+    a = fun1(x)
+    b = expensive_fun(a)
+    [a, b]
+  end
 
   y, _ = fun(x)
 
@@ -71,11 +72,12 @@ For example:
 
 .. code-block:: ruby
 
-  range(100).each do |_|
-       a = a + b
-       mx.eval(a)
-       b = b * 2
-       mx.eval(b)
+  100.times do
+    a = a + b
+    mx.eval(a)
+    b = b * 2
+    mx.eval(b)
+  end
 
 This is a bad idea because there is some fixed overhead with each graph
 evaluation. On the other hand, there is some slight overhead which grows with
@@ -96,15 +98,16 @@ Here is a concrete example:
 
    dataset.each do |batch|
 
-       # Nothing has been evaluated yet
-       loss, grad = value_and_grad_fn(model, batch)
+      # Nothing has been evaluated yet
+      loss, grad = value_and_grad_fn.call(model, batch)
 
-       # Still nothing has been evaluated
-       optimizer.update(model, grad)
+      # Still nothing has been evaluated
+      optimizer.update(model, grad)
 
-       # Evaluate the loss and the new parameters which will
-       # run the full gradient computation and optimizer update
-       mx.eval(loss, model.parameters())
+      # Evaluate the loss and the new parameters which will
+      # run the full gradient computation and optimizer update
+      mx.eval(loss, model.parameters)
+    end
 
 
 An important behavior to be aware of is when the graph will be implicitly
@@ -132,12 +135,14 @@ Here is an example:
 .. code-block:: ruby
 
    def fun(x)
-       h, y = first_layer(x)
-       if y > 0  # An evaluation is done here!
-           z  = second_layer_a(h)
-       else
-           z  = second_layer_b(h)
-       return z
+     h, y = first_layer(x)
+     if y > 0  # An evaluation is done here!
+       z  = second_layer_a(h)
+     else
+       z  = second_layer_b(h)
+     end
+     z
+   end
 
 Using arrays for control flow should be done with care. The above example works
 and can even be used with gradient transformations. However, this can be very

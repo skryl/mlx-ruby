@@ -21,20 +21,21 @@ Let's start with a simple example:
 .. code-block:: ruby
 
   def fun(x, y)
-      return mx.exp(-x) + y
+    mx.exp(-x) + y
+  end
 
   x = mx.array(1.0)
   y = mx.array(2.0)
 
   # Regular call, no compilation
   # Prints: array(2.36788, dtype=float32)
-  print(fun(x, y))
+  puts fun(x, y)
 
   # Compile the function
-  compiled_fun = mx.compile(fun)
+  compiled_fun = mx.compile(method(:fun))
 
   # Prints: array(2.36788, dtype=float32)
-  print(compiled_fun(x, y))
+  puts compiled_fun.call(x, y)
 
 The output of both the regular function and the compiled function is the same
 up to numerical precision.
@@ -48,21 +49,22 @@ should typically compile functions that you plan to use more than once.
 .. code-block:: ruby
 
   def fun(x, y)
-      return mx.exp(-x) + y
+    mx.exp(-x) + y
+  end
 
   x = mx.array(1.0)
   y = mx.array(2.0)
 
-  compiled_fun = mx.compile(fun)
+  compiled_fun = mx.compile(method(:fun))
 
   # Compiled here
-  compiled_fun(x, y)
+  compiled_fun.call(x, y)
 
   # Not compiled again
-  compiled_fun(x, y)
+  compiled_fun.call(x, y)
 
   # Not compiled again
-  mx.compile(fun)(x, y)
+  mx.compile(method(:fun)).call(x, y)
 
 There are some important cases to be aware of that can cause a function to
 be recompiled:
@@ -84,8 +86,9 @@ function in a loop:
 
   a = mx.array(1.0)
   # Don't do this, compiles lambda at each iteration
-  range(5).each do |_|
-      mx.compile(lambda x: mx.exp(mx.abs(x)))(a)
+  5.times do
+    mx.compile(->(x) { mx.exp(mx.abs(x)) }).call(a)
+  end
 
 Example Speedup
 ---------------
@@ -97,7 +100,8 @@ element-wise operations:
 .. code-block:: ruby
 
   def gelu(x)
-      return x * (1 + mx.erf(x / math.sqrt(2))) / 2
+    x * (1 + mx.erf(x / Math.sqrt(2))) / 2
+  end
 
 If you use this function with small arrays, it will be overhead bound. If you
 use it with large arrays it will be memory bandwidth bound.  However, all of
@@ -114,24 +118,23 @@ handles synchronization:
   require "benchmark"
 
   def timeit(fun, x)
-      # warm up
-      0...10
-        mx.eval(fun.call(x))
-      end
+    # warm up
+    10.times { mx.eval(fun.call(x)) }
 
-      tpi = Benchmark.realtime do
-        100.times { mx.eval(fun.call(x)) }
-      end
-      1000.0 * tpi / 100.0
+    tpi = Benchmark.realtime do
+      100.times { mx.eval(fun.call(x)) }
+    end
+    1000.0 * tpi / 100.0
+  end
 
 
 Now make an array, and benchmark both functions:
 
 .. code-block:: ruby
 
-  x = mx.random.uniform(shape=(32, 1000, 4096))
-  timeit(gelu, x)
-  timeit(mx.compile(gelu), x)
+  x = mx.random.uniform(shape: [32, 1000, 4096])
+  timeit(->(t) { gelu(t) }, x)
+  timeit(mx.compile(->(t) { gelu(t) }), x)
 
 On an M1 Max the times are 15.5 and 3.1 milliseconds. The compiled ``gelu`` is
 five times faster.
@@ -145,13 +148,13 @@ contents) inside compiled functions.
 
 .. code-block:: ruby
 
-  @mx.compile
-  def fun(x)
-      z = -x
-      print(z)  # Crash
-      return mx.exp(z)
+  fun = mx.compile(->(x) do
+    z = -x
+    puts z # Crash
+    mx.exp(z)
+  end)
 
-  fun(mx.array(5.0))
+  fun.call(mx.array(5.0))
 
 For debugging, inspecting arrays can be helpful. One way to do that is to
 globally disable compilation using the :func:`disable_compile` function or
@@ -160,14 +163,14 @@ globally disable compilation using the :func:`disable_compile` function or
 
 .. code-block:: ruby
 
-  @mx.compile
-  def fun(x)
-      z = -x
-      print(z) # Okay
-      return mx.exp(z)
+  fun = mx.compile(->(x) do
+    z = -x
+    puts z # Okay
+    mx.exp(z)
+  end)
 
   mx.disable_compile()
-  fun(mx.array(5.0))
+  fun.call(mx.array(5.0))
 
 
 Pure Functions
@@ -180,15 +183,15 @@ effects. For example:
 
   state = []
 
-  @mx.compile
-  def fun(x, y)
-      z = x + y
-      state.append(z)
-      return mx.exp(z)
+  fun = mx.compile(->(x, y) do
+    z = x + y
+    state << z
+    mx.exp(z)
+  end)
 
-  fun(mx.array(1.0), mx.array(2.0))
+  fun.call(mx.array(1.0), mx.array(2.0))
   # Crash!
-  print(state)
+  puts state
 
 After the first call of ``fun``, the ``state`` list will hold a placeholder
 array. The placeholder does not have any data; it is only used to build the
@@ -201,35 +204,36 @@ You have two options to deal with this. The first option is to simply return
 
    state = []
 
-   @mx.compile
-   def fun(x, y)
-      z = x + y
-      state.append(z)
-      return mx.exp(z), state
+   fun = mx.compile(->(x, y) do
+     z = x + y
+     state << z
+     [mx.exp(z), state]
+   end)
 
-    _, state = fun(mx.array(1.0), mx.array(2.0))
-    # Prints [array(3, dtype=float32)]
-    print(state)
+   _, state = fun.call(mx.array(1.0), mx.array(2.0))
+   # Prints [array(3, dtype=float32)]
+   puts state
 
 In some cases returning updated state can be pretty inconvenient. Hence,
 :func:`compile` has a parameter to capture implicit outputs:
 
 .. code-block:: ruby
 
-  from functools import partial
-
   state = []
 
   # Tell compile to capture state as an output
-  @partial(mx.compile, outputs=state)
-  def fun(x, y)
+  fun = mx.compile(
+    ->(x, y) do
       z = x + y
-      state.append(z)
-      return mx.exp(z)
+      state << z
+      mx.exp(z)
+    end,
+    outputs: state
+  )
 
-  fun(mx.array(1.0), mx.array(2.0))
+  fun.call(mx.array(1.0), mx.array(2.0))
   # Prints [array(3, dtype=float32)]
-  print(state)
+  puts state
 
 This is particularly useful for compiling a function which includes an update
 to a container of arrays, as is commonly done when training the parameters of a
@@ -242,18 +246,16 @@ constants. For example:
 
   state = [mx.array(1.0)]
 
-  @mx.compile
-  def fun(x)
-      return x + state[0]
+  fun = mx.compile(->(x) { x + state[0] })
 
   # Prints array(2, dtype=float32)
-  print(fun(mx.array(1.0)))
+  puts fun.call(mx.array(1.0))
 
   # Update state
   state[0] = mx.array(5.0)
 
   # Still prints array(2, dtype=float32)
-  print(fun(mx.array(1.0)))
+  puts fun.call(mx.array(1.0))
 
 In order to have the change of state reflected in the outputs of ``fun`` you
 again have two options. The first option is to simply pass ``state`` as input
@@ -263,40 +265,35 @@ to the function.
 
   state = [mx.array(1.0)]
 
-  @mx.compile
-  def fun(x, state)
-      return x + state[0]
+  fun = mx.compile(->(x, current_state) { x + current_state[0] })
 
   # Prints array(2, dtype=float32)
-  print(fun(mx.array(1.0), state))
+  puts fun.call(mx.array(1.0), state)
 
   # Update state
   state[0] = mx.array(5.0)
 
   # Prints array(6, dtype=float32)
-  print(fun(mx.array(1.0), state))
+  puts fun.call(mx.array(1.0), state)
 
 In some cases this can be pretty inconvenient. Hence,
 :func:`compile` also has a parameter to capture implicit inputs:
 
 .. code-block:: ruby
 
-  from functools import partial
   state = [mx.array(1.0)]
 
   # Tell compile to capture state as an input
-  @partial(mx.compile, inputs=state)
-  def fun(x)
-      return x + state[0]
+  fun = mx.compile(->(x) { x + state[0] }, inputs: state)
 
   # Prints array(2, dtype=float32)
-  print(fun(mx.array(1.0)))
+  puts fun.call(mx.array(1.0))
 
   # Update state
   state[0] = mx.array(5.0)
 
   # Prints array(6, dtype=float32)
-  print(fun(mx.array(1.0)))
+  puts fun.call(mx.array(1.0))
 
 
 Compiling Training Graphs
@@ -316,28 +313,30 @@ To start, here is the simple example without any compilation:
   nn = MLX::NN
   optim = MLX::Optimizers
   # 4 examples with 10 features each
-  x = mx.random.uniform(shape=(4, 10))
+  x = mx.random.uniform(shape: [4, 10])
 
   # 0, 1 targets
   y = mx.array([0, 1, 0, 1])
 
   # Simple linear model
-  model = nn.Linear(10, 1)
+  model = nn::Linear.new(10, 1)
 
   # SGD with momentum
-  optimizer = optim.SGD(learning_rate=0.1, momentum=0.8)
+  optimizer = optim::SGD.new(learning_rate: 0.1, momentum: 0.8)
 
   def loss_fn(model, x, y)
-      logits = model(x).squeeze()
-      return nn.losses.binary_cross_entropy(logits, y)
+    logits = model.call(x).squeeze
+    nn.losses.binary_cross_entropy(logits, y)
+  end
 
   loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
 
   # Perform 10 steps of gradient descent
-  range(10).each do |it|
-      loss, grads = loss_and_grad_fn(model, x, y)
-      optimizer.update(model, grads)
-      mx.eval(model.parameters(), optimizer.state)
+  10.times do
+    loss, grads = loss_and_grad_fn.call(model, x, y)
+    optimizer.update(model, grads)
+    mx.eval(model.parameters, optimizer.state)
+  end
 
 To compile the update we can put it all in a function and compile it with the
 appropriate input and output captures. Here's the same example but compiled:
@@ -348,40 +347,45 @@ appropriate input and output captures. Here's the same example but compiled:
   mx = MLX::Core
   nn = MLX::NN
   optim = MLX::Optimizers
-  from functools import partial
 
   # 4 examples with 10 features each
-  x = mx.random.uniform(shape=(4, 10))
+  x = mx.random.uniform(shape: [4, 10])
 
   # 0, 1 targets
   y = mx.array([0, 1, 0, 1])
 
   # Simple linear model
-  model = nn.Linear(10, 1)
+  model = nn::Linear.new(10, 1)
 
   # SGD with momentum
-  optimizer = optim.SGD(learning_rate=0.1, momentum=0.8)
+  optimizer = optim::SGD.new(learning_rate: 0.1, momentum: 0.8)
 
   def loss_fn(model, x, y)
-      logits = model(x).squeeze()
-      return nn.losses.binary_cross_entropy(logits, y)
+    logits = model.call(x).squeeze
+    nn.losses.binary_cross_entropy(logits, y)
+  end
 
   # The state that will be captured as input and output
   state = [model.state, optimizer.state]
 
-  @partial(mx.compile, inputs=state, outputs=state)
-  def step(x, y)
+  step = mx.compile(
+    ->(x, y) do
       loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
-      loss, grads = loss_and_grad_fn(model, x, y)
+      loss, grads = loss_and_grad_fn.call(model, x, y)
       optimizer.update(model, grads)
-      return loss
+      loss
+    end,
+    inputs: state,
+    outputs: state
+  )
 
   # Perform 10 steps of gradient descent
-  range(10).each do |it|
-      loss = step(x, y)
-      # Evaluate the model and optimizer state
-      mx.eval(state)
-      print(loss)
+  10.times do
+    loss = step.call(x, y)
+    # Evaluate the model and optimizer state
+    mx.eval(*state)
+    puts loss
+  end
 
 
 .. note::
@@ -414,10 +418,10 @@ Compiling transformed functions works just as expected:
   compiled_grad_fn = mx.compile(grad_fn)
 
   # Prints: array(2.71828, dtype=float32)
-  print(grad_fn(mx.array(1.0)))
+  puts grad_fn.call(mx.array(1.0))
 
   # Also prints: array(2.71828, dtype=float32)
-  print(compiled_grad_fn(mx.array(1.0)))
+  puts compiled_grad_fn.call(mx.array(1.0))
 
 .. note::
 
@@ -431,12 +435,11 @@ the most opportunity to optimize the computation graph:
 
 .. code-block:: ruby
 
-  @mx.compile
-  def inner(x)
-      return mx.exp(-mx.abs(x))
+  inner = mx.compile(->(x) { mx.exp(-mx.abs(x)) })
 
-  def outer(x)
-      inner(inner(x))
+  outer = ->(x) do
+    inner.call(inner.call(x))
+  end
 
   # Compiling the outer function is good to do as it will likely
   # be faster even though the inner functions are compiled
@@ -451,28 +454,29 @@ Shapeless Compilation
 
 When the shape of an input to a compiled function changes, the function is
 recompiled. You can compile a function once and run it on inputs with
-variable shapes by specifying ``shapeless=True`` to :func:`compile`. In this
+variable shapes by specifying ``shapeless: true`` to :func:`compile`. In this
 case changes to the shapes of the inputs do not cause the function to be
 recompiled.
 
 .. code-block:: ruby
 
   def fun(x, y)
-      return mx.abs(x + y)
+    mx.abs(x + y)
+  end
 
-  compiled_fun = mx.compile(fun, shapeless=True)
+  compiled_fun = mx.compile(method(:fun), shapeless: true)
 
   x = mx.array(1.0)
   y = mx.array(-2.0)
 
   # Firt call compiles the function
-  print(compiled_fun(x, y))
+  puts compiled_fun.call(x, y)
 
   # Second call with different shapes
   # does not recompile the function
   x = mx.array([1.0, -6.0])
   y = mx.array([-2.0, 3.0])
-  print(compiled_fun(x, y))
+  puts compiled_fun.call(x, y)
 
 
 Use shapeless compilations carefully. Since compilation is not triggered when
@@ -483,18 +487,19 @@ to detect. For example:
 .. code-block:: ruby
 
   def fun(x)
-      return x.reshape(x.shape[0] * x.shape[1], -1)
+    x.reshape(x.shape[0] * x.shape[1], -1)
+  end
 
-  compiled_fun = mx.compile(fun, shapeless=True)
+  compiled_fun = mx.compile(method(:fun), shapeless: true)
 
-  x = mx.random.uniform(shape=(2, 3, 4))
+  x = mx.random.uniform(shape: [2, 3, 4])
 
-  out = compiled_fun(x)
+  out = compiled_fun.call(x)
 
-  x = mx.random.uniform(shape=(5, 5, 3))
+  x = mx.random.uniform(shape: [5, 5, 3])
 
   # Error, can't reshape (5, 5, 3) to (6, -1)
-  out = compiled_fun(x)
+  out = compiled_fun.call(x)
 
 The second call to the ``compiled_fun`` fails because of the call to
 :func:`reshape` which uses the static shape of ``x`` in the first call. We can
@@ -503,15 +508,16 @@ fix this by using :func:`flatten` to avoid hardcoding the shape of ``x``:
 .. code-block:: ruby
 
   def fun(x)
-      return x.flatten(0, 1)
+    x.flatten(0, 1)
+  end
 
-  compiled_fun = mx.compile(fun, shapeless=True)
+  compiled_fun = mx.compile(method(:fun), shapeless: true)
 
-  x = mx.random.uniform(shape=(2, 3, 4))
+  x = mx.random.uniform(shape: [2, 3, 4])
 
-  out = compiled_fun(x)
+  out = compiled_fun.call(x)
 
-  x = mx.random.uniform(shape=(5, 5, 3))
+  x = mx.random.uniform(shape: [5, 5, 3])
 
   # Ok
-  out = compiled_fun(x)
+  out = compiled_fun.call(x)

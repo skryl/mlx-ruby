@@ -24,8 +24,8 @@ without needing to move them from one memory location to another. For example:
 
 .. code-block:: ruby
 
-  mx.add(a, b, stream=mx.cpu)
-  mx.add(a, b, stream=mx.gpu)
+  mx.add(a, b, stream: mx.cpu)
+  mx.add(a, b, stream: mx.gpu)
 
 In the above, both the CPU and the GPU will perform the same add
 operation. The operations can (and likely will) be run in parallel since
@@ -38,8 +38,8 @@ MLX scheduler will automatically manage them. For example:
 
 .. code-block:: ruby
 
-  c = mx.add(a, b, stream=mx.cpu)
-  d = mx.add(a, c, stream=mx.gpu)
+  c = mx.add(a, b, stream: mx.cpu)
+  d = mx.add(a, c, stream: mx.gpu)
 
 In the above case, the second ``add`` runs on the GPU but it depends on the
 output of the first ``add`` which is running on the CPU. MLX will
@@ -55,18 +55,20 @@ memory can be helpful. Suppose we have the following computation:
 
 .. code-block:: ruby
 
-  def fun(a, b, d1, d2):
-    x = mx.matmul(a, b, stream=d1)
-    for _ in range(500):
-        b = mx.exp(b, stream=d2)
-    return x, b
+  def fun(a, b, d1, d2)
+    x = mx.matmul(a, b, stream: d1)
+    500.times do
+      b = mx.exp(b, stream: d2)
+    end
+    [x, b]
+  end
 
 which we want to run with the following arguments:
 
 .. code-block:: ruby
 
-  a = mx.random.uniform(shape=(4096, 512))
-  b = mx.random.uniform(shape=(512, 4))
+  a = mx.random.uniform(shape: [4096, 512])
+  b = mx.random.uniform(shape: [512, 4])
 
 The first ``matmul`` operation is a good fit for the GPU since it's more
 compute dense. The second sequence of operations are a better fit for the CPU,
