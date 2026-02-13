@@ -14,7 +14,7 @@ module MLX
 
         lambda do |*args, **kwargs|
           params = model.trainable_parameters
-          if MLX::Utils.tree_flatten(params).empty?
+          unless contains_array_leaf?(params)
             [fn.call(*args, **kwargs), {}]
           else
             value_grad_fn.call(params, *args, **kwargs)
@@ -44,7 +44,6 @@ module MLX
         communication_type: nil,
         communication_stream: nil
       )
-        _ = all_reduce_size
         group ||= begin
           MLX::Core.init
         rescue StandardError
@@ -65,9 +64,77 @@ module MLX
           MLX::Core.divide(summed.astype(original_dtype), world_size)
         end
 
-        MLX::Utils.tree_map(average_fn, gradients)
+        return MLX::Utils.tree_map(average_fn, gradients) if all_reduce_size.to_i <= 0
+
+        flat_grads = MLX::Utils.tree_flatten(gradients)
+        return gradients if flat_grads.empty?
+
+        keys = flat_grads.map(&:first)
+        arrays = flat_grads.map(&:last)
+        dtypes = arrays.map(&:dtype)
+        unless dtypes.all? { |dtype| dtype == dtypes.first }
+          return average_gradients(
+            gradients,
+            group,
+            all_reduce_size: 0,
+            communication_type: communication_type,
+            communication_stream: communication_stream
+          )
+        end
+
+        itemsize = communication_type.nil? ? dtypes.first.size : communication_type.size
+        sizes = arrays.map(&:size)
+        shapes = arrays.map(&:shape)
+
+        groups = []
+        current_group = []
+        current_size = 0
+        sizes.each_with_index do |size, i|
+          current_group << i
+          current_size += size * itemsize
+          next unless current_size >= all_reduce_size
+
+          groups << current_group
+          current_group = []
+          current_size = 0
+        end
+        groups << current_group unless current_group.empty?
+
+        rebuilt = []
+        groups.each do |group_indices|
+          flat_arrays = group_indices.map { |index| MLX::Core.reshape(arrays[index], [sizes[index]]) }
+          merged = MLX::Core.concatenate(flat_arrays)
+          reduced = average_fn.call(merged)
+
+          split_points = []
+          running = 0
+          group_indices.each_with_index do |index, i|
+            running += sizes[index]
+            split_points << running if i < group_indices.length - 1
+          end
+
+          parts = if split_points.empty?
+            [reduced]
+          else
+            MLX::Core.split(reduced, split_points, 0)
+          end
+
+          group_indices.each_with_index do |index, part_index|
+            rebuilt << [keys[index], MLX::Core.reshape(parts[part_index], shapes[index])]
+          end
+        end
+
+        MLX::Utils.tree_unflatten(rebuilt)
       rescue StandardError
         gradients
+      end
+
+      def contains_array_leaf?(tree)
+        return true if tree.is_a?(MLX::Core::Array)
+        return tree.any? { |item| contains_array_leaf?(item) } if tree.is_a?(::Array)
+        return tree.any? { |_k, value| contains_array_leaf?(value) } if tree.is_a?(::Hash)
+
+        false
       end
     end
 

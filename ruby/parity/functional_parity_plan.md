@@ -293,3 +293,44 @@ For each phase above, execute in strict red/green order and do not advance early
 2. Implement minimum Ruby wrapper/native changes to satisfy only that phase.
 3. Run the new phase tests, then full Ruby test suite.
 4. Update parity artifact and mark the phase complete only when all gates pass.
+
+### Phases 255-264 (Performance Hardening and Runtime Throughput)
+
+- [x] Phase 255: eliminate duplicate forward execution in `MLX::Core.value_and_grad` wrapper path and lock single-forward contract
+- [x] Phase 256: remove host `to_a` dependence from `clip_grad_norm` and preserve numeric parity
+- [x] Phase 257: implement `nn.utils.average_gradients` `all_reduce_size` grouping (concat/reduce/split) parity for lower communication overhead
+- [x] Phase 258: avoid per-call checkpoint wrapper allocation in transformer encoder/decoder loops via wrapper caching
+- [x] Phase 259: make `from_dlpack` array/capsule conversion host-copy free (no `to_a` fallback for supported inputs)
+- [x] Phase 260: optimize `Array#__setitem__` common index-update path to stay on-device for integer/list updates
+- [x] Phase 261: reduce extra forced evaluation barriers in boolean comparison helpers where `item` already materializes scalars
+- [x] Phase 262: tighten `nn.utils.value_and_grad` hot path by avoiding redundant tree traversals in no-params detection
+- [x] Phase 263: reduce transform wrapper cache-key overhead in `compile`/`checkpoint` path (shape-signature key without full `Marshal.dump`)
+- [x] Phase 264: final performance gate: run targeted perf-phase tests + full Ruby suite and record benchmark delta notes
+
+Execution rule for phases 255-264:
+1. Write the phase test first and verify red.
+2. Implement only the phase-scoped change and verify green.
+3. Run phase tests + full Ruby test suite.
+4. Mark the phase complete only when all checks pass.
+
+Phase 264 notes:
+- Targeted performance phase tests (`phase255`-`phase268`) are green.
+- Full Ruby suite is green in per-file execution mode (`ALL_OK 264`).
+- Contract probe confirms single forward execution in wrapper path (`MLX::Core.value_and_grad` produced `forward_calls=1`).
+
+### Phases 265-268 (Native Binding Throughput and Concurrency)
+
+- [x] Phase 265: cache dtype/category symbol and ID conversions in native binding helpers
+  - scope: `device_type_from_value`, `dtype_from_symbol`, `symbol_is_dtype`, `dtype_to_symbol`, `category_from_symbol`, `category_to_symbol`, `dtype_or_category_from_value`
+- [x] Phase 266: optimize `to_a` materialization path for large arrays and avoid redundant reshape/flat eval work where possible
+  - scope: `build_nested_ruby_array`, `array_to_a`
+- [x] Phase 267: release Ruby GVL around heavy MLX compute/eval entry points
+  - scope: `function_call`, `core_eval`, `core_async_eval`, and direct `mx::...` wrappers where safe
+- [x] Phase 268: reduce nested Ruby-array ingest overhead by removing double-pass staging where feasible
+  - scope: `infer_shape_and_flatten`, `tensor_array_from_ruby`, `array_from_ruby`
+
+Execution rule for phases 265-268:
+1. Add phase tests that fail before implementation.
+2. Apply minimum native changes for the phase.
+3. Build extension and run phase tests.
+4. Run full Ruby suite and mark phase complete only if green.

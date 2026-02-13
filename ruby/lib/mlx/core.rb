@@ -412,7 +412,7 @@ module MLX
         lambda do |*args, **kwargs|
           flat_inputs = []
           input_spec = flatten_tree_spec([args, kwargs], flat_inputs, false)
-          key = Marshal.dump(input_spec)
+          key = structure_cache_key(input_spec)
 
           entry = cache[key]
           unless entry
@@ -456,7 +456,7 @@ module MLX
         lambda do |*args, **kwargs|
           flat_inputs = []
           input_spec = flatten_tree_spec([args, kwargs], flat_inputs, false)
-          key = Marshal.dump(input_spec)
+          key = structure_cache_key(input_spec)
 
           entry = cache[key]
           unless entry
@@ -544,10 +544,9 @@ module MLX
       def from_dlpack(dlpack_value)
         case dlpack_value
         when MLX::Core::DLPackCapsule
-          source = dlpack_value.array
-          array(source.to_a, dlpack_value.dtype)
+          dlpack_value.array
         when MLX::Core::Array
-          array(dlpack_value.to_a, dlpack_value.dtype)
+          dlpack_value
         else
           raise TypeError, "from_dlpack expects MLX::Core::DLPackCapsule or MLX::Core::Array"
         end
@@ -675,15 +674,18 @@ module MLX
         lambda do |*args, **kwargs|
           selections, flat_inputs = build_target_selections(args, kwargs, argnums, argnames)
           native_argnums = (0...flat_inputs.length).to_a
+          captured_value = nil
           lifted = lambda do |*flat_vars|
             call_args, call_kwargs = apply_flat_vars_to_targets(args, kwargs, selections, flat_vars)
-            extract_loss(fun.call(*call_args, **call_kwargs))
+            raw_value = fun.call(*call_args, **call_kwargs)
+            captured_value = raw_value
+            extract_loss(raw_value)
           end
 
           if with_value
             native_fn = native_value_and_grad(lifted, native_argnums)
             _loss, raw_grads = native_fn.call(*flat_inputs)
-            value = fun.call(*args, **kwargs)
+            value = captured_value.nil? ? fun.call(*args, **kwargs) : captured_value
             [value, rebuild_grad_result(raw_grads, selections, argnames)]
           else
             native_fn = native_grad(lifted, native_argnums)
@@ -818,6 +820,25 @@ module MLX
         end
         raise TypeError,
               "[compile] Function arguments and outputs must be trees of arrays or constants (Numeric, String, Symbol, true/false, nil)"
+      end
+
+      def structure_cache_key(spec)
+        return "A" if spec == ARRAY_LEAF
+
+        tag, payload = spec
+        case tag
+        when :array
+          "L[#{payload.map { |entry| structure_cache_key(entry) }.join(",")}]"
+        when :hash
+          pairs = payload.map do |key, child|
+            "#{key.inspect}:#{structure_cache_key(child)}"
+          end
+          "H{#{pairs.join(",")}}"
+        when :const
+          "C(#{payload.class}:#{payload.inspect})"
+        else
+          raise ArgumentError, "invalid tree specification"
+        end
       end
 
       def inflate_tree_from_arrays(spec, arrays, cursor)
@@ -1416,6 +1437,9 @@ module MLX
       end
 
       def __setitem__(index, value)
+        fast_path = __setitem_1d_device_fast_path(index, value)
+        return fast_path unless fast_path.nil?
+
         copy = __ruby_deep_copy(to_a)
         replacement = value.is_a?(MLX::Core::Array) ? value.to_a : value
         __apply_setitem!(copy, index, replacement)
@@ -1484,6 +1508,55 @@ module MLX
       alias __dlpack_device__ __dlpack_device
 
       private
+
+      def __setitem_1d_device_fast_path(index, replacement)
+        return nil unless ndim == 1
+
+        if index.is_a?(::Integer)
+          normalized = __normalize_1d_index(index)
+          index_array = MLX::Core.array([normalized], MLX::Core.int32)
+          values_array = __coerce_setitem_values_1d(replacement, 1)
+          return MLX::Core.put_along_axis(self, index_array, values_array, 0)
+        end
+
+        return nil unless index.is_a?(::Array) && index.all? { |entry| entry.is_a?(::Integer) }
+
+        normalized = index.map { |entry| __normalize_1d_index(entry) }
+        index_array = MLX::Core.array(normalized, MLX::Core.int32)
+        values_array = __coerce_setitem_values_1d(replacement, normalized.length)
+        MLX::Core.put_along_axis(self, index_array, values_array, 0)
+      rescue StandardError
+        nil
+      end
+
+      def __normalize_1d_index(index)
+        size_1d = shape[0]
+        normalized = index
+        normalized += size_1d if normalized.negative?
+        if normalized.negative? || normalized >= size_1d
+          raise IndexError, "index out of range"
+        end
+
+        normalized
+      end
+
+      def __coerce_setitem_values_1d(values, count)
+        case values
+        when MLX::Core::Array
+          return MLX::Core.full([count], values, dtype) if values.size == 1 && count > 1
+          raise ArgumentError, "__setitem__ replacement values must match index list length" if values.size != count
+
+          MLX::Core.reshape(values.astype(dtype), [count])
+        when ::Array
+          value_array = MLX::Core.array(values, dtype)
+          return MLX::Core.full([count], value_array, dtype) if value_array.size == 1 && count > 1
+          raise ArgumentError, "__setitem__ replacement values must match index list length" if value_array.size != count
+
+          MLX::Core.reshape(value_array, [count])
+        else
+          MLX::Core.full([count], values, dtype)
+        end
+      end
 
       def __apply_setitem!(data, index, replacement)
         if index.is_a?(::Integer)

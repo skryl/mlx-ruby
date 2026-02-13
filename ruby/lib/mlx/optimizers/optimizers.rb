@@ -769,23 +769,24 @@ module MLX
     end
 
     def self.clip_grad_norm(grads, max_norm)
-      flatten = lambda do |value|
-        if value.is_a?(Array)
-          value.flat_map { |item| flatten.call(item) }
-        else
-          [value.to_f]
-        end
-      end
+      norm_squared = MLX::Utils.tree_reduce(
+        lambda do |acc, grad|
+          MLX::Core.add(acc, MLX::Core.sum(MLX::Core.square(grad)))
+        end,
+        grads,
+        MLX::Core.array(0.0, MLX::Core.float32)
+      )
 
-      norm_squared = MLX::Utils.tree_flatten(grads).reduce(0.0) do |acc, (_k, grad)|
-        values = flatten.call(grad.to_a)
-        acc + values.reduce(0.0) { |sum, v| sum + (v * v) }
-      end
-      total_norm = Math.sqrt(norm_squared)
-      normalizer = [max_norm.to_f / (total_norm + 1e-6), 1.0].min
+      total_norm = MLX::Core.sqrt(norm_squared)
+      max_norm_array = MLX::Core.array(max_norm.to_f, total_norm.dtype)
+      one = MLX::Core.array(1.0, total_norm.dtype)
+      normalizer = MLX::Core.minimum(
+        MLX::Core.divide(max_norm_array, MLX::Core.add(total_norm, 1e-6)),
+        one
+      )
 
       clipped = MLX::Utils.tree_map(lambda { |g| MLX::Core.multiply(g, normalizer) }, grads)
-      [clipped, MLX::Core.array(total_norm, MLX::Core.float32)]
+      [clipped, total_norm]
     end
   end
 end

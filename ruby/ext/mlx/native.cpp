@@ -1,4 +1,5 @@
 #include <ruby.h>
+#include <ruby/thread.h>
 
 #include <algorithm>
 #include <cmath>
@@ -92,12 +93,14 @@ struct FunctionWrapper {
   bool accepts_args_kwargs;
   bool returns_value_and_grad;
   bool always_array_output;
+  bool release_gvl;
   VALUE refs;
 
   FunctionWrapper()
       : accepts_args_kwargs(false),
         returns_value_and_grad(false),
         always_array_output(false),
+        release_gvl(false),
         refs(Qnil) {}
 };
 
@@ -271,17 +274,82 @@ static void raise_std_exception(const std::exception& error) {
   rb_raise(rb_eRuntimeError, "%s", error.what());
 }
 
+struct SymbolIdCache {
+  ID cpu;
+  ID gpu;
+  ID bool_;
+  ID uint8;
+  ID uint16;
+  ID uint32;
+  ID uint64;
+  ID int8;
+  ID int16;
+  ID int32;
+  ID int64;
+  ID float16;
+  ID float32;
+  ID float64;
+  ID bfloat16;
+  ID complex64;
+  ID complexfloating;
+  ID floating;
+  ID inexact;
+  ID signedinteger;
+  ID unsignedinteger;
+  ID integer;
+  ID number;
+  ID generic;
+};
+
+static const SymbolIdCache& symbol_ids() {
+  static const SymbolIdCache cache = {
+      rb_intern("cpu"),
+      rb_intern("gpu"),
+      rb_intern("bool_"),
+      rb_intern("uint8"),
+      rb_intern("uint16"),
+      rb_intern("uint32"),
+      rb_intern("uint64"),
+      rb_intern("int8"),
+      rb_intern("int16"),
+      rb_intern("int32"),
+      rb_intern("int64"),
+      rb_intern("float16"),
+      rb_intern("float32"),
+      rb_intern("float64"),
+      rb_intern("bfloat16"),
+      rb_intern("complex64"),
+      rb_intern("complexfloating"),
+      rb_intern("floating"),
+      rb_intern("inexact"),
+      rb_intern("signedinteger"),
+      rb_intern("unsignedinteger"),
+      rb_intern("integer"),
+      rb_intern("number"),
+      rb_intern("generic"),
+  };
+  return cache;
+}
+
+static VALUE id_to_symbol(ID id) {
+  return ID2SYM(id);
+}
+
 static mx::Device::DeviceType device_type_from_value(VALUE value) {
+  const auto& ids = symbol_ids();
   VALUE symbol = value;
   if (RB_TYPE_P(value, T_STRING)) {
     symbol = rb_str_intern(value);
   }
 
-  if (SYMBOL_P(symbol) && symbol == ID2SYM(rb_intern("cpu"))) {
-    return mx::Device::cpu;
-  }
-  if (SYMBOL_P(symbol) && symbol == ID2SYM(rb_intern("gpu"))) {
-    return mx::Device::gpu;
+  if (SYMBOL_P(symbol)) {
+    const ID sid = SYM2ID(symbol);
+    if (sid == ids.cpu) {
+      return mx::Device::cpu;
+    }
+    if (sid == ids.gpu) {
+      return mx::Device::gpu;
+    }
   }
 
   rb_raise(rb_eArgError, "device type must be :cpu or :gpu");
@@ -289,11 +357,12 @@ static mx::Device::DeviceType device_type_from_value(VALUE value) {
 }
 
 static VALUE device_type_to_symbol(mx::Device::DeviceType type) {
+  const auto& ids = symbol_ids();
   switch (type) {
     case mx::Device::cpu:
-      return ID2SYM(rb_intern("cpu"));
+      return id_to_symbol(ids.cpu);
     case mx::Device::gpu:
-      return ID2SYM(rb_intern("gpu"));
+      return id_to_symbol(ids.gpu);
     default:
       rb_raise(rb_eRuntimeError, "unknown MLX device type");
       return Qnil;
@@ -301,27 +370,27 @@ static VALUE device_type_to_symbol(mx::Device::DeviceType type) {
 }
 
 static mx::Dtype dtype_from_symbol(VALUE symbol) {
-#define DTYPE_CASE(name, dtype_const) \
-  if (symbol == ID2SYM(rb_intern(name))) { \
-    return dtype_const; \
+  const auto& ids = symbol_ids();
+  if (!SYMBOL_P(symbol)) {
+    rb_raise(rb_eArgError, "unsupported dtype symbol");
   }
 
-  DTYPE_CASE("bool_", mx::bool_)
-  DTYPE_CASE("uint8", mx::uint8)
-  DTYPE_CASE("uint16", mx::uint16)
-  DTYPE_CASE("uint32", mx::uint32)
-  DTYPE_CASE("uint64", mx::uint64)
-  DTYPE_CASE("int8", mx::int8)
-  DTYPE_CASE("int16", mx::int16)
-  DTYPE_CASE("int32", mx::int32)
-  DTYPE_CASE("int64", mx::int64)
-  DTYPE_CASE("float16", mx::float16)
-  DTYPE_CASE("float32", mx::float32)
-  DTYPE_CASE("float64", mx::float64)
-  DTYPE_CASE("bfloat16", mx::bfloat16)
-  DTYPE_CASE("complex64", mx::complex64)
+  const ID sid = SYM2ID(symbol);
+  if (sid == ids.bool_) return mx::bool_;
+  if (sid == ids.uint8) return mx::uint8;
+  if (sid == ids.uint16) return mx::uint16;
+  if (sid == ids.uint32) return mx::uint32;
+  if (sid == ids.uint64) return mx::uint64;
+  if (sid == ids.int8) return mx::int8;
+  if (sid == ids.int16) return mx::int16;
+  if (sid == ids.int32) return mx::int32;
+  if (sid == ids.int64) return mx::int64;
+  if (sid == ids.float16) return mx::float16;
+  if (sid == ids.float32) return mx::float32;
+  if (sid == ids.float64) return mx::float64;
+  if (sid == ids.bfloat16) return mx::bfloat16;
+  if (sid == ids.complex64) return mx::complex64;
 
-#undef DTYPE_CASE
   rb_raise(rb_eArgError, "unsupported dtype symbol");
   return mx::bool_;
 }
@@ -331,14 +400,12 @@ static bool symbol_is_dtype(VALUE symbol) {
     return false;
   }
 
+  const auto& ids = symbol_ids();
   const ID sid = SYM2ID(symbol);
-  return sid == rb_intern("bool_") || sid == rb_intern("uint8") ||
-      sid == rb_intern("uint16") || sid == rb_intern("uint32") ||
-      sid == rb_intern("uint64") || sid == rb_intern("int8") ||
-      sid == rb_intern("int16") || sid == rb_intern("int32") ||
-      sid == rb_intern("int64") || sid == rb_intern("float16") ||
-      sid == rb_intern("float32") || sid == rb_intern("float64") ||
-      sid == rb_intern("bfloat16") || sid == rb_intern("complex64");
+  return sid == ids.bool_ || sid == ids.uint8 || sid == ids.uint16 || sid == ids.uint32 ||
+      sid == ids.uint64 || sid == ids.int8 || sid == ids.int16 || sid == ids.int32 ||
+      sid == ids.int64 || sid == ids.float16 || sid == ids.float32 || sid == ids.float64 ||
+      sid == ids.bfloat16 || sid == ids.complex64;
 }
 
 static bool value_looks_like_dtype(VALUE value) {
@@ -353,35 +420,36 @@ static bool value_looks_like_dtype(VALUE value) {
 }
 
 static VALUE dtype_to_symbol(const mx::Dtype& dtype) {
+  const auto& ids = symbol_ids();
   switch (dtype.val()) {
     case mx::Dtype::Val::bool_:
-      return ID2SYM(rb_intern("bool_"));
+      return id_to_symbol(ids.bool_);
     case mx::Dtype::Val::uint8:
-      return ID2SYM(rb_intern("uint8"));
+      return id_to_symbol(ids.uint8);
     case mx::Dtype::Val::uint16:
-      return ID2SYM(rb_intern("uint16"));
+      return id_to_symbol(ids.uint16);
     case mx::Dtype::Val::uint32:
-      return ID2SYM(rb_intern("uint32"));
+      return id_to_symbol(ids.uint32);
     case mx::Dtype::Val::uint64:
-      return ID2SYM(rb_intern("uint64"));
+      return id_to_symbol(ids.uint64);
     case mx::Dtype::Val::int8:
-      return ID2SYM(rb_intern("int8"));
+      return id_to_symbol(ids.int8);
     case mx::Dtype::Val::int16:
-      return ID2SYM(rb_intern("int16"));
+      return id_to_symbol(ids.int16);
     case mx::Dtype::Val::int32:
-      return ID2SYM(rb_intern("int32"));
+      return id_to_symbol(ids.int32);
     case mx::Dtype::Val::int64:
-      return ID2SYM(rb_intern("int64"));
+      return id_to_symbol(ids.int64);
     case mx::Dtype::Val::float16:
-      return ID2SYM(rb_intern("float16"));
+      return id_to_symbol(ids.float16);
     case mx::Dtype::Val::float32:
-      return ID2SYM(rb_intern("float32"));
+      return id_to_symbol(ids.float32);
     case mx::Dtype::Val::float64:
-      return ID2SYM(rb_intern("float64"));
+      return id_to_symbol(ids.float64);
     case mx::Dtype::Val::bfloat16:
-      return ID2SYM(rb_intern("bfloat16"));
+      return id_to_symbol(ids.bfloat16);
     case mx::Dtype::Val::complex64:
-      return ID2SYM(rb_intern("complex64"));
+      return id_to_symbol(ids.complex64);
     default:
       rb_raise(rb_eRuntimeError, "unknown MLX dtype value");
       return Qnil;
@@ -389,43 +457,44 @@ static VALUE dtype_to_symbol(const mx::Dtype& dtype) {
 }
 
 static mx::Dtype::Category category_from_symbol(VALUE symbol) {
-#define CATEGORY_CASE(name, category_const) \
-  if (symbol == ID2SYM(rb_intern(name))) { \
-    return category_const; \
+  const auto& ids = symbol_ids();
+  if (!SYMBOL_P(symbol)) {
+    rb_raise(rb_eArgError, "unsupported dtype category symbol");
   }
 
-  CATEGORY_CASE("complexfloating", mx::complexfloating)
-  CATEGORY_CASE("floating", mx::floating)
-  CATEGORY_CASE("inexact", mx::inexact)
-  CATEGORY_CASE("signedinteger", mx::signedinteger)
-  CATEGORY_CASE("unsignedinteger", mx::unsignedinteger)
-  CATEGORY_CASE("integer", mx::integer)
-  CATEGORY_CASE("number", mx::number)
-  CATEGORY_CASE("generic", mx::generic)
+  const ID sid = SYM2ID(symbol);
+  if (sid == ids.complexfloating) return mx::complexfloating;
+  if (sid == ids.floating) return mx::floating;
+  if (sid == ids.inexact) return mx::inexact;
+  if (sid == ids.signedinteger) return mx::signedinteger;
+  if (sid == ids.unsignedinteger) return mx::unsignedinteger;
+  if (sid == ids.integer) return mx::integer;
+  if (sid == ids.number) return mx::number;
+  if (sid == ids.generic) return mx::generic;
 
-#undef CATEGORY_CASE
   rb_raise(rb_eArgError, "unsupported dtype category symbol");
   return mx::generic;
 }
 
 static VALUE category_to_symbol(mx::Dtype::Category category) {
+  const auto& ids = symbol_ids();
   switch (category) {
     case mx::Dtype::Category::complexfloating:
-      return ID2SYM(rb_intern("complexfloating"));
+      return id_to_symbol(ids.complexfloating);
     case mx::Dtype::Category::floating:
-      return ID2SYM(rb_intern("floating"));
+      return id_to_symbol(ids.floating);
     case mx::Dtype::Category::inexact:
-      return ID2SYM(rb_intern("inexact"));
+      return id_to_symbol(ids.inexact);
     case mx::Dtype::Category::signedinteger:
-      return ID2SYM(rb_intern("signedinteger"));
+      return id_to_symbol(ids.signedinteger);
     case mx::Dtype::Category::unsignedinteger:
-      return ID2SYM(rb_intern("unsignedinteger"));
+      return id_to_symbol(ids.unsignedinteger);
     case mx::Dtype::Category::integer:
-      return ID2SYM(rb_intern("integer"));
+      return id_to_symbol(ids.integer);
     case mx::Dtype::Category::number:
-      return ID2SYM(rb_intern("number"));
+      return id_to_symbol(ids.number);
     case mx::Dtype::Category::generic:
-      return ID2SYM(rb_intern("generic"));
+      return id_to_symbol(ids.generic);
     default:
       rb_raise(rb_eRuntimeError, "unknown MLX dtype category");
       return Qnil;
@@ -499,25 +568,27 @@ static bool is_numeric_scalar(VALUE value) {
       RB_TYPE_P(value, T_TRUE) || RB_TYPE_P(value, T_FALSE);
 }
 
-static double to_double_scalar(VALUE value) {
+template <typename T>
+static T scalar_value_from_ruby(VALUE value) {
   if (RB_INTEGER_TYPE_P(value)) {
-    return static_cast<double>(NUM2LL(value));
+    return static_cast<T>(NUM2LL(value));
   }
   if (RB_FLOAT_TYPE_P(value)) {
-    return NUM2DBL(value);
+    return static_cast<T>(NUM2DBL(value));
   }
   if (RB_TYPE_P(value, T_TRUE) || RB_TYPE_P(value, T_FALSE)) {
-    return value == Qtrue ? 1.0 : 0.0;
+    return static_cast<T>(value == Qtrue ? 1.0 : 0.0);
   }
   rb_raise(rb_eTypeError, "expected numeric/boolean scalar");
-  return 0.0;
+  return static_cast<T>(0);
 }
 
-static void infer_shape_and_flatten(
+template <typename T>
+static void infer_shape_and_flatten_typed(
     VALUE value,
     size_t depth,
     mx::Shape& shape,
-    std::vector<double>& flat) {
+    std::vector<T>& flat) {
   if (RB_TYPE_P(value, T_ARRAY)) {
     const long len = RARRAY_LEN(value);
     if (shape.size() == depth) {
@@ -526,7 +597,7 @@ static void infer_shape_and_flatten(
       rb_raise(rb_eArgError, "ragged array input is not supported");
     }
     for (long i = 0; i < len; ++i) {
-      infer_shape_and_flatten(rb_ary_entry(value, i), depth + 1, shape, flat);
+      infer_shape_and_flatten_typed<T>(rb_ary_entry(value, i), depth + 1, shape, flat);
     }
     return;
   }
@@ -537,14 +608,18 @@ static void infer_shape_and_flatten(
   if (shape.size() != depth) {
     rb_raise(rb_eArgError, "inconsistent nested array depth");
   }
-  flat.push_back(to_double_scalar(value));
+  flat.push_back(scalar_value_from_ruby<T>(value));
+}
+
+static void infer_shape_and_flatten(
+    VALUE value,
+    size_t depth,
+    mx::Shape& shape,
+    std::vector<double>& flat) {
+  infer_shape_and_flatten_typed<double>(value, depth, shape, flat);
 }
 
 static mx::array tensor_array_from_ruby(VALUE value, const std::optional<mx::Dtype>& dtype) {
-  mx::Shape shape;
-  std::vector<double> data;
-  infer_shape_and_flatten(value, 0, shape, data);
-
   mx::Dtype target_dtype = dtype.value_or(mx::float32);
   mx::Dtype build_dtype = target_dtype;
 
@@ -554,11 +629,25 @@ static mx::array tensor_array_from_ruby(VALUE value, const std::optional<mx::Dty
     build_dtype = mx::float32;
   }
 
-  mx::array a(data.begin(), shape, build_dtype);
-  if (target_dtype != build_dtype) {
-    a = mx::astype(std::move(a), target_dtype);
+  if (build_dtype == mx::float32) {
+    mx::Shape shape;
+    std::vector<float> data;
+    infer_shape_and_flatten_typed<float>(value, 0, shape, data);
+    mx::array a(data.begin(), shape, build_dtype);
+    if (target_dtype != build_dtype) {
+      a = mx::astype(std::move(a), target_dtype);
+    }
+    return a;
+  } else {
+    mx::Shape shape;
+    std::vector<double> data;
+    infer_shape_and_flatten(value, 0, shape, data);
+    mx::array a(data.begin(), shape, build_dtype);
+    if (target_dtype != build_dtype) {
+      a = mx::astype(std::move(a), target_dtype);
+    }
+    return a;
   }
-  return a;
 }
 
 static mx::array array_from_ruby(VALUE value, const std::optional<mx::Dtype>& dtype) {
@@ -1063,6 +1152,64 @@ static VALUE ruby_from_array_vector_auto(const std::vector<mx::array>& arrays) {
   return ruby_array_of_arrays(arrays);
 }
 
+static void rethrow_captured_exception(const std::exception_ptr& error) {
+  if (error) {
+    std::rethrow_exception(error);
+  }
+}
+
+struct FunctionVectorCallPayload {
+  FunctionWrapper* wrapper;
+  const std::vector<mx::array>* inputs;
+  std::vector<mx::array>* outputs;
+  std::exception_ptr error;
+};
+
+static void* function_vector_call_without_gvl(void* arg) {
+  auto* payload = reinterpret_cast<FunctionVectorCallPayload*>(arg);
+  try {
+    *payload->outputs = payload->wrapper->vector_fn(*payload->inputs);
+  } catch (...) {
+    payload->error = std::current_exception();
+  }
+  return nullptr;
+}
+
+struct FunctionArgsKwCallPayload {
+  FunctionWrapper* wrapper;
+  const mx::Args* args;
+  const mx::Kwargs* kwargs;
+  std::vector<mx::array>* outputs;
+  std::exception_ptr error;
+};
+
+static void* function_args_kwargs_call_without_gvl(void* arg) {
+  auto* payload = reinterpret_cast<FunctionArgsKwCallPayload*>(arg);
+  try {
+    *payload->outputs = payload->wrapper->args_kwargs_fn(*payload->args, *payload->kwargs);
+  } catch (...) {
+    payload->error = std::current_exception();
+  }
+  return nullptr;
+}
+
+struct FunctionValueGradCallPayload {
+  FunctionWrapper* wrapper;
+  const std::vector<mx::array>* inputs;
+  std::pair<std::vector<mx::array>, std::vector<mx::array>>* outputs;
+  std::exception_ptr error;
+};
+
+static void* function_value_grad_call_without_gvl(void* arg) {
+  auto* payload = reinterpret_cast<FunctionValueGradCallPayload*>(arg);
+  try {
+    *payload->outputs = payload->wrapper->value_grad_fn(*payload->inputs);
+  } catch (...) {
+    payload->error = std::current_exception();
+  }
+  return nullptr;
+}
+
 static VALUE function_call(int argc, VALUE* argv, VALUE self) {
   try {
     FunctionWrapper* wrapper = nullptr;
@@ -1085,7 +1232,18 @@ static VALUE function_call(int argc, VALUE* argv, VALUE self) {
         args.push_back(array_from_ruby(argv[i], std::nullopt));
       }
       mx::Kwargs kwargs = NIL_P(kwargs_hash) ? mx::Kwargs{} : array_map_from_ruby_hash(kwargs_hash);
-      auto outputs = wrapper->args_kwargs_fn(args, kwargs);
+      std::vector<mx::array> outputs;
+      if (wrapper->release_gvl) {
+        FunctionArgsKwCallPayload payload{wrapper, &args, &kwargs, &outputs, nullptr};
+        rb_thread_call_without_gvl(
+            function_args_kwargs_call_without_gvl,
+            &payload,
+            RUBY_UBF_IO,
+            nullptr);
+        rethrow_captured_exception(payload.error);
+      } else {
+        outputs = wrapper->args_kwargs_fn(args, kwargs);
+      }
       if (wrapper->always_array_output) {
         return ruby_array_of_arrays(outputs);
       }
@@ -1099,14 +1257,38 @@ static VALUE function_call(int argc, VALUE* argv, VALUE self) {
     }
 
     if (wrapper->returns_value_and_grad) {
-      auto result = wrapper->value_grad_fn(inputs);
+      std::pair<std::vector<mx::array>, std::vector<mx::array>> result;
+      if (wrapper->release_gvl) {
+        FunctionValueGradCallPayload payload{wrapper, &inputs, &result, nullptr};
+        rb_thread_call_without_gvl(
+            function_value_grad_call_without_gvl,
+            &payload,
+            RUBY_UBF_IO,
+            nullptr);
+        rethrow_captured_exception(payload.error);
+      } else {
+        result = wrapper->value_grad_fn(inputs);
+      }
       VALUE out = rb_ary_new_capa(2);
       rb_ary_push(out, ruby_from_array_vector_auto(result.first));
       rb_ary_push(out, ruby_from_array_vector_auto(result.second));
       return out;
     }
 
-    return ruby_from_array_vector_auto(wrapper->vector_fn(inputs));
+    std::vector<mx::array> outputs;
+    if (wrapper->release_gvl) {
+      FunctionVectorCallPayload payload{wrapper, &inputs, &outputs, nullptr};
+      rb_thread_call_without_gvl(
+          function_vector_call_without_gvl,
+          &payload,
+          RUBY_UBF_IO,
+          nullptr);
+      rethrow_captured_exception(payload.error);
+    } else {
+      outputs = wrapper->vector_fn(inputs);
+    }
+
+    return ruby_from_array_vector_auto(outputs);
   } catch (const std::exception& error) {
     raise_std_exception(error);
     return Qnil;
@@ -1893,9 +2075,9 @@ static VALUE build_nested_ruby_array(
 static VALUE array_to_a(VALUE self) {
   ArrayWrapper* wrapper = nullptr;
   TypedData_Get_Struct(self, ArrayWrapper, &array_data_type, wrapper);
-  wrapper->array.eval();
 
   if (wrapper->array.ndim() == 0) {
+    wrapper->array.eval();
     return ruby_scalar_from_array(wrapper->array);
   }
 
@@ -5788,7 +5970,6 @@ static VALUE core_allclose(int argc, VALUE* argv, VALUE) {
     const bool equal_nan_v = NIL_P(equal_nan) ? false : RTEST(equal_nan);
 
     auto out = mx::allclose(array_unwrap(a), array_unwrap(b), rtol_v, atol_v, equal_nan_v);
-    out.eval();
     return out.item<bool>() ? Qtrue : Qfalse;
   } catch (const std::exception& error) {
     raise_std_exception(error);
@@ -5874,7 +6055,6 @@ static VALUE core_array_equal(int argc, VALUE* argv, VALUE) {
         array_from_ruby(a, std::nullopt),
         array_from_ruby(b, std::nullopt),
         equal_nan_v);
-    out.eval();
     return out.item<bool>() ? Qtrue : Qfalse;
   } catch (const std::exception& error) {
     raise_std_exception(error);
@@ -6795,7 +6975,24 @@ static VALUE core_eval(int argc, VALUE* argv, VALUE) {
     for (int i = 0; i < argc; ++i) {
       collect_arrays_from_tree(argv[i], arrays);
     }
-    mx::eval(arrays);
+
+    struct CoreEvalPayload {
+      std::vector<mx::array>* arrays;
+      std::exception_ptr error;
+    };
+    auto core_eval_without_gvl = [](void* arg) -> void* {
+      auto* payload = reinterpret_cast<CoreEvalPayload*>(arg);
+      try {
+        mx::eval(*payload->arrays);
+      } catch (...) {
+        payload->error = std::current_exception();
+      }
+      return nullptr;
+    };
+
+    CoreEvalPayload payload{&arrays, nullptr};
+    rb_thread_call_without_gvl(core_eval_without_gvl, &payload, RUBY_UBF_IO, nullptr);
+    rethrow_captured_exception(payload.error);
     return Qnil;
   } catch (const std::exception& error) {
     raise_std_exception(error);
@@ -6810,7 +7007,24 @@ static VALUE core_async_eval(int argc, VALUE* argv, VALUE) {
     for (int i = 0; i < argc; ++i) {
       collect_arrays_from_tree(argv[i], arrays);
     }
-    mx::async_eval(arrays);
+
+    struct CoreAsyncEvalPayload {
+      std::vector<mx::array>* arrays;
+      std::exception_ptr error;
+    };
+    auto core_async_eval_without_gvl = [](void* arg) -> void* {
+      auto* payload = reinterpret_cast<CoreAsyncEvalPayload*>(arg);
+      try {
+        mx::async_eval(*payload->arrays);
+      } catch (...) {
+        payload->error = std::current_exception();
+      }
+      return nullptr;
+    };
+
+    CoreAsyncEvalPayload payload{&arrays, nullptr};
+    rb_thread_call_without_gvl(core_async_eval_without_gvl, &payload, RUBY_UBF_IO, nullptr);
+    rethrow_captured_exception(payload.error);
     return Qnil;
   } catch (const std::exception& error) {
     raise_std_exception(error);
@@ -7141,14 +7355,7 @@ static DtypeOrCategory dtype_or_category_from_value(VALUE value) {
     rb_raise(rb_eArgError, "expected dtype or dtype category symbol");
   }
 
-  const ID sid = SYM2ID(symbol);
-  if (sid == rb_intern("bool_") || sid == rb_intern("uint8") ||
-      sid == rb_intern("uint16") || sid == rb_intern("uint32") ||
-      sid == rb_intern("uint64") || sid == rb_intern("int8") ||
-      sid == rb_intern("int16") || sid == rb_intern("int32") ||
-      sid == rb_intern("int64") || sid == rb_intern("float16") ||
-      sid == rb_intern("float32") || sid == rb_intern("float64") ||
-      sid == rb_intern("bfloat16") || sid == rb_intern("complex64")) {
+  if (symbol_is_dtype(symbol)) {
     return dtype_from_symbol(symbol);
   }
 

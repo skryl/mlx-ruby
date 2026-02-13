@@ -160,16 +160,16 @@ module MLX
         end
         self.ln = LayerNorm.new(dims)
         @checkpoint = checkpoint
+        @layer_fns = if @checkpoint
+          layers.map { |layer| MLX::NN.checkpoint(layer, ->(a, b) { layer.call(a, b) }) }
+        else
+          layers
+        end
       end
 
       def call(x, mask)
-        layers.each do |layer|
-          if @checkpoint
-            layer_fn = MLX::NN.checkpoint(->(a, b) { layer.call(a, b) })
-            x = layer_fn.call(x, mask)
-          else
-            x = layer.call(x, mask)
-          end
+        @layer_fns.each do |layer_fn|
+          x = layer_fn.call(x, mask)
         end
         ln.call(x)
       end
@@ -265,16 +265,18 @@ module MLX
         end
         self.ln = LayerNorm.new(dims)
         @checkpoint = checkpoint
+        @layer_fns = if @checkpoint
+          layers.map do |layer|
+            MLX::NN.checkpoint(layer, ->(a, b, c, d) { layer.call(a, b, c, d) })
+          end
+        else
+          layers
+        end
       end
 
       def call(x, memory, x_mask, memory_mask)
-        layers.each do |layer|
-          if @checkpoint
-            layer_fn = MLX::NN.checkpoint(->(a, b, c, d) { layer.call(a, b, c, d) })
-            x = layer_fn.call(x, memory, x_mask, memory_mask)
-          else
-            x = layer.call(x, memory, x_mask, memory_mask)
-          end
+        @layer_fns.each do |layer_fn|
+          x = layer_fn.call(x, memory, x_mask, memory_mask)
         end
         ln.call(x)
       end
