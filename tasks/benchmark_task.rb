@@ -3,14 +3,11 @@
 require "json"
 require "open3"
 require "fileutils"
-require "open-uri"
 LIB_ROOT = File.expand_path("../lib", __dir__)
 $LOAD_PATH.unshift(LIB_ROOT) unless $LOAD_PATH.include?(LIB_ROOT)
 require "mlx"
 
 class BenchmarkTask
-  KARPATHY_GPT2_DATA_URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
-
   CNN_CHANNELS = 3
   CNN_HEIGHT = 64
   CNN_WIDTH = 64
@@ -87,7 +84,7 @@ class BenchmarkTask
     @num_layers = num_layers
     @compute_device = parse_compute_device(compute_device)
     @python_bin = python_bin
-    @repo_root = File.expand_path("../..", __dir__)
+    @repo_root = File.expand_path("..", __dir__)
   end
 
   def run(model: :transformer)
@@ -263,12 +260,9 @@ class BenchmarkTask
 
   def prepare_karpathy_gpt2_dataset
     data_path = karpathy_gpt2_dataset_path
-    FileUtils.mkdir_p(File.dirname(data_path))
     unless File.exist?(data_path)
-      puts "[karpathy_gpt2] downloading dataset from Karpathy's tiny_shakespeare repo"
-      URI.open(KARPATHY_GPT2_DATA_URL) do |source|
-        File.binwrite(data_path, source.read)
-      end
+      raise "Karpathy GPT-2 fixture missing at #{data_path}. " \
+            "Add test/fixtures/karpathy_gpt2_input.txt before running this benchmark."
     end
 
     text = File.read(data_path)
@@ -299,7 +293,7 @@ class BenchmarkTask
   end
 
   def karpathy_gpt2_dataset_path
-    File.join(@repo_root, "benchmarks", "karpathy_gpt2", "input.txt")
+    File.join(@repo_root, "test", "fixtures", "karpathy_gpt2_input.txt")
   end
 
   def benchmark_ruby_transformer
@@ -443,7 +437,7 @@ class BenchmarkTask
     raise "Unknown benchmark model: #{model_name}" if python_script.nil?
 
     env = {
-      "PYTHONPATH" => [File.join(@repo_root, "python"), ENV["PYTHONPATH"]].compact.join(File::PATH_SEPARATOR)
+      "PYTHONPATH" => [File.join(@repo_root, "mlx", "python"), ENV["PYTHONPATH"]].compact.join(File::PATH_SEPARATOR)
     }
 
     output_lines = []
@@ -544,7 +538,6 @@ class BenchmarkTask
       import json
       import os
       import random
-      import urllib.request
       import time
 
       import mlx.core as mx
@@ -560,7 +553,6 @@ class BenchmarkTask
 
       mx.set_default_device(#{python_device_expr})
 
-      data_url = #{KARPATHY_GPT2_DATA_URL.inspect}
       data_path = #{karpathy_gpt2_dataset_path.inspect}
       batch_size = #{@batch_size}
       block_size = #{@sequence_length}
@@ -573,9 +565,10 @@ class BenchmarkTask
       iter_every = max(1, iterations // 5)
 
       if not os.path.exists(data_path):
-          os.makedirs(os.path.dirname(data_path), exist_ok=True)
-          print(f"[python/karpathy_gpt2] downloading dataset from Karpathy tiny-shakespeare repo")
-          urllib.request.urlretrieve(data_url, data_path)
+          raise FileNotFoundError(
+              f"Karpathy GPT-2 fixture missing at {data_path}. "
+              "Add test/fixtures/karpathy_gpt2_input.txt before running this benchmark."
+          )
 
       with open(data_path, "r", encoding="utf-8") as f:
           text = f.read()
