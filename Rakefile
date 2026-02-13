@@ -1,12 +1,86 @@
 # frozen_string_literal: true
 
+require "rake"
+require "rake/file_list"
 require "rake/testtask"
+require "timeout"
 require_relative "tasks/benchmark_task"
 
-Rake::TestTask.new(:test) do |t|
-  t.libs << "test"
-  t.pattern = "test/**/*_test.rb"
-  t.warning = true
+def strict_test_timeout_seconds
+  value = ENV.fetch("MLX_TEST_TIMEOUT", "10").to_i
+  value.positive? ? value : 10
+end
+
+def test_file_list
+  Rake::FileList["test/**/*_test.rb"]
+end
+
+def run_test_file_with_timeout(file, timeout: strict_test_timeout_seconds)
+  command = ["bundle", "exec", "ruby", "-Itest", file]
+  pid = Process.spawn(*command, chdir: __dir__)
+
+  begin
+    _, status = Timeout.timeout(timeout) { Process.wait2(pid) }
+    return status.success?
+  rescue Timeout::Error
+    warn "✗ timeout after #{timeout}s: #{file}"
+    begin
+      Process.kill("TERM", pid)
+    rescue Errno::ESRCH, Errno::EINVAL, Errno::EPERM
+      return false
+    end
+
+    sleep 0.2
+    begin
+      Process.kill("KILL", pid)
+    rescue Errno::ESRCH, Errno::EINVAL, Errno::EPERM
+      # ignore
+    end
+
+    Process.wait(pid) rescue nil
+    false
+  end
+ensure
+  begin
+    Process.kill("KILL", pid) if pid
+  rescue Errno::ESRCH, Errno::EINVAL, Errno::EPERM
+    # ignore if process already exited
+  end
+end
+
+def run_strict_test_suite
+  files = test_file_list.to_a
+  failures = []
+
+  files.each do |file|
+    print "."
+    $stdout.flush
+    success = run_test_file_with_timeout(file)
+    failures << file unless success
+  end
+
+  puts
+  puts "Ran #{files.length} tests in strict mode (#{strict_test_timeout_seconds}s timeout)."
+
+  return unless failures.any?
+
+  warn
+  warn "The following files failed or timed out:"
+  failures.each { |file| warn "  - #{file}" }
+  abort "Strict test run failed."
+end
+
+if ENV.fetch("MLX_STRICT_TESTS", "0") == "1"
+  desc "Run tests with strict per-file timeout (set MLX_TEST_TIMEOUT to customize)."
+  task :test do
+    run_strict_test_suite
+  end
+else
+  Rake::TestTask.new(:test) do |t|
+    t.libs << "test"
+    t.pattern = "test/**/*_test.rb"
+    t.warning = true
+  end
 end
 
 namespace :benchmark do

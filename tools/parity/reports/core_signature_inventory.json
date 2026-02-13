@@ -1,1952 +1,8 @@
 {
-  "generated_at": "2026-02-13T04:13:34Z",
+  "generated_at": "2026-02-13T07:30:53Z",
   "python": {
-    "singleton_methods": {
-      "default_device": {
-        "sources": [
-          "device.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "set_default_device": {
-        "sources": [
-          "device.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "is_available": {
-        "sources": [
-          "device.cpp",
-          "distributed.cpp"
-        ],
-        "signatures": [
-          "def is_available(backend: str = 'any') -> bool"
-        ],
-        "has_signature": true
-      },
-      "device_count": {
-        "sources": [
-          "device.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "device_info": {
-        "sources": [
-          "device.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "init": {
-        "sources": [
-          "distributed.cpp"
-        ],
-        "signatures": [
-          "def init(strict: bool = False, backend: str = 'any') -> Group"
-        ],
-        "has_signature": true
-      },
-      "all_sum": {
-        "sources": [
-          "distributed.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "all_max": {
-        "sources": [
-          "distributed.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "all_min": {
-        "sources": [
-          "distributed.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "all_gather": {
-        "sources": [
-          "distributed.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "send": {
-        "sources": [
-          "distributed.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "recv": {
-        "sources": [
-          "distributed.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "recv_like": {
-        "sources": [
-          "distributed.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "sum_scatter": {
-        "sources": [
-          "distributed.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "export_function": {
-        "sources": [
-          "export.cpp"
-        ],
-        "signatures": [
-          "def import_function(file: str) -> Callable"
-        ],
-        "has_signature": true
-      },
-      "import_function": {
-        "sources": [
-          "export.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "exporter": {
-        "sources": [
-          "export.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "export_to_dot": {
-        "sources": [
-          "export.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "rms_norm": {
-        "sources": [
-          "fast.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "layer_norm": {
-        "sources": [
-          "fast.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "rope": {
-        "sources": [
-          "fast.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "scaled_dot_product_attention": {
-        "sources": [
-          "fast.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "metal_kernel": {
-        "sources": [
-          "fast.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cuda_kernel": {
-        "sources": [
-          "fast.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "precompiled_cuda_kernel": {
-        "sources": [
-          "fast.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "fft": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "ifft": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "fft2": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "ifft2": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "fftn": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "ifftn": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "rfft": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "irfft": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "rfft2": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "irfft2": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "rfftn": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "irfftn": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "fftshift": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "ifftshift": {
-        "sources": [
-          "fft.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "norm": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "qr": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "svd": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "inv": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "tri_inv": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cholesky": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cholesky_inv": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "pinv": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cross": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "eigvals": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "eig": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "eigvalsh": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "eigh": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "lu": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "lu_factor": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "solve": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "solve_triangular": {
-        "sources": [
-          "linalg.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "get_active_memory": {
-        "sources": [
-          "memory.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "get_peak_memory": {
-        "sources": [
-          "memory.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "reset_peak_memory": {
-        "sources": [
-          "memory.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "get_cache_memory": {
-        "sources": [
-          "memory.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "set_memory_limit": {
-        "sources": [
-          "memory.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "set_cache_limit": {
-        "sources": [
-          "memory.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "set_wired_limit": {
-        "sources": [
-          "memory.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "clear_cache": {
-        "sources": [
-          "memory.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "reshape": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [
-          "def einsum_path(subscripts: str, *operands)"
-        ],
-        "has_signature": true
-      },
-      "flatten": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "unflatten": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "squeeze": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "expand_dims": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "abs": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "sign": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "negative": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "add": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "subtract": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "multiply": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "divide": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "divmod": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "floor_divide": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "remainder": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "equal": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "not_equal": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "less": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "less_equal": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "greater": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "greater_equal": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "array_equal": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "matmul": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "square": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "sqrt": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "rsqrt": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "reciprocal": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "logical_not": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "logical_and": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "logical_or": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "logaddexp": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "exp": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "expm1": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "erf": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "erfinv": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "sin": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cos": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "tan": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "arcsin": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "arccos": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "arctan": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "arctan2": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "sinh": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cosh": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "tanh": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "arcsinh": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "arccosh": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "arctanh": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "degrees": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "radians": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "log": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "log2": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "log10": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "log1p": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "stop_gradient": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "sigmoid": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "power": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "arange": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "linspace": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "kron": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "take": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "take_along_axis": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "put_along_axis": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "full": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "zeros": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "asarray": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "zeros_like": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "ones": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "ones_like": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "eye": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "identity": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "tri": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "tril": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "triu": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "allclose": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "isclose": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "all": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "any": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "minimum": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "maximum": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "floor": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "ceil": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "isnan": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "isinf": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "isfinite": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "isposinf": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "isneginf": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "moveaxis": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "swapaxes": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "transpose": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "permute_dims": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "sum": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "prod": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "min": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "max": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "logcumsumexp": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "logsumexp": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "mean": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "median": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "var": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "std": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "split": {
-        "sources": [
-          "ops.cpp",
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "argmin": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "argmax": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "sort": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "argsort": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "partition": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "argpartition": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "topk": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "broadcast_to": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "broadcast_arrays": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "softmax": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "concatenate": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "concat": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "stack": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "meshgrid": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "repeat": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "clip": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "pad": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "as_strided": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cumsum": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cumprod": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cummax": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "cummin": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "conj": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "conjugate": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "convolve": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "conv1d": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "conv2d": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "conv3d": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "conv_transpose1d": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "conv_transpose2d": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "conv_transpose3d": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "conv_general": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "save": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "savez": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "savez_compressed": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "load": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "save_safetensors": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "save_gguf": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "where": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "nan_to_num": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "round": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "quantized_matmul": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "quantize": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "dequantize": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "gather_qmm": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "segmented_mm": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "tensordot": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "inner": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "outer": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "tile": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "addmm": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "block_masked_mm": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "gather_mm": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "diagonal": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "diag": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "trace": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "atleast_1d": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "atleast_2d": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "atleast_3d": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "issubdtype": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "bitwise_and": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "bitwise_or": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "bitwise_xor": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "left_shift": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "right_shift": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "bitwise_invert": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "view": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "hadamard_transform": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "einsum_path": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "einsum": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [
-          "def broadcast_shapes(*shapes: Sequence[int]) -> Tuple[int]"
-        ],
-        "has_signature": true
-      },
-      "roll": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "real": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "imag": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "slice": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "slice_update": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "contiguous": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "broadcast_shapes": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "depends": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "qqmm": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "from_fp8": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "to_fp8": {
-        "sources": [
-          "ops.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "seed": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "key": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "uniform": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "normal": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "multivariate_normal": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "randint": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "bernoulli": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "truncated_normal": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "gumbel": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "categorical": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "laplace": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "permutation": {
-        "sources": [
-          "random.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "default_stream": {
-        "sources": [
-          "stream.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "set_default_stream": {
-        "sources": [
-          "stream.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "new_stream": {
-        "sources": [
-          "stream.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "stream": {
-        "sources": [
-          "stream.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "synchronize": {
-        "sources": [
-          "stream.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "eval": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [
-          "def eval(*args) -> None"
-        ],
-        "has_signature": true
-      },
-      "async_eval": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [
-          "def async_eval(*args)"
-        ],
-        "has_signature": true
-      },
-      "jvp": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [
-          "def checkpoint(fun: Callable[P, R]) -> Callable[P, R]"
-        ],
-        "has_signature": true
-      },
-      "vjp": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "value_and_grad": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "grad": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "vmap": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "compile": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "disable_compile": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "enable_compile": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      },
-      "checkpoint": {
-        "sources": [
-          "transforms.cpp"
-        ],
-        "signatures": [],
-        "has_signature": false
-      }
-    },
-    "count": 275
+    "singleton_methods": {},
+    "count": 0
   },
   "ruby": {
     "singleton_methods": {
@@ -3536,51 +1592,17 @@
   "diff": {
     "missing_from_ruby": [],
     "missing_from_python": [
-      "array",
-      "astype",
-      "bfloat16",
-      "bool_",
-      "complex64",
-      "complexfloating",
-      "cpu",
-      "distributed_is_available",
-      "e",
-      "euler_gamma",
-      "float16",
-      "float32",
-      "float64",
-      "floating",
-      "generic",
-      "gpu",
-      "inexact",
-      "inf",
-      "int16",
-      "int32",
-      "int64",
-      "int8",
-      "integer",
-      "metal_device_info",
-      "metal_is_available",
-      "metal_start_capture",
-      "metal_stop_capture",
-      "nan",
-      "newaxis",
-      "number",
-      "pi",
-      "random_seed",
-      "random_split",
-      "random_uniform",
-      "signedinteger",
-      "uint16",
-      "uint32",
-      "uint64",
-      "uint8",
-      "unsignedinteger",
-      "version"
-    ],
-    "ruby_fixed_arity_without_python_signature": [
       "abs",
       "add",
+      "addmm",
+      "all",
+      "all_gather",
+      "all_max",
+      "all_min",
+      "all_sum",
+      "allclose",
+      "any",
+      "arange",
       "arccos",
       "arccosh",
       "arcsin",
@@ -3588,87 +1610,243 @@
       "arctan",
       "arctan2",
       "arctanh",
+      "argmax",
+      "argmin",
+      "argpartition",
+      "argsort",
+      "array",
+      "array_equal",
+      "as_strided",
+      "asarray",
+      "astype",
+      "async_eval",
       "atleast_1d",
       "atleast_2d",
       "atleast_3d",
+      "bernoulli",
+      "bfloat16",
       "bitwise_and",
       "bitwise_invert",
       "bitwise_or",
       "bitwise_xor",
+      "block_masked_mm",
+      "bool_",
       "broadcast_arrays",
+      "broadcast_shapes",
       "broadcast_to",
+      "categorical",
       "ceil",
       "checkpoint",
+      "cholesky",
+      "cholesky_inv",
       "clear_cache",
+      "clip",
+      "compile",
+      "complex64",
+      "complexfloating",
+      "concat",
+      "concatenate",
       "conj",
       "conjugate",
+      "contiguous",
+      "conv1d",
+      "conv2d",
+      "conv3d",
+      "conv_general",
+      "conv_transpose1d",
+      "conv_transpose2d",
+      "conv_transpose3d",
+      "convolve",
       "cos",
       "cosh",
+      "cpu",
+      "cross",
+      "cuda_kernel",
+      "cummax",
+      "cummin",
+      "cumprod",
+      "cumsum",
       "default_device",
       "default_stream",
       "degrees",
       "depends",
+      "dequantize",
       "device_count",
+      "device_info",
+      "diag",
+      "diagonal",
       "disable_compile",
+      "distributed_is_available",
       "divide",
       "divmod",
+      "e",
+      "eig",
+      "eigh",
+      "eigvals",
+      "eigvalsh",
+      "einsum",
+      "einsum_path",
       "enable_compile",
       "equal",
       "erf",
       "erfinv",
+      "euler_gamma",
+      "eval",
       "exp",
       "expand_dims",
       "expm1",
+      "export_function",
+      "export_to_dot",
+      "exporter",
+      "eye",
+      "fft",
+      "fft2",
+      "fftn",
+      "fftshift",
+      "flatten",
+      "float16",
+      "float32",
+      "float64",
+      "floating",
       "floor",
       "floor_divide",
+      "from_fp8",
+      "full",
+      "gather_mm",
+      "gather_qmm",
+      "generic",
       "get_active_memory",
       "get_cache_memory",
       "get_peak_memory",
+      "gpu",
+      "grad",
       "greater",
       "greater_equal",
+      "gumbel",
+      "hadamard_transform",
+      "identity",
+      "ifft",
+      "ifft2",
+      "ifftn",
+      "ifftshift",
       "imag",
       "import_function",
+      "inexact",
+      "inf",
+      "init",
       "inner",
+      "int16",
+      "int32",
+      "int64",
+      "int8",
+      "integer",
+      "inv",
+      "irfft",
+      "irfft2",
+      "irfftn",
+      "is_available",
+      "isclose",
       "isfinite",
       "isinf",
       "isnan",
       "isneginf",
       "isposinf",
       "issubdtype",
+      "jvp",
       "key",
       "kron",
+      "laplace",
+      "layer_norm",
       "left_shift",
       "less",
       "less_equal",
+      "linspace",
+      "load",
       "log",
       "log10",
       "log1p",
       "log2",
       "logaddexp",
+      "logcumsumexp",
       "logical_and",
       "logical_not",
       "logical_or",
+      "logsumexp",
+      "lu",
+      "lu_factor",
       "matmul",
+      "max",
       "maximum",
+      "mean",
+      "median",
+      "meshgrid",
+      "metal_device_info",
+      "metal_is_available",
+      "metal_kernel",
+      "metal_start_capture",
+      "metal_stop_capture",
+      "min",
       "minimum",
       "moveaxis",
       "multiply",
+      "multivariate_normal",
+      "nan",
+      "nan_to_num",
       "negative",
       "new_stream",
+      "newaxis",
+      "norm",
+      "normal",
       "not_equal",
+      "number",
+      "ones",
       "ones_like",
       "outer",
+      "pad",
+      "partition",
+      "permutation",
+      "permute_dims",
+      "pi",
+      "pinv",
       "power",
+      "precompiled_cuda_kernel",
+      "prod",
+      "put_along_axis",
+      "qqmm",
+      "qr",
+      "quantize",
+      "quantized_matmul",
       "radians",
+      "randint",
+      "random_seed",
+      "random_split",
+      "random_uniform",
       "real",
       "reciprocal",
+      "recv",
+      "recv_like",
       "remainder",
+      "repeat",
       "reset_peak_memory",
+      "reshape",
+      "rfft",
+      "rfft2",
+      "rfftn",
       "right_shift",
+      "rms_norm",
+      "roll",
+      "rope",
+      "round",
       "rsqrt",
       "save",
+      "save_gguf",
+      "save_safetensors",
+      "savez",
+      "savez_compressed",
+      "scaled_dot_product_attention",
       "seed",
       "segmented_mm",
+      "send",
       "set_cache_limit",
       "set_default_device",
       "set_default_stream",
@@ -3676,23 +1854,61 @@
       "set_wired_limit",
       "sigmoid",
       "sign",
+      "signedinteger",
       "sin",
       "sinh",
+      "slice",
+      "slice_update",
+      "softmax",
+      "solve",
+      "solve_triangular",
+      "sort",
+      "split",
       "sqrt",
       "square",
+      "squeeze",
+      "stack",
+      "std",
       "stop_gradient",
       "stream",
       "subtract",
+      "sum",
+      "sum_scatter",
+      "svd",
       "swapaxes",
+      "synchronize",
+      "take",
+      "take_along_axis",
       "tan",
       "tanh",
+      "tensordot",
       "tile",
       "to_fp8",
+      "topk",
+      "trace",
+      "transpose",
+      "tri",
+      "tri_inv",
+      "tril",
+      "triu",
+      "truncated_normal",
+      "uint16",
+      "uint32",
+      "uint64",
+      "uint8",
       "unflatten",
+      "uniform",
+      "unsignedinteger",
+      "value_and_grad",
+      "var",
+      "version",
       "view",
       "vjp",
+      "vmap",
       "where",
+      "zeros",
       "zeros_like"
-    ]
+    ],
+    "ruby_fixed_arity_without_python_signature": []
   }
 }

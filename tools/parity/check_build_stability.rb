@@ -5,9 +5,10 @@ require "json"
 require "pathname"
 require "time"
 
-RUBY_ROOT = Pathname.new(File.expand_path("..", __dir__)).freeze
-EXTCONF = RUBY_ROOT.join("ext", "mlx", "extconf.rb").freeze
-OUT_FILE = RUBY_ROOT.join("tools", "parity", "reports", "build_stability.json").freeze
+REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__)).freeze
+TOOLS_ROOT = REPO_ROOT.join("tools").freeze
+EXTCONF = REPO_ROOT.join("ext", "mlx", "extconf.rb").freeze
+OUT_FILE = TOOLS_ROOT.join("parity", "reports", "build_stability.json").freeze
 
 source = File.read(EXTCONF)
 

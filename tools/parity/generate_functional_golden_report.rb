@@ -2,10 +2,12 @@
 # frozen_string_literal: true
 
 require "json"
+require "pathname"
 require "time"
 
-RUBY_ROOT = File.expand_path("..", __dir__)
-$LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
+REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__)).freeze
+RUBY_ROOT = REPO_ROOT.join("lib").freeze
+$LOAD_PATH.unshift(RUBY_ROOT.to_s)
 require "mlx"
 
 def nested_close?(expected, actual, atol = 1e-4)
@@ -167,6 +169,6 @@ report = {
   "uncovered_behavior" => uncovered
 }
 
-out_file = File.join(RUBY_ROOT, "tools", "parity", "reports", "functional_golden_report.json")
+out_file = REPO_ROOT.join("tools", "parity", "reports", "functional_golden_report.json")
 File.write(out_file, JSON.pretty_generate(report) + "\n")
 puts "wrote #{out_file}"

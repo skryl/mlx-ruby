@@ -4,7 +4,11 @@
 require "json"
 require "optparse"
 
-DEFAULT_CONTRACT = File.expand_path("../tools/parity/reports/phase0_contract.json", __dir__)
+require "pathname"
+
+DEFAULT_CONTRACT = Pathname.new(File.expand_path("../..", __dir__))
+  .join("tools", "parity", "reports", "phase0_contract.json")
+  .to_s
 
 options = {
   manifest: nil,

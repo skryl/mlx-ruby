@@ -4,6 +4,8 @@ require_relative "test_helper"
 
 class Phase0ManifestTest < Minitest::Test
   def test_generates_manifest_with_expected_surface
+    skip "Python sources are unavailable in this environment" unless TestSupport.python_sources_available?
+
     script = File.join(RUBY_ROOT, "tools", "parity", "generate_parity_manifest.rb")
 
     Dir.mktmpdir("mlx-ruby-manifest") do |dir|
@@ -40,6 +42,8 @@ class Phase0ManifestTest < Minitest::Test
   end
 
   def test_contract_checker_accepts_generated_manifest
+    skip "Python sources are unavailable in this environment" unless TestSupport.python_sources_available?
+
     generator = File.join(RUBY_ROOT, "tools", "parity", "generate_parity_manifest.rb")
     checker = File.join(RUBY_ROOT, "tools", "parity", "check_parity_manifest.rb")
 

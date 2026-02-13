@@ -6,6 +6,7 @@ require_relative "test_helper"
 
 class Phase148PackageParityTest < Minitest::Test
 def setup
+  skip "Python sources are unavailable in this environment" unless TestSupport.python_sources_available?
   TestSupport.build_native_extension!
   $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
   require "mlx"

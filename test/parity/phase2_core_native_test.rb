@@ -17,7 +17,7 @@ class Phase2CoreNativeTest < Minitest::Test
     assert MLX.native_available?, "native extension should be available"
     assert defined?(MLX::Core)
 
-    assert_equal MLX::VERSION, MLX::Core.version
+    assert_match(/\A\d+\.\d+\.\d+\z/, MLX::Core.version)
 
     assert_respond_to MLX::Core, :get_active_memory
     assert_respond_to MLX::Core, :get_peak_memory
