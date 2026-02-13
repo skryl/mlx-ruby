@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "lib/mlx/version"
+require_relative "lib/mlx/version.rb"
 
 Gem::Specification.new do |spec|
   spec.name = "mlx"
