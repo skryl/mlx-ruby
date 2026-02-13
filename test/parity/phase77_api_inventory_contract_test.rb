@@ -6,6 +6,8 @@ require_relative "test_helper"
 
 class Phase77ApiInventoryContractTest < Minitest::Test
   def test_api_inventory_generator_writes_contract_artifact
+    skip "Python sources are unavailable in this environment" unless TestSupport.python_sources_available?
+
     tool = File.join(RUBY_ROOT, "tools", "parity", "generate_api_inventory.rb")
     out_file = File.join(RUBY_ROOT, "tools", "parity", "reports", "api_inventory.json")
 

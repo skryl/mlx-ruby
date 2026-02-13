@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "timeout"
 require "minitest/autorun"
 require "open3"
 require "rbconfig"
@@ -44,6 +45,7 @@ module TestSupport
   def newest_native_input_mtime
     roots = [
       File.join(RUBY_ROOT, "ext", "mlx"),
+      File.join(RUBY_ROOT, "lib", "mlx", "version.rb"),
       File.join(REPO_ROOT, "mlx"),
       File.join(REPO_ROOT, "cmake"),
       File.join(REPO_ROOT, "CMakeLists.txt")
@@ -71,6 +73,19 @@ module TestSupport
     newest
   end
 
+  def python_sources_available?
+    roots = [
+      File.join(REPO_ROOT, "python", "src"),
+      File.join(REPO_ROOT, "python", "mlx"),
+      File.join(REPO_ROOT, "mlx", "python", "src"),
+      File.join(REPO_ROOT, "mlx", "python", "mlx")
+    ]
+
+    roots.any? do |root|
+      File.directory?(root) && !Dir.children(root).empty?
+    end
+  end
+
   def run_cmd!(cmd, chdir)
     stdout, stderr, status = Open3.capture3(*cmd, chdir: chdir)
     return if status.success?
@@ -83,5 +98,18 @@ module TestSupport
       stderr:
       #{stderr}
     MSG
+  end
+end
+
+raw_test_timeout = ENV.fetch("MLX_TEST_TIMEOUT", "10").to_i
+TEST_TIMEOUT_SECONDS = raw_test_timeout.positive? ? raw_test_timeout : 10
+
+module Minitest
+  class Test
+    alias_method :run_without_timeout, :run
+
+    def run
+      Timeout.timeout(TEST_TIMEOUT_SECONDS) { run_without_timeout }
+    end
   end
 end

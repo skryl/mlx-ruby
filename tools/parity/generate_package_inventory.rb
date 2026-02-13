@@ -5,11 +5,16 @@ require "json"
 require "pathname"
 require "time"
 
-RUBY_ROOT = Pathname.new(File.expand_path("..", __dir__)).freeze
-REPO_ROOT = RUBY_ROOT.parent.freeze
-PYTHON_MLX_ROOT = REPO_ROOT.join("python", "mlx").freeze
-RUBY_MLX_ROOT = RUBY_ROOT.join("lib", "mlx").freeze
-OUT_FILE = RUBY_ROOT.join("tools", "parity", "reports", "package_inventory.json").freeze
+REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__)).freeze
+TOOLS_ROOT = REPO_ROOT.join("tools").freeze
+RUBY_MLX_ROOT = REPO_ROOT.join("lib", "mlx").freeze
+PARITY_ROOT = TOOLS_ROOT.join("parity").freeze
+PYTHON_MLX_ROOT = [REPO_ROOT.join("python", "mlx"), REPO_ROOT.join("mlx", "python", "mlx")].find(&:directory?)
+OUT_FILE = PARITY_ROOT.join("reports", "package_inventory.json").freeze
+
+unless PYTHON_MLX_ROOT
+  abort "Python MLX sources not found at python/mlx or mlx/python/mlx"
+end
 
 def list_python_files
   Dir.glob(PYTHON_MLX_ROOT.join("**", "*")).filter_map do |path|
@@ -87,7 +92,7 @@ end
 python_files = list_python_files
 ruby_files = list_ruby_files
 
-$LOAD_PATH.unshift(RUBY_ROOT.join("lib").to_s)
+$LOAD_PATH.unshift(REPO_ROOT.join("lib").to_s)
 require "mlx"
 
 ruby_nn = ruby_namespace_exports(defined?(MLX::NN) ? MLX::NN : nil)

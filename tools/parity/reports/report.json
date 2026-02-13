@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-02-13T04:13:34Z",
+  "generated_at": "2026-02-13T07:30:53Z",
   "summary": {
     "top_level_missing_in_ruby": 0,
-    "top_level_extra_in_ruby": 1,
+    "top_level_extra_in_ruby": 5,
     "core_missing_in_ruby": 0,
-    "core_extra_in_ruby": 40,
+    "core_extra_in_ruby": 315,
     "array_missing_in_ruby": 0,
-    "array_extra_in_ruby": 18,
+    "array_extra_in_ruby": 133,
     "signature_missing_from_ruby": 0
   },
   "checks": {

@@ -5,14 +5,15 @@ require "json"
 require "pathname"
 require "time"
 
-RUBY_ROOT = Pathname.new(File.expand_path("..", __dir__)).freeze
-REPO_ROOT = RUBY_ROOT.parent.freeze
+REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__)).freeze
+TOOLS_ROOT = REPO_ROOT.join("tools").freeze
+PARITY_ROOT = TOOLS_ROOT.join("parity").freeze
 PYTHON_ROOT = REPO_ROOT.join("python").freeze
 PYTHON_MLX_ROOT = PYTHON_ROOT.join("mlx").freeze
 PYTHON_SRC_ROOT = PYTHON_ROOT.join("src").freeze
-RUBY_LIB_ROOT = RUBY_ROOT.join("lib").freeze
-RUBY_NATIVE_CPP = RUBY_ROOT.join("ext", "mlx", "native.cpp").freeze
-OUT_FILE = RUBY_ROOT.join("tools", "parity", "reports", "api_inventory.json").freeze
+RUBY_LIB_ROOT = REPO_ROOT.join("lib").freeze
+RUBY_NATIVE_CPP = REPO_ROOT.join("ext", "mlx", "native.cpp").freeze
+OUT_FILE = PARITY_ROOT.join("reports", "api_inventory.json").freeze
 
 def scan_regex(path, regex)
   path = Pathname.new(path)
@@ -23,6 +24,8 @@ end
 
 def python_top_level_modules
   modules = ["mlx", "mlx.core"]
+
+  return modules unless PYTHON_MLX_ROOT.directory?
 
   Dir.children(PYTHON_MLX_ROOT).sort.each do |entry|
     full = PYTHON_MLX_ROOT.join(entry)
