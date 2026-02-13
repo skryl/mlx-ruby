@@ -32,7 +32,7 @@ We'll generate a synthetic dataset by:
 
   # Noisy labels
   eps = 1e-2 * mx.random.normal((num_examples,))
-  y = X @ w_star + eps
+  y = mx.matmul(X, w_star) + eps
 
 
 We will use SGD to find the optimal weights. To start, define the squared loss
@@ -41,7 +41,7 @@ and get the gradient function of the loss with respect to the parameters.
 .. code-block:: ruby
 
   def loss_fn(w)
-      return 0.5 * mx.mean(mx.square(X @ w - y))
+      return 0.5 * mx.mean(mx.square(mx.matmul(X, w) - y))
 
   grad_fn = mx.grad(loss_fn)
 
@@ -65,9 +65,7 @@ close to the ground truth parameters.
   loss = loss_fn(w)
   error_norm = mx.sum(mx.square(w - w_star)).item() ** 0.5
 
-  print(
-      f"Loss {loss.item():.5f}, |w-w*| = {error_norm:.5f}, "
-  )
+  puts("Loss #{\"%.5f\" % loss.item()}, |w-w*| = #{\"%.5f\" % error_norm}")
   # Should print something close to: Loss 0.00005, |w-w*| = 0.00364
 
 Full versions of the linear and logistic regression examples are available in the

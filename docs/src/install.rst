@@ -3,6 +3,8 @@
 Build and Install
 =================
 
+.. _ruby install:
+
 Ruby Installation
 -------------------
 
