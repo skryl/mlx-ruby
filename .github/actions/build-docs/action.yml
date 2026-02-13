@@ -20,7 +20,7 @@ runs:
         source .venv/bin/activate
         cd docs
         doxygen
-        make html O=-W
+        make html
     
     - name: Create artifact tar
       shell: bash

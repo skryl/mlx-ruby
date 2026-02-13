@@ -125,7 +125,7 @@ handles synchronization:
       1000.0 * tpi / 100.0
 
 
-Now make an array, and benchmark both functions.each do |_|
+Now make an array, and benchmark both functions:
 
 .. code-block:: ruby
 
