@@ -5,6 +5,7 @@ require "rbconfig"
 require "stringio"
 require "tempfile"
 require "timeout"
+require "fileutils"
 require_relative "../test_helper"
 
 class DocExamplesTest < Minitest::Test
@@ -69,47 +70,58 @@ class DocExamplesTest < Minitest::Test
       next if blocks.empty?
 
       context = build_context
+      workdir = docs_test_workdir_for(rst_path)
+      FileUtils.rm_rf(workdir)
+      FileUtils.mkdir_p(workdir)
 
-      blocks.each do |block|
-        max_block = ENV["DOCS_TEST_MAX_BLOCK"]&.to_i
-        if max_block && max_block.positive? && block.index > max_block
-          next
-        end
+      Dir.chdir(workdir) do
+        blocks.each do |block|
+          max_block = ENV["DOCS_TEST_MAX_BLOCK"]&.to_i
+          if max_block && max_block.positive? && block.index > max_block
+            next
+          end
 
-        mode = block_mode(block.code)
-        next if mode[:skip]
+          mode = block_mode(block.code)
+          next if mode[:skip]
 
-        trace_block(rst_path, block)
+          trace_block(rst_path, block)
 
-        begin
-          runner = lambda do
-            if mode[:timeout_seconds].nil?
-              eval(block.code, context, rst_path, block.code_start_line)
-            else
-              Timeout.timeout(mode[:timeout_seconds]) do
+          begin
+            runner = lambda do
+              if mode[:timeout_seconds].nil?
                 eval(block.code, context, rst_path, block.code_start_line)
+              else
+                Timeout.timeout(mode[:timeout_seconds]) do
+                  eval(block.code, context, rst_path, block.code_start_line)
+                end
               end
             end
-          end
 
-          if mode[:skip_capture]
-            runner.call
-          else
-            capture_output { runner.call }
-          end
+            if mode[:skip_capture]
+              runner.call
+            else
+              capture_output { runner.call }
+            end
 
-          if mode[:expect_error]
-            failures << failure_hash(rst_path, block, "expected error but block succeeded")
-          end
-        rescue Exception => e # rubocop:disable Lint/RescueException
-          unless mode[:expect_error]
-            failures << failure_hash(rst_path, block, "#{e.class}: #{e.message.lines.first}")
+            if mode[:expect_error]
+              failures << failure_hash(rst_path, block, "expected error but block succeeded")
+            end
+          rescue Exception => e # rubocop:disable Lint/RescueException
+            unless mode[:expect_error]
+              failures << failure_hash(rst_path, block, "#{e.class}: #{e.message.lines.first}")
+            end
           end
         end
       end
     end
 
     failures
+  end
+
+  def docs_test_workdir_for(rst_path)
+    relative_path = Pathname.new(rst_path).relative_path_from(Pathname.new(RUBY_ROOT)).to_s
+    slug = relative_path.gsub(File::SEPARATOR, "__").gsub(/[^A-Za-z0-9_.-]/, "_")
+    File.join(RUBY_ROOT, "tmp", "docs-test-artifacts", slug)
   end
 
   def run_file_in_child(rst_path)
@@ -134,7 +146,7 @@ class DocExamplesTest < Minitest::Test
       err: stderr_file.path
     )
 
-    timed_out, exit_status = wait_for_child(pid, CHILD_TIMEOUT_SECONDS)
+    timed_out, process_status = wait_for_child(pid, CHILD_TIMEOUT_SECONDS)
 
     stdout_file.rewind
     stderr_file.rewind
@@ -165,11 +177,11 @@ class DocExamplesTest < Minitest::Test
       )
     end
 
-    success = exit_status.zero?
+    success = process_status&.success? == true
     ChildResult.new(
       path: rst_path,
       success: success,
-      message: success ? "" : "child exited with status #{exit_status}",
+      message: success ? "" : child_status_message(process_status),
       output: [stdout, stderr].join
     )
   end
@@ -179,12 +191,20 @@ class DocExamplesTest < Minitest::Test
 
     loop do
       waited_pid, status = Process.waitpid2(pid, Process::WNOHANG)
-      return [false, status.exitstatus] if waited_pid
+      return [false, status] if waited_pid
 
       return [true, nil] if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
 
       sleep 0.1
     end
+  end
+
+  def child_status_message(process_status)
+    return "child exited without status" if process_status.nil?
+    return "child exited with status #{process_status.exitstatus}" if process_status.exited?
+    return "child terminated by signal #{process_status.termsig}" if process_status.signaled?
+
+    "child exited abnormally (status=#{process_status.inspect})"
   end
 
   def rst_files
