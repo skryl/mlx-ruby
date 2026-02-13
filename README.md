@@ -19,7 +19,7 @@ This repository packages:
 - Lazy arrays and dynamic graph construction.
 - Function transforms (`grad`, `value_and_grad`, `vmap`, `jvp`, `vjp`, `compile`, and more).
 - Neural-network layers, losses, initialization, and optimizers.
-- Device-aware execution (CPU/GPU support exposed through MLX).
+- Device-aware execution (CPU/GPU support exposed through MLX), including full Metal support on Apple silicon.
 - Extensive parity testing and generated report artifacts.
 
 ## Requirements
@@ -300,6 +300,26 @@ Benchmark environment variables:
 | `HEADS` | `8` | Attention heads |
 | `LAYERS` | `4` | Number of layers |
 | `PYTHON` | `python3` | Python executable for cross-language comparison |
+
+### Performance
+
+MLX Ruby has full Metal support through the upstream MLX runtime. On Apple silicon, use `DEVICE=metal` (or `DEVICE=gpu`) to run on Metal.
+
+The table below is from:
+
+```bash
+bundle exec rake benchmark:all DEVICE=gpu ITERATIONS=1000 WARMUP=50 BATCH=2 SEQUENCE_LENGTH=32 TARGET_SEQUENCE_LENGTH=16 DIMENSIONS=64 HEADS=4 LAYERS=2
+bundle exec rake benchmark:all DEVICE=cpu ITERATIONS=1000 WARMUP=50 BATCH=2 SEQUENCE_LENGTH=32 TARGET_SEQUENCE_LENGTH=16 DIMENSIONS=64 HEADS=4 LAYERS=2
+```
+
+Updated with reversed ratios (`Python/Ruby`), so `< 1x` means Ruby is slower.
+
+| Model | Ruby CPU (ms) | Python CPU (ms) | Python/Ruby CPU (x) | Ruby GPU (ms) | Python GPU (ms) | Python/Ruby GPU (x) |
+| --- | --- | --- | --- | --- | --- | --- |
+| transformer | 1.771 | 1.242 | 0.70x | 1.315 | 0.830 | 0.63x |
+| cnn | 4.070 | 4.271 | 1.05x | 1.113 | 0.958 | 0.86x |
+| mlp | 0.168 | 0.258 | 1.54x | 0.313 | 0.218 | 0.70x |
+| rnn | 0.919 | 0.532 | 0.58x | 1.168 | 0.644 | 0.55x |
 
 ### Build docs
 
