@@ -1,6 +1,0 @@
-﻿mlx.core.quantized\_matmul
-==========================
-
-.. currentmodule:: mlx.core
-
-.. autodata:: quantized_matmul
