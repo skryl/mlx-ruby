@@ -186,7 +186,7 @@ model.unfreeze_paths!(/^head\./)
 
 ### Deliverables
 
-1. Update `tools/parity/generate_package_inventory.rb` ignore list so:
+1. Update `test/parity/scripts/generate_package_inventory.rb` ignore list so:
    - `lib/mlx/dsl.rb`
    - `lib/mlx/dsl/**/*.rb`
    are excluded from package file parity diffs.

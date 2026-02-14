@@ -412,7 +412,7 @@ class DslTest < Minitest::Test
     target = MLX::Core.array([[0.0], [0.0]], MLX::Core.float32)
     _loss = step.call(x: input, y: target)
 
-    Tempfile.create(["mlx-dsl-checkpoint", ".bin"]) do |f|
+    Tempfile.create(["mlx-dsl-checkpoint", ".bin"], TestSupport.test_tmp_dir) do |f|
       model.save_checkpoint(f.path, optimizer: optimizer, metadata: { "tag" => "dsl-test" })
 
       restored_model = DslAffine.new(in_dim: 1, out_dim: 1)
@@ -438,7 +438,7 @@ class DslTest < Minitest::Test
     target = MLX::Core.array([[0.0], [0.0]], MLX::Core.float32)
     _loss = step.call(x: input, y: target)
 
-    Tempfile.create(["mlx-dsl-checkpoint-native", ".npz"]) do |f|
+    Tempfile.create(["mlx-dsl-checkpoint-native", ".npz"], TestSupport.test_tmp_dir) do |f|
       path = f.path
       f.close
 
@@ -470,7 +470,7 @@ class DslTest < Minitest::Test
     target = MLX::Core.array([[0.0], [0.0]], MLX::Core.float32)
     _loss = step.call(x: input, y: target)
 
-    Dir.mktmpdir("mlx-dsl-checkpoint-autodetect") do |dir|
+    TestSupport.mktmpdir("mlx-dsl-checkpoint-autodetect") do |dir|
       base_path = File.join(dir, "checkpoint")
       weights_path = model.save_checkpoint(base_path, optimizer: optimizer, format: :npz, metadata: { "tag" => "auto-detect" })
       assert_equal "#{base_path}.npz", weights_path
@@ -491,7 +491,7 @@ class DslTest < Minitest::Test
   def test_save_checkpoint_creates_parent_directories_for_marshal
     model = DslAffine.new(in_dim: 1, out_dim: 1)
 
-    Dir.mktmpdir("mlx-dsl-checkpoint-dir") do |dir|
+    TestSupport.mktmpdir("mlx-dsl-checkpoint-dir") do |dir|
       path = File.join(dir, "nested", "marshal", "checkpoint.bin")
       model.save_checkpoint(path, metadata: { "tag" => "mkdir-marshal" })
       assert File.exist?(path)
@@ -501,7 +501,7 @@ class DslTest < Minitest::Test
   def test_save_checkpoint_creates_parent_directories_for_native_format
     model = DslAffine.new(in_dim: 1, out_dim: 1)
 
-    Dir.mktmpdir("mlx-dsl-checkpoint-dir") do |dir|
+    TestSupport.mktmpdir("mlx-dsl-checkpoint-dir") do |dir|
       path = File.join(dir, "nested", "native", "checkpoint.npz")
       model.save_checkpoint(path, metadata: { "tag" => "mkdir-native" })
       assert File.exist?(path)

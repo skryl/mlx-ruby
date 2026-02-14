@@ -6,8 +6,8 @@ require_relative "test_helper"
 
 class Phase220GapBaselineArtifactTest < Minitest::Test
   def test_gap_baseline_artifact_contains_method_and_module_coverage
-    tool = File.join(RUBY_ROOT, "tools", "parity", "generate_gap_baseline_artifact.rb")
-    out_file = File.join(RUBY_ROOT, "tools", "parity", "reports", "gap_baseline.json")
+    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_gap_baseline_artifact.rb")
+    out_file = File.join(RUBY_ROOT, "test", "parity", "reports", "gap_baseline.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)
     assert status.success?, "tool failed\nstdout:\n#{stdout}\nstderr:\n#{stderr}"

@@ -652,7 +652,7 @@ Built docs are placed under `docs/build/html`.
 - `ext/mlx/`: native extension (`extconf.rb`, C++ bridge).
 - `mlx/`: upstream MLX submodule.
 - `test/`: unit/parity tests (including large parity phase suite).
-- `tools/parity/`: report and contract generators.
+- `test/parity/scripts/`: report and contract generators.
 - `tasks/benchmark_task.rb`: benchmark harness.
 - `docs/`: Sphinx + Doxygen documentation sources.
 
@@ -678,7 +678,7 @@ ruby -e 'require "rbconfig"; puts RbConfig::CONFIG["host_cpu"]'
 ## Contributing
 
 - Open pull requests against this repository.
-- Keep parity artifacts in `tools/parity/reports/` in sync with tool/script changes.
+- Keep parity artifacts in `test/parity/reports/` in sync with tool/script changes.
 - Follow upstream MLX contributor guidance where applicable: [mlx/CONTRIBUTING.md](https://github.com/ml-explore/mlx/blob/main/CONTRIBUTING.md).
 
 CI currently runs on `ubuntu-22.04` and `macos-14` with Ruby `3.3`.

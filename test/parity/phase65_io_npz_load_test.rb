@@ -28,7 +28,7 @@ class Phase65IoNpzLoadTest < Minitest::Test
     x = MLX::Core.array([1.0, 2.0, 3.0], MLX::Core.float32)
     y = MLX::Core.array([[4.0, 5.0], [6.0, 7.0]], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       npy_dir = File.join(dir, "npy")
       Dir.mkdir(npy_dir)
       MLX::Core.save(File.join(npy_dir, "x.npy"), x)

@@ -6,13 +6,13 @@ require "open3"
 require "pathname"
 require "time"
 
-REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__)).freeze
-TOOLS_ROOT = REPO_ROOT.join("tools").freeze
-PARITY_ROOT = TOOLS_ROOT.join("parity", "reports").freeze
+REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
+SCRIPT_ROOT = REPO_ROOT.join("test", "parity", "scripts").freeze
+PARITY_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
 
 TOOLS = [
-  TOOLS_ROOT.join("parity", "generate_api_inventory.rb"),
-  TOOLS_ROOT.join("parity", "generate_package_inventory.rb")
+  SCRIPT_ROOT.join("generate_api_inventory.rb"),
+  SCRIPT_ROOT.join("generate_package_inventory.rb")
 ].freeze
 
 API_FILE = PARITY_ROOT.join("api_inventory.json").freeze

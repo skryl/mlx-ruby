@@ -5,10 +5,9 @@ require "json"
 require "pathname"
 require "time"
 
-REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__)).freeze
-TOOLS_ROOT = REPO_ROOT.join("tools").freeze
+REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
 EXTCONF = REPO_ROOT.join("ext", "mlx", "extconf.rb").freeze
-OUT_FILE = TOOLS_ROOT.join("parity", "reports", "build_stability.json").freeze
+OUT_FILE = REPO_ROOT.join("test", "parity", "reports", "build_stability.json").freeze
 
 source = File.read(EXTCONF)
 

@@ -5,15 +5,14 @@ require "json"
 require "pathname"
 require "time"
 
-REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__)).freeze
-TOOLS_ROOT = REPO_ROOT.join("tools").freeze
-PARITY_ROOT = TOOLS_ROOT.join("parity").freeze
+REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
+PARITY_REPORTS_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
 PYTHON_ROOT = REPO_ROOT.join("python").freeze
 PYTHON_MLX_ROOT = PYTHON_ROOT.join("mlx").freeze
 PYTHON_SRC_ROOT = PYTHON_ROOT.join("src").freeze
 RUBY_LIB_ROOT = REPO_ROOT.join("lib").freeze
 RUBY_NATIVE_CPP = REPO_ROOT.join("ext", "mlx", "native.cpp").freeze
-OUT_FILE = PARITY_ROOT.join("reports", "api_inventory.json").freeze
+OUT_FILE = PARITY_REPORTS_ROOT.join("api_inventory.json").freeze
 
 def scan_regex(path, regex)
   path = Pathname.new(path)

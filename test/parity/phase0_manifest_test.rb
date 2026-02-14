@@ -6,7 +6,7 @@ class Phase0ManifestTest < Minitest::Test
   def test_generates_manifest_with_expected_surface
     skip "Python sources are unavailable in this environment" unless TestSupport.python_sources_available?
 
-    script = File.join(RUBY_ROOT, "tools", "parity", "generate_parity_manifest.rb")
+    script = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_parity_manifest.rb")
 
     Dir.mktmpdir("mlx-ruby-manifest") do |dir|
       manifest_path = File.join(dir, "parity_manifest.json")
@@ -44,8 +44,8 @@ class Phase0ManifestTest < Minitest::Test
   def test_contract_checker_accepts_generated_manifest
     skip "Python sources are unavailable in this environment" unless TestSupport.python_sources_available?
 
-    generator = File.join(RUBY_ROOT, "tools", "parity", "generate_parity_manifest.rb")
-    checker = File.join(RUBY_ROOT, "tools", "parity", "check_parity_manifest.rb")
+    generator = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_parity_manifest.rb")
+    checker = File.join(RUBY_ROOT, "test", "parity", "scripts", "check_parity_manifest.rb")
 
     Dir.mktmpdir("mlx-ruby-contract") do |dir|
       manifest_path = File.join(dir, "parity_manifest.json")

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "fileutils"
-require "ostruct"
 require "rbconfig"
 require_relative "test_helper"
 
@@ -44,7 +43,7 @@ class Phase214DistributedLaunchMpiParityTest < Minitest::Test
         Host.new(rank: 1, ssh_hostname: "h0", ips: [], rdma: []),
         Host.new(rank: 2, ssh_hostname: "h1", ips: [], rdma: [])
       ]
-      args = OpenStruct.new(
+      args = struct_with(
         env: ["A=1"],
         cwd: "/tmp",
         mpi_arg: ["--bind-to none"],
@@ -78,5 +77,11 @@ class Phase214DistributedLaunchMpiParityTest < Minitest::Test
   def test_get_mpi_libname_returns_nil_or_string
     out = MLX::DistributedUtils.get_mpi_libname
     assert(out.nil? || out.is_a?(String))
+  end
+
+  private
+
+  def struct_with(**kwargs)
+    Struct.new(*kwargs.keys, keyword_init: true).new(**kwargs)
   end
 end

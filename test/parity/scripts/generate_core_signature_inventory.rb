@@ -5,12 +5,11 @@ require "json"
 require "pathname"
 require "time"
 
-REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__)).freeze
-TOOLS_ROOT = REPO_ROOT.join("tools").freeze
-PARITY_ROOT = TOOLS_ROOT.join("parity").freeze
+REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
+PARITY_REPORTS_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
 PYTHON_SRC_ROOT = REPO_ROOT.join("python", "src").freeze
 RUBY_NATIVE_CPP = REPO_ROOT.join("ext", "mlx", "native.cpp").freeze
-OUT_FILE = PARITY_ROOT.join("reports", "core_signature_inventory.json").freeze
+OUT_FILE = PARITY_REPORTS_ROOT.join("core_signature_inventory.json").freeze
 
 ruby_source = File.read(RUBY_NATIVE_CPP)
 

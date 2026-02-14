@@ -16,7 +16,7 @@ class ManifestGenerator
       "metadata" => {
         "generated_at" => Time.now.utc.iso8601,
         "repo_root" => @repo_root,
-        "generator" => "ruby/tools/parity/generate_parity_manifest.rb"
+        "generator" => "ruby/test/parity/scripts/generate_parity_manifest.rb"
       },
       "python_binding" => python_binding,
       "python_package" => python_package,
@@ -131,7 +131,7 @@ options = {
 }
 
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: ruby/tools/parity/generate_parity_manifest.rb --repo-root PATH --output PATH"
+  opts.banner = "Usage: ruby/test/parity/scripts/generate_parity_manifest.rb --repo-root PATH --output PATH"
 
   opts.on("--repo-root PATH", "Repository root") do |value|
     options[:repo_root] = value

@@ -174,6 +174,9 @@ class DslTrainStepUnitTest < Minitest::Test
     end
 
     nn_singleton.alias_method(:__dsl_original_value_and_grad, :value_and_grad)
+    if nn_singleton.instance_methods(false).include?(:value_and_grad)
+      nn_singleton.remove_method(:value_and_grad)
+    end
     nn_singleton.define_method(:value_and_grad) do |_model, fn|
       lambda do |*args, **kwargs|
         [fn.call(*args, **kwargs), { "weight" => 0.5 }]
@@ -182,6 +185,9 @@ class DslTrainStepUnitTest < Minitest::Test
 
     yield
   ensure
+    if nn_singleton.instance_methods(false).include?(:value_and_grad)
+      nn_singleton.remove_method(:value_and_grad)
+    end
     nn_singleton.alias_method(:value_and_grad, :__dsl_original_value_and_grad)
     nn_singleton.remove_method(:__dsl_original_value_and_grad)
   end
@@ -195,6 +201,7 @@ class DslTrainStepUnitTest < Minitest::Test
     core_singleton.alias_method(:__dsl_original_compile, :compile) if had_compile
 
     calls = []
+    core_singleton.remove_method(:compile) if had_compile
     core_singleton.define_method(:compile) do |fn, inputs = nil, outputs = nil, shapeless = false|
       calls << { inputs: inputs, outputs: outputs, shapeless: shapeless }
       lambda do |*args, **kwargs|
@@ -205,6 +212,7 @@ class DslTrainStepUnitTest < Minitest::Test
     yield calls
   ensure
     if had_compile
+      core_singleton.remove_method(:compile) if core_singleton.instance_methods(false).include?(:compile)
       core_singleton.alias_method(:compile, :__dsl_original_compile)
       core_singleton.remove_method(:__dsl_original_compile)
     else
@@ -221,6 +229,7 @@ class DslTrainStepUnitTest < Minitest::Test
     core_singleton.alias_method(:__dsl_original_eval, :eval) if had_eval
 
     calls = []
+    core_singleton.remove_method(:eval) if had_eval
     core_singleton.define_method(:eval) do |*args|
       calls << args
       nil
@@ -229,6 +238,7 @@ class DslTrainStepUnitTest < Minitest::Test
     yield calls
   ensure
     if had_eval
+      core_singleton.remove_method(:eval) if core_singleton.instance_methods(false).include?(:eval)
       core_singleton.alias_method(:eval, :__dsl_original_eval)
       core_singleton.remove_method(:__dsl_original_eval)
     else

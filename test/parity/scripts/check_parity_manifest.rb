@@ -6,8 +6,8 @@ require "optparse"
 
 require "pathname"
 
-DEFAULT_CONTRACT = Pathname.new(File.expand_path("../..", __dir__))
-  .join("tools", "parity", "reports", "phase0_contract.json")
+DEFAULT_CONTRACT = Pathname.new(File.expand_path("../../..", __dir__))
+  .join("test", "parity", "reports", "phase0_contract.json")
   .to_s
 
 options = {
@@ -16,7 +16,7 @@ options = {
 }
 
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: ruby/tools/parity/check_parity_manifest.rb --manifest PATH [--contract PATH]"
+  opts.banner = "Usage: ruby/test/parity/scripts/check_parity_manifest.rb --manifest PATH [--contract PATH]"
 
   opts.on("--manifest PATH", "Path to generated manifest") do |value|
     options[:manifest] = value

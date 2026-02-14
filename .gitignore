@@ -77,6 +77,18 @@ uv.lock
 # Debug symbols
 *.pdb
 
+# Generated parity reports
+/test/parity/reports/*.json
+!/test/parity/reports/phase0_contract.json
+/test/tmp/
+
+# Generated native extension artifacts
+/ext/mlx/Makefile
+/ext/mlx/mkmf.log
+/ext/mlx/native.bundle
+/ext/mlx/native.bundle.dSYM/
+/ext/mlx/build/
+
 # VSCode
 .vscode/
 # Jetbrains

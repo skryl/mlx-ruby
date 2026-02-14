@@ -13,6 +13,9 @@ class TestHelperBuildPolicyTest < Minitest::Test
 
   def teardown
     @restores.reverse_each do |name, backup|
+      if @singleton.instance_methods(false).include?(name)
+        @singleton.remove_method(name)
+      end
       @singleton.alias_method(name, backup)
       @singleton.remove_method(backup)
     end
@@ -60,6 +63,9 @@ class TestHelperBuildPolicyTest < Minitest::Test
     backup = :"__dsl_restore_#{name}_#{@restores.length}"
     @singleton.alias_method(backup, name)
     @restores << [name, backup]
+    if @singleton.instance_methods(false).include?(name)
+      @singleton.remove_method(name)
+    end
     @singleton.define_method(name, &block)
   end
 end

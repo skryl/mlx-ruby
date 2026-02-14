@@ -28,7 +28,7 @@ class Phase251ExportImportAdvancedParityTest < Minitest::Test
     y = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
     mask = MLX::Core.array([true, false], MLX::Core.bool_)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "advanced.mlxfn")
       MLX::Core.export_function(path, fun, x, y: y, mask: mask)
       imported = MLX::Core.import_function(path)
@@ -41,7 +41,7 @@ class Phase251ExportImportAdvancedParityTest < Minitest::Test
   end
 
   def test_exporter_multi_signature_and_duplicate_signature_rejection
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "multi_sig.mlxfn")
       exporter = MLX::Core.exporter(path, ->(z) { [MLX::Core.add(z, 1.0)] })
 
@@ -56,7 +56,7 @@ class Phase251ExportImportAdvancedParityTest < Minitest::Test
       assert_equal [2.0, 3.0, 4.0], imported.call(y).to_a
     end
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "dup_sig.mlxfn")
       exporter = MLX::Core.exporter(path, ->(z) { [MLX::Core.add(z, 1.0)] })
       x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)

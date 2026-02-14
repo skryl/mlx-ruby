@@ -6,6 +6,7 @@ require "minitest/autorun"
 require "open3"
 require "rbconfig"
 require "tmpdir"
+require "fileutils"
 
 RUBY_ROOT = File.expand_path("..", __dir__)
 REPO_ROOT = File.expand_path("..", RUBY_ROOT)
@@ -132,6 +133,22 @@ module TestSupport
       stderr:
       #{stderr}
     MSG
+  end
+
+  def test_tmp_dir
+    @test_tmp_dir ||= begin
+      path = File.join(RUBY_ROOT, "test", "tmp")
+      FileUtils.mkdir_p(path)
+      path
+    end
+  end
+
+  def mktmpdir(prefix = "mlx-ruby-")
+    return Dir.mktmpdir(prefix, test_tmp_dir) unless block_given?
+
+    Dir.mktmpdir(prefix, test_tmp_dir) do |dir|
+      yield dir
+    end
   end
 end
 

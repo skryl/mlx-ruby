@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "json"
-require "ostruct"
 require "rbconfig"
 require_relative "test_helper"
 
@@ -41,7 +40,7 @@ class Phase213DistributedLaunchBackendParityTest < Minitest::Test
       Host.new(rank: 0, ssh_hostname: "127.0.0.1", ips: ["10.0.0.1"], rdma: []),
       Host.new(rank: 1, ssh_hostname: "worker", ips: ["10.0.0.2"], rdma: [])
     ]
-    args = OpenStruct.new(
+    args = struct_with(
       starting_port: 32_000,
       connections_per_ip: 2,
       env: ["A=1"],
@@ -77,7 +76,7 @@ class Phase213DistributedLaunchBackendParityTest < Minitest::Test
       Host.new(rank: 0, ssh_hostname: "h0", ips: ["192.168.0.10"], rdma: []),
       Host.new(rank: 1, ssh_hostname: "h1", ips: ["192.168.0.11"], rdma: [])
     ]
-    args = OpenStruct.new(
+    args = struct_with(
       nccl_port: 18_000,
       repeat_hosts: 2,
       env: ["X=1"],
@@ -102,7 +101,7 @@ class Phase213DistributedLaunchBackendParityTest < Minitest::Test
       Host.new(rank: 0, ssh_hostname: "h0", ips: ["10.0.0.1"], rdma: [nil, "rdma_en2"]),
       Host.new(rank: 1, ssh_hostname: "h1", ips: ["10.0.0.2"], rdma: ["rdma_en2", nil])
     ]
-    args = OpenStruct.new(
+    args = struct_with(
       backend: "jaccl-ring",
       starting_port: 33_000,
       env: [],
@@ -126,11 +125,17 @@ class Phase213DistributedLaunchBackendParityTest < Minitest::Test
     parser = Object.new
     parser.define_singleton_method(:error) { |message| raise RuntimeError, message }
     hosts = [Host.new(rank: 0, ssh_hostname: "h0", ips: [], rdma: [])]
-    args = OpenStruct.new(starting_port: 1, connections_per_ip: 1, env: [], verbose: false, cwd: nil, python: RbConfig.ruby)
+    args = struct_with(starting_port: 1, connections_per_ip: 1, env: [], verbose: false, cwd: nil, python: RbConfig.ruby)
 
     err = assert_raises(RuntimeError) do
       MLX::DistributedUtils.launch_ring(parser, hosts, args, [RbConfig.ruby, "-e", "puts :x"])
     end
     assert_match(/requires IPs/, err.message)
+  end
+
+  private
+
+  def struct_with(**kwargs)
+    Struct.new(*kwargs.keys, keyword_init: true).new(**kwargs)
   end
 end

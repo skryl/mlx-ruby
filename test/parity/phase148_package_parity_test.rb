@@ -17,8 +17,8 @@ def teardown
 end
 
   def test_phase_148_contract
-    tool = File.join(RUBY_ROOT, "tools", "parity", "generate_package_parity_report.rb")
-    out_file = File.join(RUBY_ROOT, "tools", "parity", "reports", "package_report.json")
+    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_package_parity_report.rb")
+    out_file = File.join(RUBY_ROOT, "test", "parity", "reports", "package_report.json")
     stdout, stderr, status = Open3.capture3("ruby", tool)
     assert status.success?, "package report failed\nstdout:\n#{stdout}\nstderr:\n#{stderr}"
     payload = JSON.parse(File.read(out_file))

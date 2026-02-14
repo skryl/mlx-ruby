@@ -5,7 +5,7 @@ require "json"
 require "pathname"
 require "time"
 
-REPO_ROOT = Pathname.new(File.expand_path("../..", __dir__)).freeze
+REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
 RUBY_ROOT = REPO_ROOT.join("lib").freeze
 $LOAD_PATH.unshift(RUBY_ROOT.to_s)
 require "mlx"
@@ -169,6 +169,6 @@ report = {
   "uncovered_behavior" => uncovered
 }
 
-out_file = REPO_ROOT.join("tools", "parity", "reports", "functional_golden_report.json")
+out_file = REPO_ROOT.join("test", "parity", "reports", "functional_golden_report.json")
 File.write(out_file, JSON.pretty_generate(report) + "\n")
 puts "wrote #{out_file}"

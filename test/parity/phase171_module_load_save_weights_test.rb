@@ -44,7 +44,7 @@ class Phase171ModuleLoadSaveWeightsTest < Minitest::Test
   def test_save_and_load_npz_weights_roundtrip
     mod = WeightsModule.new
 
-    Dir.mktmpdir("mlx-ruby-weights") do |dir|
+    TestSupport.mktmpdir("mlx-ruby-weights") do |dir|
       path = File.join(dir, "weights.npz")
       mod.save_weights(path)
 
