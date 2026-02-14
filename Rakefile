@@ -79,16 +79,96 @@ def run_strict_test_suite
   abort "Strict test run failed."
 end
 
+def with_forced_test_device(device)
+  normalized = device.to_s.downcase
+  unless %w[cpu gpu metal].include?(normalized)
+    raise ArgumentError, "Unsupported test device: #{device.inspect}. Use :cpu, :gpu, or :metal."
+  end
+
+  previous_device = ENV["DEVICE"]
+  had_mlx_default_device = ENV.key?("MLX_DEFAULT_DEVICE")
+  previous_mlx_default_device = ENV["MLX_DEFAULT_DEVICE"]
+
+  ENV["DEVICE"] = normalized
+  # Ensure forced DEVICE is respected. Focused tests can still override DEVICE
+  # inside subprocesses when they need to probe specific backends.
+  ENV.delete("MLX_DEFAULT_DEVICE")
+
+  yield
+ensure
+  if previous_device.nil?
+    ENV.delete("DEVICE")
+  else
+    ENV["DEVICE"] = previous_device
+  end
+
+  if had_mlx_default_device
+    ENV["MLX_DEFAULT_DEVICE"] = previous_mlx_default_device
+  else
+    ENV.delete("MLX_DEFAULT_DEVICE")
+  end
+end
+
+def parse_test_devices_arg(raw_devices)
+  return [] if raw_devices.nil?
+
+  raw_devices
+    .to_s
+    .split(",")
+    .map(&:strip)
+    .reject(&:empty?)
+    .map(&:downcase)
+end
+
+def run_base_test_task
+  Rake::Task[:test_base].reenable
+  Rake::Task[:test_base].invoke
+end
+
+def run_test_suite_for_device(device = nil)
+  if device.nil?
+    run_base_test_task
+    return
+  end
+
+  with_forced_test_device(device) do
+    run_base_test_task
+  end
+end
+
 if ENV.fetch("MLX_STRICT_TESTS", "0") == "1"
   desc "Run tests with strict per-file timeout (set MLX_TEST_TIMEOUT to customize)."
-  task :test do
+  task :test_base do
     run_strict_test_suite
   end
 else
-  Rake::TestTask.new(:test) do |t|
+  Rake::TestTask.new(:test_base) do |t|
     t.libs << "test"
     t.pattern = "test/**/*_test.rb"
     t.warning = true
+  end
+end
+
+desc "Run test suite on cpu+gpu by default. Override devices: rake \"test[cpu]\" or rake \"test[gpu]\"."
+task :test, [:devices] do |_task, args|
+  devices = parse_test_devices_arg(args[:devices])
+  devices = %w[cpu gpu] if devices.empty?
+
+  devices.each do |device|
+    puts "==> Running test suite with DEVICE=#{device}"
+    run_test_suite_for_device(device)
+  end
+end
+
+namespace :test do
+  desc "Run the full test suite with DEVICE=cpu."
+  task :cpu do
+    run_test_suite_for_device(:cpu)
+  end
+
+  desc "Run the full test suite with DEVICE=gpu."
+  task :gpu do
+    run_test_suite_for_device(:gpu)
   end
 end
 
@@ -109,6 +189,39 @@ namespace :docs do
 
     sh "doxygen", chdir: docs_dir
     sh make, "html", chdir: docs_dir
+  end
+end
+
+namespace :gem do
+  desc "Build gem package from mlx.gemspec."
+  task :build do
+    sh "gem", "build", "mlx.gemspec", chdir: __dir__
+  end
+
+  desc "Bump gem version by 0.0.0.1 in lib/mlx/version.rb."
+  task :bump do
+    version_file = File.expand_path("lib/mlx/version.rb", __dir__)
+    content = File.read(version_file)
+    version_pattern = /^(\s*VERSION\s*=\s*")([^"]+)(")\s*$/
+    match = content.match(version_pattern)
+
+    raise "Could not find VERSION assignment in #{version_file}" unless match
+
+    old_version = match[2]
+    segments = old_version.split(".")
+    unless segments.all? { |segment| segment.match?(/\A\d+\z/) } && segments.length <= 4
+      raise "Expected VERSION in numeric dotted format with up to 4 segments, got #{old_version.inspect}"
+    end
+
+    numeric_segments = segments.map(&:to_i)
+    numeric_segments << 0 while numeric_segments.length < 4
+    numeric_segments[3] += 1
+    new_version = numeric_segments.join(".")
+
+    updated = content.sub(version_pattern) { "#{Regexp.last_match(1)}#{new_version}#{Regexp.last_match(3)}" }
+    File.write(version_file, updated)
+
+    puts "Bumped version: #{old_version} -> #{new_version}"
   end
 end
 
