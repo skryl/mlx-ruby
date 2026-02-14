@@ -15,7 +15,7 @@ class GemTest < Minitest::Test
   def test_gem_loads
     assert_defined?(MLX)
     assert_equal "mlx", Gem::Specification.load(File.join(RUBY_ROOT, "mlx.gemspec")).name
-    assert_match(/\A\d+\.\d+\.\d+\z/, MLX::VERSION)
+    assert_match(/\A\d+\.\d+\.\d+(?:\.\d+)?\z/, MLX::VERSION)
   end
 
   def test_mlx_modules_available

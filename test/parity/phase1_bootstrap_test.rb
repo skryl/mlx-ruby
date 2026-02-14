@@ -21,7 +21,7 @@ class Phase1BootstrapTest < Minitest::Test
     require "mlx"
 
     assert defined?(MLX)
-    assert_match(/\A\d+\.\d+\.\d+\z/, MLX::VERSION)
+    assert_match(/\A\d+\.\d+\.\d+(?:\.\d+)?\z/, MLX::VERSION)
     assert_respond_to MLX, :native_available?
     assert_includes [true, false], MLX.native_available?
   ensure
