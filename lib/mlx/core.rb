@@ -335,6 +335,12 @@ module MLX
       alias_method :native_export_to_dot,
                    :export_to_dot if method_defined?(:export_to_dot) && !method_defined?(:native_export_to_dot)
 
+      %i[savez savez_compressed].each do |method_name|
+        if method_defined?(method_name) && instance_method(method_name).owner == self
+          remove_method(method_name)
+        end
+      end
+
       ARRAY_LEAF = :__mlx_array_leaf__
 
       def load(file, format = nil, return_metadata = false)
@@ -963,7 +969,8 @@ module MLX
         end
       end
 
-      alias eql? ==
+      remove_method(:eql?) if method_defined?(:eql?) && instance_method(:eql?).owner == self
+      alias_method :eql?, :==
     end
 
     class Array

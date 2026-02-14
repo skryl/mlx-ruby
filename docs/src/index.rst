@@ -64,6 +64,24 @@ are the CPU and GPU.
    ruby/api_reference
 
 .. toctree::
+   :caption: Ruby DSL
+   :maxdepth: 1
+
+   ruby_dsl/index
+   ruby_dsl/model_declaration
+   ruby_dsl/builder_and_graphs
+   ruby_dsl/train_step
+   ruby_dsl/trainer_core
+   ruby_dsl/trainer_data
+   ruby_dsl/trainer_presets
+   ruby_dsl/checkpoints_and_resume
+   ruby_dsl/artifact_policy
+   ruby_dsl/data_pipeline
+   ruby_dsl/experiment
+   ruby_dsl/split_plan
+   ruby_dsl/examples
+
+.. toctree::
    :caption: C++ API Reference
    :maxdepth: 1
 

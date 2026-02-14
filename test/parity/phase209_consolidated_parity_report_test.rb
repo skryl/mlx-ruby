@@ -10,8 +10,8 @@ class Phase209ConsolidatedParityReportTest < Minitest::Test
   end
 
   def test_consolidated_report_contains_uncovered_behavior_list
-    tool = File.join(RUBY_ROOT, "tools", "parity", "generate_functional_golden_report.rb")
-    out_file = File.join(RUBY_ROOT, "tools", "parity", "reports", "functional_golden_report.json")
+    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_functional_golden_report.rb")
+    out_file = File.join(RUBY_ROOT, "test", "parity", "reports", "functional_golden_report.json")
     _stdout, stderr, status = Open3.capture3("ruby", tool)
     assert status.success?, "functional golden harness failed\nstderr:\n#{stderr}"
 

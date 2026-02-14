@@ -6,8 +6,8 @@ require_relative "test_helper"
 
 class Phase101ParityReportChecksTest < Minitest::Test
   def test_report_emits_array_and_overall_parity_checks
-    tool = File.join(RUBY_ROOT, "tools", "parity", "generate_parity_report.rb")
-    out_file = File.join(RUBY_ROOT, "tools", "parity", "reports", "report.json")
+    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_parity_report.rb")
+    out_file = File.join(RUBY_ROOT, "test", "parity", "reports", "report.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)
     assert status.success?, "report generator failed\nstdout:\n#{stdout}\nstderr:\n#{stderr}"

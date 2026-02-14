@@ -21,7 +21,7 @@ class Phase76ExportKwargsOnlyTest < Minitest::Test
 
     y = MLX::Core.array([2.0, 5.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "kw_only.mlxfn")
       MLX::Core.export_function(path, fun, y: y)
 
@@ -43,7 +43,7 @@ class Phase76ExportKwargsOnlyTest < Minitest::Test
 
     y = MLX::Core.array([1.5, 4.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "kw_only_exporter.mlxfn")
       exporter = MLX::Core.exporter(path, fun)
       exporter.call(y: y)

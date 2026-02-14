@@ -7884,9 +7884,6 @@ extern "C" void Init_native(void) {
       "scaled_dot_product_attention",
       RUBY_METHOD_FUNC(core_scaled_dot_product_attention),
       -1);
-  rb_define_singleton_method(
-      mCore, "scaled_dot_product_attention", RUBY_METHOD_FUNC(core_scaled_dot_product_attention), -1);
-  rb_define_singleton_method(mCore, "scaled_dot_product_attention", RUBY_METHOD_FUNC(core_scaled_dot_product_attention), -1);
   rb_define_singleton_method(mCore, "arange", RUBY_METHOD_FUNC(core_arange), -1);
   rb_define_singleton_method(mCore, "linspace", RUBY_METHOD_FUNC(core_linspace), -1);
   rb_define_singleton_method(mCore, "zeros", RUBY_METHOD_FUNC(core_zeros), -1);
@@ -8023,5 +8020,4 @@ extern "C" void Init_native(void) {
       "precompiled_cuda_kernel",
       RUBY_METHOD_FUNC(core_precompiled_cuda_kernel),
       -1);
-  rb_define_singleton_method(mCore, "precompiled_cuda_kernel", RUBY_METHOD_FUNC(core_precompiled_cuda_kernel), -1);
 }

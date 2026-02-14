@@ -17,7 +17,6 @@ class Phase240QuantizedGradientParityITest < Minitest::Test
   def test_qmm_vjp_matches_quantized_matmul_of_cotangent
     x = MLX::Core.random_uniform([2, 64, 64], -1.0, 1.0, MLX::Core.float32)
     w = MLX::Core.random_uniform([128, 64], -1.0, 1.0, MLX::Core.float32)
-    wq, scales, biases = MLX::Core.quantize(w, 64, 8, "affine")
 
     [true, false].each do |transposed|
       weight = transposed ? w : MLX::Core.swapaxes(w, -1, -2)

@@ -3,8 +3,11 @@
 require_relative "test_helper"
 
 class Phase236CompileChangingStructureParityTest < Minitest::Test
+  def run
+    run_without_timeout
+  end
+
   def setup
-    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
@@ -15,6 +18,7 @@ class Phase236CompileChangingStructureParityTest < Minitest::Test
   end
 
   def test_compile_allows_output_structure_change_by_constant_kwargs
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     compiled = MLX::Core.compile(lambda do |x, pair: false|
       pair ? [x, MLX::Core.add(x, 1.0)] : x
     end)
@@ -30,6 +34,7 @@ class Phase236CompileChangingStructureParityTest < Minitest::Test
   end
 
   def test_compile_output_with_siblings
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     compiled = MLX::Core.compile(lambda do |x|
       y = MLX::Core.add(x, 1.0)
       [y, MLX::Core.square(y)]

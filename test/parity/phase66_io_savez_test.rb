@@ -18,7 +18,7 @@ class Phase66IoSavezTest < Minitest::Test
     a = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
     b = MLX::Core.array([[3.0, 4.0], [5.0, 6.0]], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "weights")
       MLX::Core.savez(path, a, b: b)
 
@@ -32,7 +32,7 @@ class Phase66IoSavezTest < Minitest::Test
   def test_savez_compressed_roundtrip
     x = MLX::Core.array([10.0, 20.0, 30.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "compressed.npz")
       MLX::Core.savez_compressed(path, x: x)
 
@@ -46,7 +46,7 @@ class Phase66IoSavezTest < Minitest::Test
     x = MLX::Core.array([1.0], MLX::Core.float32)
 
     err = assert_raises(ArgumentError) do
-      MLX::Core.savez("dummy", x, "arr_0" => x)
+      MLX::Core.savez(File.join(TestSupport.test_tmp_dir, "dummy"), x, "arr_0" => x)
     end
     assert_match(/arr_0/, err.message)
   end

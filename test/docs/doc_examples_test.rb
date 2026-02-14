@@ -2,6 +2,7 @@
 
 require "pathname"
 require "rbconfig"
+require "fileutils"
 require "stringio"
 require "tempfile"
 require "timeout"
@@ -29,9 +30,16 @@ class DocExamplesTest < Minitest::Test
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
+    @previous_pwd = Dir.pwd
+    @docs_output_dir = ENV["DOCS_TEST_OUTPUT_DIR"]
+    return if @docs_output_dir.nil? || @docs_output_dir.strip.empty?
+
+    FileUtils.mkdir_p(@docs_output_dir)
+    Dir.chdir(@docs_output_dir)
   end
 
   def teardown
+    Dir.chdir(@previous_pwd) if defined?(@previous_pwd) && @previous_pwd
     $LOAD_PATH.delete(File.join(RUBY_ROOT, "lib"))
   end
 
@@ -133,7 +141,12 @@ class DocExamplesTest < Minitest::Test
       "DOCS_TEST_CHILD" => "1",
       "DOCS_TEST_FILE" => relative_path,
       "DOCS_TEST_MAX_BLOCK" => ENV["DOCS_TEST_MAX_BLOCK"].to_s,
-      "DOCS_TEST_TRACE" => ENV["DOCS_TEST_TRACE"].to_s
+      "DOCS_TEST_TRACE" => ENV["DOCS_TEST_TRACE"].to_s,
+      "DOCS_TEST_OUTPUT_DIR" => File.join(
+        TestSupport.test_tmp_dir,
+        "docs_examples",
+        relative_path.gsub(/[^\w.\-]+/, "_")
+      )
     }
 
     pid = Process.spawn(

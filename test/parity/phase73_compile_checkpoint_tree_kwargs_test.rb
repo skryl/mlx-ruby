@@ -3,8 +3,11 @@
 require_relative "test_helper"
 
 class Phase73CompileCheckpointTreeKwargsTest < Minitest::Test
+  def run
+    run_without_timeout
+  end
+
   def setup
-    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
@@ -15,6 +18,7 @@ class Phase73CompileCheckpointTreeKwargsTest < Minitest::Test
   end
 
   def test_compile_handles_tree_inputs_keywords_and_preserves_structure
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     fun = lambda do |params, x:, bias: 0.0|
       y = MLX::Core.add(MLX::Core.multiply(params["w"], x), params["b"])
       y = MLX::Core.add(y, bias)
@@ -39,6 +43,7 @@ class Phase73CompileCheckpointTreeKwargsTest < Minitest::Test
   end
 
   def test_checkpoint_handles_tree_inputs_and_keywords
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     fun = lambda do |params, x:, scale: 1.0|
       y = MLX::Core.add(MLX::Core.multiply(params["w"], x), params["b"])
       y = MLX::Core.multiply(y, scale)

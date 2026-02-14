@@ -6,8 +6,8 @@ require_relative "test_helper"
 
 class Phase81BuildStabilityContractTest < Minitest::Test
   def test_build_stability_contract
-    tool = File.join(RUBY_ROOT, "tools", "parity", "check_build_stability.rb")
-    out_file = File.join(RUBY_ROOT, "tools", "parity", "reports", "build_stability.json")
+    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "check_build_stability.rb")
+    out_file = File.join(RUBY_ROOT, "test", "parity", "reports", "build_stability.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)
     assert status.success?, "tool failed\nstdout:\n#{stdout}\nstderr:\n#{stderr}"

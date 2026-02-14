@@ -16,7 +16,7 @@ class Phase50IoFormatsTest < Minitest::Test
   def test_save_safetensors_roundtrip_or_feature_error
     x = MLX::Core.array([1.0, 2.0, 3.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "weights.safetensors")
 
       begin
@@ -33,7 +33,7 @@ class Phase50IoFormatsTest < Minitest::Test
   def test_save_gguf_roundtrip_or_feature_error
     x = MLX::Core.array([1.0, 2.0, 3.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "weights.gguf")
 
       begin
@@ -50,7 +50,7 @@ class Phase50IoFormatsTest < Minitest::Test
   def test_savez_methods_roundtrip
     x = MLX::Core.array([1.0, 2.0, 3.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       uncompressed = File.join(dir, "weights")
       MLX::Core.savez(uncompressed, x: x)
       loaded = MLX::Core.load(uncompressed + ".npz")

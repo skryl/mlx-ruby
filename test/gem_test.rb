@@ -25,6 +25,7 @@ class GemTest < Minitest::Test
     assert_const_defined(MLX, :Optimizers)
     assert_const_defined(MLX, :DistributedUtils)
     assert_const_defined(MLX, :Extension)
+    assert_const_defined(MLX, :DSL)
 
     assert_const_defined(MLX::NN, :Losses)
     assert_const_defined(MLX::NN, :Utils)
@@ -49,6 +50,9 @@ class GemTest < Minitest::Test
     assert_const_defined(MLX::DistributedUtils, :ThunderboltPort)
 
     assert_const_defined(MLX::Extension, :CMakeExtension)
+    assert_const_defined(MLX::DSL, :Model)
+    assert_const_defined(MLX::DSL, :ModelMixin)
+    assert_const_defined(MLX::DSL, :Trainer)
   end
 
   private
