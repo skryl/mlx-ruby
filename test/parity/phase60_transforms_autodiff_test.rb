@@ -3,8 +3,13 @@
 require_relative "test_helper"
 
 class Phase60TransformsAutodiffTest < Minitest::Test
+  # Timeout-based interruption is unstable for this transform mix and can hang
+  # the process after successful assertions.
+  def run
+    run_without_timeout
+  end
+
   def setup
-    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"

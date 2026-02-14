@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require "set"
+require "json"
+require "fileutils"
+
 module MLX
   module DSL
     module ModelMixin
@@ -67,6 +71,12 @@ module MLX
       module Initializer
         def initialize(*args, **kwargs, &block)
           dsl_options = __dsl_extract_declared_options(kwargs)
+          unknown_kwargs = __dsl_unknown_kwargs_for_super(kwargs, method(__method__).super_method)
+          unless unknown_kwargs.empty?
+            names = unknown_kwargs.map(&:to_s).sort.join(", ")
+            raise ArgumentError, "unknown option(s): #{names}"
+          end
+
           super(*args, **kwargs, &block)
           __dsl_apply_option_values(dsl_options)
           __dsl_materialize_declarations!
@@ -80,21 +90,26 @@ module MLX
           dsl_option_definitions[key] = { default: default, required: !!required }
         end
 
-        def layer(name, factory = nil, &block)
+        def layer(name, factory = nil, *factory_args, **factory_kwargs, &block)
           if factory.nil? && !block_given?
             raise ArgumentError, "layer requires either a factory or block"
+          end
+          if !factory.nil? && block_given?
+            raise ArgumentError, "layer cannot accept both a factory and block"
           end
 
           dsl_declarations << {
             kind: :layer,
             name: name.to_s,
             factory: factory,
+            factory_args: factory_args,
+            factory_kwargs: factory_kwargs,
             block: block
           }
         end
 
-        def network(name, factory = nil, &block)
-          layer(name, factory, &block)
+        def network(name, factory = nil, *factory_args, **factory_kwargs, &block)
+          layer(name, factory, *factory_args, **factory_kwargs, &block)
         end
 
         def param(name, shape:, init: nil, dtype: UNSET)
@@ -146,35 +161,57 @@ module MLX
         builder.build
       end
 
-      def trainer(optimizer:, clip_grad_norm: nil, &loss_block)
+      def trainer(optimizer:, clip_grad_norm: nil, compile: false, sync: :none, &loss_block)
         MLX::DSL::Trainer.new(
           model: self,
           optimizer: optimizer,
           clip_grad_norm: clip_grad_norm,
+          compile: compile,
+          sync: sync,
           &loss_block
         )
       end
 
-      def save_checkpoint(path, optimizer: nil, metadata: {})
-        payload = {
-          "format" => "mlx_dsl_checkpoint_v1",
-          "model" => __dsl_serialize_tree(parameters),
-          "metadata" => metadata || {}
-        }
-        payload["optimizer"] = __dsl_serialize_tree(optimizer.state) unless optimizer.nil?
+      def save_checkpoint(path, optimizer: nil, metadata: {}, format: nil)
+        checkpoint_format = __dsl_checkpoint_format(path, format)
+        if checkpoint_format == :marshal
+          __dsl_ensure_parent_dir!(path)
+          payload = {
+            "format" => "mlx_dsl_checkpoint_v1",
+            "model" => __dsl_serialize_tree(parameters),
+            "metadata" => metadata || {}
+          }
+          payload["optimizer"] = __dsl_serialize_tree(optimizer.state) unless optimizer.nil?
 
-        File.binwrite(path, Marshal.dump(payload))
-        path
-      end
-
-      def load_checkpoint(path, optimizer: nil, strict: true)
-        payload = Marshal.load(File.binread(path))
-        unless payload.is_a?(Hash) && payload["format"] == "mlx_dsl_checkpoint_v1"
-          raise ArgumentError, "unsupported checkpoint format"
+          File.binwrite(path, Marshal.dump(payload))
+          return path
         end
 
-        model_state = __dsl_deserialize_tree(payload.fetch("model"))
-        update(model_state, strict: strict)
+        __dsl_save_native_checkpoint(path, checkpoint_format, optimizer: optimizer, metadata: metadata)
+      end
+
+      def load_checkpoint(path, optimizer: nil, strict: true, format: nil)
+        resolved_path = __dsl_resolve_load_checkpoint_path(path, format)
+        checkpoint_format = __dsl_checkpoint_format(resolved_path, format)
+        if checkpoint_format == :marshal
+          payload = Marshal.load(File.binread(resolved_path))
+          unless payload.is_a?(Hash) && payload["format"] == "mlx_dsl_checkpoint_v1"
+            raise ArgumentError, "unsupported checkpoint format"
+          end
+
+          model_state = __dsl_deserialize_tree(payload.fetch("model"))
+          update(model_state, strict: strict)
+
+          if !optimizer.nil? && payload.key?("optimizer")
+            optimizer.state = __dsl_deserialize_tree(payload["optimizer"])
+          end
+
+          return payload
+        end
+
+        weights_path = __dsl_checkpoint_weights_path(resolved_path, checkpoint_format)
+        load_weights(weights_path, strict: strict)
+        payload = __dsl_load_native_checkpoint_payload(weights_path)
 
         if !optimizer.nil? && payload.key?("optimizer")
           optimizer.state = __dsl_deserialize_tree(payload["optimizer"])
@@ -221,7 +258,173 @@ module MLX
         __dsl_toggle_paths(selected, freeze: false)
       end
 
+      def parameter_paths(matcher: nil)
+        all_paths = MLX::Utils.tree_flatten(parameters, destination: {}).keys.sort
+        return all_paths if matcher.nil?
+
+        path_matcher = __dsl_path_matcher(matcher)
+        all_paths.select { |path| path_matcher.call(path) }
+      end
+
+      def parameter_count
+        __dsl_count_parameters(parameters)
+      end
+
+      def trainable_parameter_count
+        __dsl_count_parameters(trainable_parameters)
+      end
+
+      def summary(as: :hash)
+        total = parameter_count
+        trainable = trainable_parameter_count
+        payload = {
+          "model_class" => self.class.name.to_s,
+          "total_parameters" => total,
+          "trainable_parameters" => trainable,
+          "frozen_parameters" => total - trainable,
+          "parameter_paths" => parameter_paths
+        }
+        case as.to_sym
+        when :hash
+          payload
+        when :text
+          __dsl_summary_text(payload)
+        else
+          raise ArgumentError, "summary :as must be :hash or :text"
+        end
+      end
+
       private
+
+      def __dsl_summary_text(payload)
+        [
+          "model=#{payload.fetch('model_class')}",
+          "total_parameters=#{payload.fetch('total_parameters')}",
+          "trainable_parameters=#{payload.fetch('trainable_parameters')}",
+          "frozen_parameters=#{payload.fetch('frozen_parameters')}",
+          "parameter_paths=#{payload.fetch('parameter_paths').join(',')}"
+        ].join("\n")
+      end
+
+      def __dsl_count_parameters(tree)
+        flat = MLX::Utils.tree_flatten(tree, destination: {})
+        flat.values.sum { |value| __dsl_leaf_numel(value) }
+      end
+
+      def __dsl_leaf_numel(value)
+        if value.respond_to?(:shape)
+          shape = value.shape
+          if shape.is_a?(Array)
+            return 1 if shape.empty?
+
+            return shape.reduce(1) { |acc, dim| acc * dim.to_i }
+          end
+        end
+        return value.size.to_i if value.respond_to?(:size)
+
+        1
+      end
+
+      def __dsl_checkpoint_format(path, format)
+        raw = if format.nil?
+          ext = File.extname(path.to_s).delete_prefix(".").downcase
+          ext.empty? ? "marshal" : ext
+        else
+          format.to_s.downcase
+        end
+
+        case raw
+        when "marshal", "bin", "legacy", "dsl_v1"
+          :marshal
+        when "npz"
+          :npz
+        when "safetensors"
+          :safetensors
+        else
+          raise ArgumentError, "unsupported checkpoint format: #{raw.inspect}"
+        end
+      end
+
+      def __dsl_checkpoint_weights_path(path, checkpoint_format)
+        target = path.to_s
+        case checkpoint_format
+        when :npz
+          target.end_with?(".npz") ? target : "#{target}.npz"
+        when :safetensors
+          target.end_with?(".safetensors") ? target : "#{target}.safetensors"
+        else
+          target
+        end
+      end
+
+      def __dsl_checkpoint_sidecar_path(weights_path)
+        "#{weights_path}.mlxmeta.json"
+      end
+
+      def __dsl_resolve_load_checkpoint_path(path, format)
+        target = path.to_s
+        return target unless format.nil?
+        return target unless File.extname(target).empty?
+        return target if File.exist?(target)
+
+        candidates = ["#{target}.npz", "#{target}.safetensors"]
+        found = candidates.find { |candidate| File.exist?(candidate) }
+        found.nil? ? target : found
+      end
+
+      def __dsl_save_native_checkpoint(path, checkpoint_format, optimizer:, metadata:)
+        weights_path = __dsl_checkpoint_weights_path(path, checkpoint_format)
+        __dsl_ensure_parent_dir!(weights_path)
+        save_weights(weights_path)
+
+        payload = {
+          "format" => "mlx_dsl_checkpoint_v2_native",
+          "weights_format" => checkpoint_format.to_s,
+          "metadata" => metadata || {}
+        }
+        payload["optimizer"] = __dsl_serialize_tree(optimizer.state) unless optimizer.nil?
+
+        File.binwrite(__dsl_checkpoint_sidecar_path(weights_path), JSON.generate(payload))
+        weights_path
+      end
+
+      def __dsl_ensure_parent_dir!(path)
+        dir = File.dirname(path.to_s)
+        return if dir.nil? || dir.empty? || dir == "."
+
+        FileUtils.mkdir_p(dir)
+      end
+
+      def __dsl_load_native_checkpoint_payload(weights_path)
+        sidecar_path = __dsl_checkpoint_sidecar_path(weights_path)
+        payload = if File.exist?(sidecar_path)
+          JSON.parse(File.binread(sidecar_path))
+        else
+          {}
+        end
+        unless payload.is_a?(Hash)
+          raise ArgumentError, "invalid native checkpoint sidecar payload"
+        end
+
+        payload["format"] ||= "mlx_dsl_checkpoint_v2_native"
+        payload["weights_format"] ||= File.extname(weights_path).delete_prefix(".")
+        payload["metadata"] ||= {}
+        payload
+      end
+
+      def __dsl_unknown_kwargs_for_super(kwargs, super_method)
+        return [] if kwargs.empty?
+        return kwargs.keys unless super_method
+
+        params = super_method.parameters
+        return [] if params.any? { |type, _name| type == :keyrest }
+
+        accepted = params.each_with_object(Set.new) do |(type, name), out|
+          out << name.to_s if (type == :key || type == :keyreq) && !name.nil?
+        end
+
+        kwargs.keys.select { |key| !accepted.include?(key.to_s) }
+      end
 
       def __dsl_extract_declared_options(kwargs)
         out = {}
@@ -279,12 +482,20 @@ module MLX
       def __dsl_build_layer(decl)
         if !decl[:factory].nil?
           value = decl[:factory]
+          args = __dsl_resolve_factory_args(decl.fetch(:factory_args, []))
+          kwargs = __dsl_resolve_factory_kwargs(decl.fetch(:factory_kwargs, {}))
           if value.is_a?(Class)
-            return value.new
+            value = value.new(*args, **kwargs)
+          elsif value.respond_to?(:call)
+            if args.empty? && kwargs.empty?
+              value = __dsl_resolve_callable(value)
+            elsif kwargs.empty?
+              value = value.call(*args)
+            else
+              value = value.call(*args, **kwargs)
+            end
           end
-          return __dsl_resolve_callable(value) if value.respond_to?(:call)
-
-          return value
+          return __dsl_validate_layer_value(value, decl[:name])
         end
 
         builder = MLX::DSL::Builder.new(self)
@@ -292,6 +503,14 @@ module MLX
         if value.nil?
           raise ArgumentError, "layer #{decl[:name]} block returned nil"
         end
+        __dsl_validate_layer_value(value, decl[:name])
+      end
+
+      def __dsl_validate_layer_value(value, name)
+        unless value.is_a?(MLX::NN::Module)
+          raise TypeError, "layer #{name} must build an MLX::NN::Module, got #{value.class}"
+        end
+
         value
       end
 
@@ -358,6 +577,16 @@ module MLX
           end
         else
           init.call(shape, dtype)
+        end
+      end
+
+      def __dsl_resolve_factory_args(values)
+        values.map { |value| __dsl_resolve_callable(value) }
+      end
+
+      def __dsl_resolve_factory_kwargs(values)
+        values.each_with_object({}) do |(key, value), out|
+          out[key] = __dsl_resolve_callable(value)
         end
       end
 

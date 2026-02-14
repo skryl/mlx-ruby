@@ -2,6 +2,26 @@
 
 module MLX
   module DSL
+    class Callable < MLX::NN::Module
+      def initialize(callable = nil, &block)
+        super()
+        if !callable.nil? && block_given?
+          raise ArgumentError, "callable layer accepts either a callable argument or block, not both"
+        end
+
+        @callable = callable.nil? ? block : callable
+        unless @callable.respond_to?(:call)
+          raise ArgumentError, "callable layer requires a callable argument or block"
+        end
+      end
+
+      def call(*args, **kwargs)
+        return @callable.call(*args) if kwargs.empty?
+
+        @callable.call(*args, **kwargs)
+      end
+    end
+
     class Residual < MLX::NN::Module
       def initialize(module_obj)
         super()

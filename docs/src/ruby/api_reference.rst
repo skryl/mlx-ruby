@@ -67,6 +67,17 @@ See implementation:
 - ``lib/mlx/nn/base.rb``
 - ``lib/mlx/nn/layers/*.rb``
 
+.. _ruby_dsl:
+
+Ruby DSL
+--------
+
+Ruby DSL now lives in a separate top-level docs section.
+
+See :doc:`../ruby_dsl/index` for the complete DSL reference, including model
+declaration, builder/graph composition, training, data pipelines, experiments,
+and split plans.
+
 Optimizers
 ----------
 

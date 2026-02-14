@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-13T19:59:00Z",
+  "generated_at": "2026-02-14T03:42:36Z",
   "method_level_gap": {
     "python_modules": [
       "mlx",
@@ -8,6 +8,7 @@
     "ruby_modules": [
       "MLX",
       "MLX::Core",
+      "MLX::Dsl",
       "MLX::Extension",
       "MLX::Nn",
       "MLX::Optimizers",
@@ -471,6 +472,7 @@
     "diff": {
       "top_level_missing_in_ruby": [],
       "top_level_extra_in_ruby": [
+        "mlx.dsl",
         "mlx.extension",
         "mlx.nn",
         "mlx.optimizers",
@@ -936,8 +938,6 @@
   "module_level_coverage": {
     "python_files": [
       "__main__.py",
-      "__pycache__/_reprlib_fix.cpython-313.pyc",
-      "__pycache__/utils.cpython-313.pyc",
       "_distributed_utils/common.py",
       "_distributed_utils/config.py",
       "_distributed_utils/launch.py",
@@ -945,29 +945,8 @@
       "_stub_patterns.txt",
       "extension.py",
       "nn/__init__.py",
-      "nn/__pycache__/__init__.cpython-313.pyc",
-      "nn/__pycache__/init.cpython-313.pyc",
-      "nn/__pycache__/losses.cpython-313.pyc",
-      "nn/__pycache__/utils.cpython-313.pyc",
       "nn/init.py",
       "nn/layers/__init__.py",
-      "nn/layers/__pycache__/__init__.cpython-313.pyc",
-      "nn/layers/__pycache__/activations.cpython-313.pyc",
-      "nn/layers/__pycache__/base.cpython-313.pyc",
-      "nn/layers/__pycache__/containers.cpython-313.pyc",
-      "nn/layers/__pycache__/convolution.cpython-313.pyc",
-      "nn/layers/__pycache__/convolution_transpose.cpython-313.pyc",
-      "nn/layers/__pycache__/distributed.cpython-313.pyc",
-      "nn/layers/__pycache__/dropout.cpython-313.pyc",
-      "nn/layers/__pycache__/embedding.cpython-313.pyc",
-      "nn/layers/__pycache__/linear.cpython-313.pyc",
-      "nn/layers/__pycache__/normalization.cpython-313.pyc",
-      "nn/layers/__pycache__/pooling.cpython-313.pyc",
-      "nn/layers/__pycache__/positional_encoding.cpython-313.pyc",
-      "nn/layers/__pycache__/quantized.cpython-313.pyc",
-      "nn/layers/__pycache__/recurrent.cpython-313.pyc",
-      "nn/layers/__pycache__/transformer.cpython-313.pyc",
-      "nn/layers/__pycache__/upsample.cpython-313.pyc",
       "nn/layers/activations.py",
       "nn/layers/base.py",
       "nn/layers/containers.py",
@@ -987,9 +966,6 @@
       "nn/losses.py",
       "nn/utils.py",
       "optimizers/__init__.py",
-      "optimizers/__pycache__/__init__.cpython-313.pyc",
-      "optimizers/__pycache__/optimizers.cpython-313.pyc",
-      "optimizers/__pycache__/schedulers.cpython-313.pyc",
       "optimizers/optimizers.py",
       "optimizers/schedulers.py",
       "py.typed",

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-13T19:59:02Z",
+  "generated_at": "2026-02-14T03:42:40Z",
   "python": {
     "top_level_modules": [
       "mlx",
@@ -12,6 +12,7 @@
     "top_level_modules": [
       "MLX",
       "MLX::Core",
+      "MLX::Dsl",
       "MLX::Extension",
       "MLX::Nn",
       "MLX::Optimizers",
@@ -474,6 +475,7 @@
   "diff": {
     "top_level_missing_in_ruby": [],
     "top_level_extra_in_ruby": [
+      "mlx.dsl",
       "mlx.extension",
       "mlx.nn",
       "mlx.optimizers",

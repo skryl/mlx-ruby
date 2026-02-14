@@ -6,6 +6,9 @@ module MLX
 end
 
 require_relative "dsl/graph_modules"
+require_relative "dsl/data_pipeline"
+require_relative "dsl/experiment"
+require_relative "dsl/split_plan"
 require_relative "dsl/builder"
 require_relative "dsl/train_step"
 require_relative "dsl/model_mixin"

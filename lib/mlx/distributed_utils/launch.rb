@@ -373,12 +373,18 @@ module MLX
         opts[:env] = hostfile.envs + opts[:env]
 
         command = rest.dup
-        script = Pathname.new(command.first)
-        if script.file?
+        command_name = command.first.to_s
+        script = Pathname.new(command_name)
+        explicit_path = command_name.include?(File::SEPARATOR) || command_name.start_with?(".", "~")
+
+        if explicit_path && script.file?
           command[0] = opts[:python]
           command.insert(1, script.realpath.to_s)
-        elsif (resolved = find_executable(command.first))
+        elsif (resolved = find_executable(command_name))
           command[0] = resolved
+        elsif script.file?
+          command[0] = opts[:python]
+          command.insert(1, script.realpath.to_s)
         elsif opts[:verify_script]
           raise ArgumentError, "Invalid script or command #{command.first}"
         end

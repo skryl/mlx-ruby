@@ -280,6 +280,15 @@ end
 model = Mlp.new(in_dim: 32, out_dim: 10)
 ```
 
+Declaration factories can also accept dynamic constructor args/kwargs:
+
+```ruby
+class Projector < MLX::DSL::Model
+  option :dims, default: 64
+  layer :proj, MLX::NN::Linear, -> { dims }, -> { dims }, bias: false
+end
+```
+
 You can also mix the DSL into existing `MLX::NN::Module` subclasses:
 
 ```ruby
@@ -296,12 +305,17 @@ class Block < MLX::NN::Module
 end
 ```
 
-`train_step` wraps `value_and_grad` and optimizer updates:
+`train_step` wraps `value_and_grad` and optimizer updates, and also supports optional compile/sync controls:
 
 ```ruby
 optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-3)
 
-step = model.train_step(optimizer: optimizer, clip_grad_norm: 1.0) do |x:, y:|
+step = model.train_step(
+  optimizer: optimizer,
+  clip_grad_norm: 1.0,
+  compile: { shapeless: true }, # or true / false
+  sync: :step                   # :none or :step
+) do |x:, y:|
   logits = model.call(x)
   MLX::NN.cross_entropy(logits, y, reduction: "mean")
 end
@@ -313,37 +327,130 @@ loss = step.call(x: batch_x, y: batch_y)
 A small trainer wrapper is also available:
 
 ```ruby
-trainer = model.trainer(optimizer: optimizer) do |x:, y:|
+trainer = model.trainer(optimizer: optimizer, compile: { shapeless: true }, sync: :epoch) do |x:, y:|
   logits = model.call(x)
   MLX::NN.cross_entropy(logits, y, reduction: "mean")
 end
 
 trainer.before_epoch { |ctx| puts "epoch=#{ctx[:epoch]}" }
 trainer.after_batch { |ctx| puts "batch=#{ctx[:batch_index]} loss=#{ctx[:loss_value]}" }
+trainer.on(:after_batch, every: 10, priority: -10) { |ctx| puts "milestone batch=#{ctx[:batch_index]}" }
+trainer.on(:after_batch, if: ->(ctx) { ctx[:epoch] > 0 }) { |ctx| puts "warm epoch=#{ctx[:epoch]}" }
 
 train_data = ->(epoch, kind:) { shuffled_batches_for(epoch, split: kind) }
 validation_data = ->(epoch:) { heldout_batches_for(epoch) }
 
+pipeline_data = MLX::DSL::Data
+  .from(train_data.call(0, kind: :train))
+  .map { |item, index| preprocess(item, index: index) }
+  .batch(32)
+  .take(100)
+
 losses = trainer.fit(train_data, epochs: 2)
+
+trainer.register_collate(:xy_base, { x: 0, y: 1 })
+trainer.register_collate(:xy_with_meta, { meta: 2 }, extends: [:xy_base])
 
 report = trainer.fit_report(
   train_data,
   epochs: 5,
+  resume_from: "checkpoints/latest.bin",
+  collate: :xy_with_meta,
   reduce: :mean,
+  limit: ->(epoch:, kind:) { kind == :train && epoch.zero? ? 64 : nil },
   strict_data_reuse: true,
   train_transform: ->(batch, epoch:, batch_index:) { collate_train(batch, epoch: epoch, batch_index: batch_index) },
   validation_data: validation_data,
+  validation_limit: ->(epoch:, kind:) { kind == :validation && epoch.zero? ? 16 : 32 },
+  validation_collate: ->(batch, epoch:, batch_index:, kind:) { collate_eval(batch, epoch: epoch, batch_index: batch_index, kind: kind) },
   validation_reduce: :mean,
   validation_transform: ->(batch, epoch:) { collate_eval(batch, epoch: epoch) },
   monitor: :val_loss,
   monitor_mode: :min,
-  checkpoint_path: "checkpoints/epoch-%{epoch}-monitor-%{monitor}.bin",
+  checkpoint_path: ->(epoch:, next_epoch:, monitor:, monitor_name:) {
+    "checkpoints/epoch-#{next_epoch}-#{monitor_name}-#{monitor}.bin"
+  },
   save_best: true,
   keep_losses: false,
   metadata: { "run" => "exp-42" }
 )
 
 puts "#{report['monitor_name']}=#{report['best_metric']}"
+puts "progress=#{report['epochs_completed']}/#{report['epochs_target']}"
+```
+
+Preset/dataflow helpers reduce repeated fit keyword boilerplate:
+
+```ruby
+trainer = trainer.with_fit_defaults(reduce: :mean, monitor_mode: :min)
+trainer.register_fit_preset(:fast_eval, epochs: 3, limit: 128, validation_limit: 32)
+trainer.register_dataflow(
+  :xy_batches,
+  train: { collate: { x: 0, y: 1 }, limit: 256 },
+  validation: { collate: { x: :input, y: :target }, reduce: :mean }
+)
+trainer.batch_schema(train: { x: 0, y: 1 }, validation: { x: :input, y: :target })
+
+report = trainer.fit_report_with(
+  :fast_eval,
+  train_data,
+  validation_data: validation_data,
+  collate: :auto,
+  validation_collate: :auto,
+  **trainer.use_dataflow(:xy_batches)
+)
+```
+
+Task shortcuts are also available for common training modes:
+
+```ruby
+report = trainer.fit_task_report(:classification, train_data, epochs: 5, validation_data: validation_data)
+lm_report = trainer.fit_task_report(:language_modeling, train_data, epochs: 3)
+```
+
+Split plans let you package train/validation wiring once and pass it directly to `fit` / `fit_report`:
+
+```ruby
+plan = MLX::DSL.splits do
+  shared collate: :xy
+  train train_data
+  validation validation_data
+end
+
+report = trainer.fit_report(plan, epochs: 5)
+```
+
+Artifact policies reduce repetitive checkpoint/resume/run-bundle setup:
+
+```ruby
+trainer.artifact_policy(
+  checkpoint: { path: "checkpoints/ep-%{epoch}.bin", strategy: :latest },
+  retention: { keep_last_n: 3 },
+  resume: :latest,
+  run_bundle: { enabled: true, path: "artifacts/auto_bundle.json" }
+)
+```
+
+Batch execution errors raised during training/validation include epoch and batch index context for faster debugging.
+`resume_from:` restores trainer state (`epoch`, `best_metric`, `stale_epochs`) from checkpoint metadata and continues from the next epoch.
+It accepts a checkpoint path, run-bundle JSON path, run-bundle hash, inline checkpoint payload hash, or a callable loader that returns any of those.
+
+Checkpoint helpers support both legacy marshal (`.bin`) and native weights formats (`.npz`, `.safetensors`):
+
+```ruby
+model.save_checkpoint("checkpoints/latest.npz", optimizer: optimizer, metadata: { "run" => "exp-42" })
+payload = model.load_checkpoint("checkpoints/latest.npz", optimizer: optimizer, strict: true)
+puts payload["format"] # => "mlx_dsl_checkpoint_v2_native"
+```
+
+Checkpoint save paths create parent directories automatically when needed.
+Extensionless load paths auto-detect `*.npz` / `*.safetensors` files when present.
+
+Trainer run bundles capture report/config/checkpoint metadata for reproducible resumes:
+
+```ruby
+bundle_path = trainer.save_run_bundle("artifacts/run_bundle.json", report: report, config: { "seed" => 42 })
+resumed_report = trainer.fit_report(train_data, epochs: 10, resume_from: bundle_path)
 ```
 
 Runnable DSL examples:
@@ -351,6 +458,8 @@ Runnable DSL examples:
 - `examples/dsl/streaming_factory.rb`
 - `examples/dsl/validation_monitor.rb`
 - `examples/dsl/memory_friendly_reporting.rb`
+- `examples/dsl/collate_schemas.rb`
+- `examples/dsl/compile_sync_and_native_checkpoint.rb`
 
 For non-linear graph composition, the DSL also supports branch/merge helpers:
 
@@ -373,6 +482,48 @@ class ResidualHead < MLX::DSL::Model
 end
 ```
 
+Inline callable layers are also supported for quick experiments without defining standalone module classes:
+
+```ruby
+layer :adapter do
+  sequential do
+    linear dims, dims
+    fn { |x| MLX::Core.multiply(x, 0.5) }
+  end
+end
+```
+
+You can also build repeated blocks with less boilerplate:
+
+```ruby
+layer :tower do
+  stack(4, MLX::NN::Linear, dims, dims)
+end
+```
+
+A unified experiment DSL is available for declarative run wiring:
+
+```ruby
+exp = MLX::DSL.experiment("mnist") do
+  model { model }
+  optimizer { optimizer }
+  trainer { |x:, y:| MLX::NN.cross_entropy(model.call(x), y, reduction: "mean") }
+  data train: train_data, validation: validation_data
+  artifacts checkpoint_path: "checkpoints/ep-%{epoch}.bin"
+end
+
+report = exp.report(epochs: 5)
+```
+
+`layer` is polymorphic and accepts module instances, module classes, callables, or a block:
+
+```ruby
+layer AddOne.new
+layer AddN, 4
+layer ->(x) { MLX::Core.multiply(x, 2.0) }
+layer { |x| MLX::Core.add(x, 1.0) }
+```
+
 Parameter-group optimizers:
 
 ```ruby
@@ -380,6 +531,15 @@ grouped = model.optimizer_groups do
   group(/^encoder\./) { MLX::Optimizers::AdamW.new(learning_rate: 1e-4) }
   group(nil) { MLX::Optimizers::SGD.new(learning_rate: 1e-2) }
 end
+```
+
+Introspection helpers:
+
+```ruby
+puts model.parameter_count
+puts model.trainable_parameter_count
+pp model.parameter_paths(matcher: /^encoder\./)
+puts model.summary(as: :text)
 ```
 
 ## Device selection

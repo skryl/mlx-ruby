@@ -1,0 +1,11 @@
+﻿mlx.nn.HardShrink
+=================
+
+.. currentmodule:: mlx.nn
+
+.. autoclass:: HardShrink
+
+   
+
+   
+   
