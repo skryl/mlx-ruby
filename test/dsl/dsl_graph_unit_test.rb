@@ -47,15 +47,28 @@ class DslGraphUnitTest < Minitest::Test
     end
     methods = %i[add concatenate]
     restore = {}
+    remove_stub = lambda do |name|
+      next unless singleton.instance_methods(false).include?(name) ||
+        singleton.private_instance_methods(false).include?(name) ||
+        singleton.protected_instance_methods(false).include?(name)
+
+      singleton.send(:remove_method, name)
+    end
 
     methods.each do |name|
       backup = :"__dsl_graph_backup_#{name}"
-      if singleton.instance_methods(false).include?(name)
-        singleton.alias_method(backup, name)
-        restore[name] = :alias
-      elsif singleton.private_instance_methods(false).include?(name)
+      if singleton.private_instance_methods(false).include?(name)
         singleton.send(:alias_method, backup, name)
+        remove_stub.call(name)
         restore[name] = :alias_private
+      elsif singleton.protected_instance_methods(false).include?(name)
+        singleton.send(:alias_method, backup, name)
+        remove_stub.call(name)
+        restore[name] = :alias_protected
+      elsif singleton.instance_methods(false).include?(name)
+        singleton.alias_method(backup, name)
+        remove_stub.call(name)
+        restore[name] = :alias_public
       else
         restore[name] = :remove
       end
@@ -67,16 +80,13 @@ class DslGraphUnitTest < Minitest::Test
   ensure
     methods.each do |name|
       backup = :"__dsl_graph_backup_#{name}"
-      case restore[name]
-      when :alias
-        singleton.alias_method(name, backup)
-        singleton.remove_method(backup)
-      when :alias_private
-        singleton.send(:alias_method, name, backup)
-        singleton.send(:remove_method, backup)
-      when :remove
-        singleton.remove_method(name) if singleton.instance_methods(false).include?(name)
-      end
+      remove_stub.call(name)
+      next if restore[name] == :remove
+
+      singleton.send(:alias_method, name, backup)
+      singleton.send(:remove_method, backup)
+      singleton.send(:private, name) if restore[name] == :alias_private
+      singleton.send(:protected, name) if restore[name] == :alias_protected
     end
   end
 

@@ -1495,8 +1495,27 @@ class DslTrainerUnitTest < Minitest::Test
       self
     end
 
-    had_eval = core_singleton.instance_methods(false).include?(:eval)
-    core_singleton.alias_method(:__dsl_original_eval, :eval) if had_eval
+    remove_singleton_method = lambda do |name|
+      next unless core_singleton.private_instance_methods(false).include?(name) ||
+        core_singleton.protected_instance_methods(false).include?(name) ||
+        core_singleton.instance_methods(false).include?(name)
+
+      core_singleton.send(:remove_method, name)
+    end
+    eval_visibility =
+      if core_singleton.private_instance_methods(false).include?(:eval)
+        :private
+      elsif core_singleton.protected_instance_methods(false).include?(:eval)
+        :protected
+      elsif core_singleton.instance_methods(false).include?(:eval)
+        :public
+      end
+
+    remove_singleton_method.call(:__dsl_original_eval)
+    if eval_visibility
+      core_singleton.send(:alias_method, :__dsl_original_eval, :eval)
+      remove_singleton_method.call(:eval)
+    end
 
     calls = []
     core_singleton.define_method(:eval) do |*args|
@@ -1506,11 +1525,15 @@ class DslTrainerUnitTest < Minitest::Test
 
     yield calls
   ensure
-    if had_eval
-      core_singleton.alias_method(:eval, :__dsl_original_eval)
-      core_singleton.remove_method(:__dsl_original_eval)
+    remove_singleton_method.call(:eval) if defined?(remove_singleton_method)
+
+    if defined?(eval_visibility) && eval_visibility
+      core_singleton.send(:alias_method, :eval, :__dsl_original_eval)
+      core_singleton.send(:remove_method, :__dsl_original_eval)
+      core_singleton.send(:private, :eval) if eval_visibility == :private
+      core_singleton.send(:protected, :eval) if eval_visibility == :protected
     else
-      core_singleton.remove_method(:eval) if core_singleton.instance_methods(false).include?(:eval)
+      remove_singleton_method.call(:eval) if defined?(remove_singleton_method)
     end
   end
 end

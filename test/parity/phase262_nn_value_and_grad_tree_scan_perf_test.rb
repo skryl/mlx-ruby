@@ -28,16 +28,22 @@ class Phase262NnValueAndGradTreeScanPerfTest < Minitest::Test
 
     wrapped = MLX::NN.value_and_grad(model, fn)
 
-    original_tree_flatten = MLX::Utils.method(:tree_flatten)
-    MLX::Utils.define_singleton_method(:tree_flatten) do |*|
-      raise "value_and_grad no-param fast path should not call tree_flatten"
-    end
+    tree_flatten_calls = 0
+    trace = TracePoint.new(:call) do |tp|
+      next unless tp.method_id == :tree_flatten
+      next unless tp.defined_class.equal?(MLX::Utils.singleton_class)
 
-    value, grads = wrapped.call(MLX::Core.array([1.0, 2.0], MLX::Core.float32))
+      tree_flatten_calls += 1
+    end
+    value = nil
+    grads = nil
+    trace.enable do
+      value, grads = wrapped.call(MLX::Core.array([1.0, 2.0], MLX::Core.float32))
+    end
 
     assert_in_delta 3.0, value.item, 1e-5
     assert_equal({}, grads)
-  ensure
-    MLX::Utils.define_singleton_method(:tree_flatten, original_tree_flatten) unless original_tree_flatten.nil?
+    assert_equal 0, tree_flatten_calls,
+      "value_and_grad no-param fast path should not call MLX::Utils.tree_flatten"
   end
 end
