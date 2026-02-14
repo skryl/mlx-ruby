@@ -83,7 +83,7 @@ uv.lock
 /test/tmp/
 
 # Generated docs autosummary directories
-/docs/**/_autosummary/
+/docs/**/_autosummary*/
 
 # Generated native extension artifacts
 /ext/mlx/Makefile
@@ -91,6 +91,12 @@ uv.lock
 /ext/mlx/native.bundle
 /ext/mlx/native.bundle.dSYM/
 /ext/mlx/build/
+/ext/**/Makefile
+/ext/**/mkmf.log
+/ext/**/*.bundle
+/ext/**/*.bundle.dSYM/
+/ext/**/CMakeCache.txt
+/ext/**/CMakeFiles/
 
 # VSCode
 .vscode/
