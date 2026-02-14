@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "ostruct"
 require_relative "test_helper"
 
 $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
@@ -46,17 +45,17 @@ class Phase216DistributedConfigRuntimeParityTest < Minitest::Test
     runner = lambda do |cmd|
       case cmd
       when ["ssh", "h0", "ipconfig", "getifaddr", "en0"]
-        OpenStruct.new(stdout: "10.0.0.10\n", status: OpenStruct.new(success?: true))
+        struct_with(stdout: "10.0.0.10\n", status: struct_with(success?: true))
       when ["ssh", "h1", "ipconfig", "getifaddr", "en0"]
-        OpenStruct.new(stdout: "\n", status: OpenStruct.new(success?: true))
+        struct_with(stdout: "\n", status: struct_with(success?: true))
       when ["ssh", "h1", "ipconfig", "getifaddr", "en1"]
-        OpenStruct.new(stdout: "10.0.0.11\n", status: OpenStruct.new(success?: true))
+        struct_with(stdout: "10.0.0.11\n", status: struct_with(success?: true))
       when ["ssh", "h0", "ibv_devices"]
-        OpenStruct.new(stdout: "device rdma_en2\n", status: OpenStruct.new(success?: true))
+        struct_with(stdout: "device rdma_en2\n", status: struct_with(success?: true))
       when ["ssh", "h1", "ibv_devices"]
-        OpenStruct.new(stdout: "no_devices\n", status: OpenStruct.new(success?: true))
+        struct_with(stdout: "no_devices\n", status: struct_with(success?: true))
       else
-        OpenStruct.new(stdout: "", status: OpenStruct.new(success?: true))
+        struct_with(stdout: "", status: struct_with(success?: true))
       end
     end
 
@@ -64,9 +63,11 @@ class Phase216DistributedConfigRuntimeParityTest < Minitest::Test
     assert_equal ["10.0.0.10"], hosts[0].ips
     assert_equal ["10.0.0.11"], hosts[1].ips
 
-    refute MLX::DistributedUtils.check_rdma(hosts, verbose: false, strict: false, runner: runner)
-    assert_raises(ArgumentError) do
-      MLX::DistributedUtils.check_rdma(hosts, verbose: false, strict: true, runner: runner)
+    _, _ = capture_io do
+      refute MLX::DistributedUtils.check_rdma(hosts, verbose: false, strict: false, runner: runner)
+      assert_raises(ArgumentError) do
+        MLX::DistributedUtils.check_rdma(hosts, verbose: false, strict: true, runner: runner)
+      end
     end
   end
 
@@ -78,17 +79,26 @@ class Phase216DistributedConfigRuntimeParityTest < Minitest::Test
     runner = lambda do |cmd|
       if cmd.include?("echo")
         ok = cmd.include?("h0")
-        OpenStruct.new(stdout: "", status: OpenStruct.new(success?: ok, exitstatus: ok ? 0 : 1))
+        struct_with(stdout: "", status: struct_with(success?: ok, exitstatus: ok ? 0 : 1))
       elsif cmd.include?("sudo")
-        OpenStruct.new(stdout: "", status: OpenStruct.new(success?: false, exitstatus: 1))
+        struct_with(stdout: "", status: struct_with(success?: false, exitstatus: 1))
       else
-        OpenStruct.new(stdout: "", status: OpenStruct.new(success?: true, exitstatus: 0))
+        struct_with(stdout: "", status: struct_with(success?: true, exitstatus: 0))
       end
     end
 
-    err = assert_raises(ArgumentError) do
-      MLX::DistributedUtils.check_ssh_connections(hosts, runner: runner)
+    err = nil
+    _, _ = capture_io do
+      err = assert_raises(ArgumentError) do
+        MLX::DistributedUtils.check_ssh_connections(hosts, runner: runner)
+      end
     end
     assert_match(/Could not ssh/, err.message)
+  end
+
+  private
+
+  def struct_with(**kwargs)
+    Struct.new(*kwargs.keys, keyword_init: true).new(**kwargs)
   end
 end

@@ -101,6 +101,17 @@ task :build do
   sh make, chdir: ext_dir
 end
 
+namespace :docs do
+  desc "Build documentation (Doxygen + Sphinx HTML)."
+  task :build do
+    docs_dir = File.expand_path("docs", __dir__)
+    make = ENV.fetch("MAKE", RbConfig::CONFIG["MAKE"] || "make")
+
+    sh "doxygen", chdir: docs_dir
+    sh make, "html", chdir: docs_dir
+  end
+end
+
 namespace :benchmark do
   def self.task_class
     require_relative "tasks/benchmark_task"

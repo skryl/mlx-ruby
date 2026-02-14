@@ -3,8 +3,11 @@
 require_relative "test_helper"
 
 class Phase237CompileRuntimeStabilityParityTest < Minitest::Test
+  def run
+    run_without_timeout
+  end
+
   def setup
-    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
@@ -15,6 +18,7 @@ class Phase237CompileRuntimeStabilityParityTest < Minitest::Test
   end
 
   def test_compiled_callable_can_be_wrapped_and_reused
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     compiled = MLX::Core.compile(->(x) { MLX::Core.add(x, 1.0) })
     wrapper = Struct.new(:fn).new(compiled)
     x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
@@ -24,6 +28,7 @@ class Phase237CompileRuntimeStabilityParityTest < Minitest::Test
   end
 
   def test_repeated_compile_invocation_is_stable
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
     20.times do
       compiled = MLX::Core.compile(->(v) { MLX::Core.add(v, 1.0) })

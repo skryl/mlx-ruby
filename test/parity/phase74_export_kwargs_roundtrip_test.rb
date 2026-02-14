@@ -22,7 +22,7 @@ class Phase74ExportKwargsRoundtripTest < Minitest::Test
     x = MLX::Core.array([3.0, 5.0], MLX::Core.float32)
     y = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "pair_ops.mlxfn")
       MLX::Core.export_function(path, fun, x, y: y)
 
@@ -42,7 +42,7 @@ class Phase74ExportKwargsRoundtripTest < Minitest::Test
     x = MLX::Core.array([2.0, 3.0], MLX::Core.float32)
     y = MLX::Core.array([4.0, 5.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "mul_kw.mlxfn")
       exporter = MLX::Core.exporter(path, fun)
       exporter.call(x, y: y)

@@ -3,8 +3,11 @@
 require_relative "test_helper"
 
 class Phase232CompileShapelessBaselineParityTest < Minitest::Test
+  def run
+    run_without_timeout
+  end
+
   def setup
-    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
@@ -15,6 +18,7 @@ class Phase232CompileShapelessBaselineParityTest < Minitest::Test
   end
 
   def test_shapeless_compile_accepts_varying_input_shapes
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     compiled = MLX::Core.compile(->(x) { MLX::Core.add(x, 1.0) }, nil, nil, true)
 
     a = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
@@ -25,6 +29,7 @@ class Phase232CompileShapelessBaselineParityTest < Minitest::Test
   end
 
   def test_shapeless_compile_broadcast_and_reduction
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     compiled = MLX::Core.compile(lambda do |x, bias:|
       shifted = MLX::Core.add(x, bias)
       MLX::Core.sum(shifted)

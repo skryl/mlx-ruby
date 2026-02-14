@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "json"
-require "ostruct"
 require_relative "test_helper"
 
 $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
@@ -38,16 +37,16 @@ class Phase217DistributedConfigPipelineParityTest < Minitest::Test
       runner = lambda do |cmd|
         case cmd
         when ["ssh", "h0", "ipconfig", "getifaddr", "en0"]
-          OpenStruct.new(stdout: "10.0.0.10\n", status: OpenStruct.new(success?: true))
+          struct_with(stdout: "10.0.0.10\n", status: struct_with(success?: true))
         when ["ssh", "h1", "ipconfig", "getifaddr", "en0"]
-          OpenStruct.new(stdout: "10.0.0.11\n", status: OpenStruct.new(success?: true))
+          struct_with(stdout: "10.0.0.11\n", status: struct_with(success?: true))
         else
-          OpenStruct.new(stdout: "", status: OpenStruct.new(success?: true))
+          struct_with(stdout: "", status: struct_with(success?: true))
         end
       end
 
       ring_file = File.join(dir, "ring.json")
-      ring_args = OpenStruct.new(output_hostfile: ring_file, env: ["E=1"], verbose: false, auto_setup: true)
+      ring_args = struct_with(output_hostfile: ring_file, env: ["E=1"], verbose: false, auto_setup: true)
       MLX::DistributedUtils.configure_ring(ring_args, hosts, ips, [[0, 1], 1], sshinfo, runner: runner)
       ring_payload = JSON.parse(File.read(ring_file))
       assert_equal "ring", ring_payload["backend"]
@@ -55,7 +54,7 @@ class Phase217DistributedConfigPipelineParityTest < Minitest::Test
       assert_equal 2, ring_payload["hosts"].length
 
       jaccl_file = File.join(dir, "jaccl.json")
-      jaccl_args = OpenStruct.new(output_hostfile: jaccl_file, env: ["E=2"], verbose: false, auto_setup: true)
+      jaccl_args = struct_with(output_hostfile: jaccl_file, env: ["E=2"], verbose: false, auto_setup: true)
       MLX::DistributedUtils.configure_jaccl(jaccl_args, hosts, ips, sshinfo, runner: runner)
       jaccl_payload = JSON.parse(File.read(jaccl_file))
       assert_equal "jaccl", jaccl_payload["backend"]
@@ -64,7 +63,7 @@ class Phase217DistributedConfigPipelineParityTest < Minitest::Test
       assert_equal ["rdma_en6", nil], jaccl_payload["hosts"][1]["rdma"]
 
       jaccl_ring_file = File.join(dir, "jaccl-ring.json")
-      jaccl_ring_args = OpenStruct.new(output_hostfile: jaccl_ring_file, env: ["E=3"], verbose: false, auto_setup: true)
+      jaccl_ring_args = struct_with(output_hostfile: jaccl_ring_file, env: ["E=3"], verbose: false, auto_setup: true)
       MLX::DistributedUtils.configure_jaccl_ring(jaccl_ring_args, hosts, ips, [[0, 1], 1], sshinfo, runner: runner)
       jaccl_ring_payload = JSON.parse(File.read(jaccl_ring_file))
       assert_equal "jaccl-ring", jaccl_ring_payload["backend"]
@@ -82,16 +81,16 @@ class Phase217DistributedConfigPipelineParityTest < Minitest::Test
       runner = lambda do |cmd|
         case cmd
         when ["ssh", "h0", "ipconfig", "getifaddr", "en0"]
-          OpenStruct.new(stdout: "10.1.0.10\n", status: OpenStruct.new(success?: true))
+          struct_with(stdout: "10.1.0.10\n", status: struct_with(success?: true))
         when ["ssh", "h1", "ipconfig", "getifaddr", "en0"]
-          OpenStruct.new(stdout: "10.1.0.11\n", status: OpenStruct.new(success?: true))
+          struct_with(stdout: "10.1.0.11\n", status: struct_with(success?: true))
         else
-          OpenStruct.new(stdout: "", status: OpenStruct.new(success?: true))
+          struct_with(stdout: "", status: struct_with(success?: true))
         end
       end
 
       out_file = File.join(dir, "ethernet.json")
-      args = OpenStruct.new(output_hostfile: out_file, env: ["ENV_X=1"], verbose: false)
+      args = struct_with(output_hostfile: out_file, env: ["ENV_X=1"], verbose: false)
       MLX::DistributedUtils.prepare_ethernet_hostfile(args, hosts, runner: runner)
 
       payload = JSON.parse(File.read(out_file))
@@ -100,5 +99,11 @@ class Phase217DistributedConfigPipelineParityTest < Minitest::Test
       assert_equal ["10.1.0.10"], payload["hosts"][0]["ips"]
       assert_equal ["10.1.0.11"], payload["hosts"][1]["ips"]
     end
+  end
+
+  private
+
+  def struct_with(**kwargs)
+    Struct.new(*kwargs.keys, keyword_init: true).new(**kwargs)
   end
 end

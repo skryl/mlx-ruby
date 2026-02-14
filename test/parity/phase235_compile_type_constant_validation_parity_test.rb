@@ -3,8 +3,11 @@
 require_relative "test_helper"
 
 class Phase235CompileTypeConstantValidationParityTest < Minitest::Test
+  def run
+    run_without_timeout
+  end
+
   def setup
-    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
@@ -15,6 +18,7 @@ class Phase235CompileTypeConstantValidationParityTest < Minitest::Test
   end
 
   def test_compile_rejects_unsupported_input_types
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     compiled = MLX::Core.compile(lambda do |x, cfg:|
       MLX::Core.add(x, 1.0) if cfg
       x
@@ -25,6 +29,7 @@ class Phase235CompileTypeConstantValidationParityTest < Minitest::Test
   end
 
   def test_compile_accepts_none_and_scalar_constants
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     compiled = MLX::Core.compile(lambda do |x, scale: 1.0, bias: nil, enabled: true|
       y = MLX::Core.multiply(x, scale)
       y = MLX::Core.add(y, bias) unless bias.nil?

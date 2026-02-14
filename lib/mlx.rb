@@ -58,6 +58,7 @@ require_relative "mlx/extension"
 require_relative "mlx/utils"
 require_relative "mlx/nn"
 require_relative "mlx/optimizers"
+require_relative "mlx/dsl"
 
 require_relative "mlx/distributed_utils/common"
 require_relative "mlx/distributed_utils/config"

@@ -18,7 +18,7 @@ class Phase61ExportGraphTest < Minitest::Test
     fun = ->(x) { MLX::Core.add(x, 2.0) }
     x = MLX::Core.array([1.0, 3.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       path = File.join(dir, "add2.mlxfn")
       MLX::Core.export_function(path, fun, [x])
 
@@ -32,7 +32,7 @@ class Phase61ExportGraphTest < Minitest::Test
     fun = ->(x) { MLX::Core.multiply(x, 3.0) }
     x = MLX::Core.array([2.0, 4.0], MLX::Core.float32)
 
-    Dir.mktmpdir do |dir|
+    TestSupport.mktmpdir do |dir|
       fn_path = File.join(dir, "mul3.mlxfn")
       exporter = MLX::Core.exporter(fn_path, fun)
       exporter.call(x)

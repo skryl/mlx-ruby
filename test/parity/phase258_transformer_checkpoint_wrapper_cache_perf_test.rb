@@ -15,28 +15,28 @@ class Phase258TransformerCheckpointWrapperCachePerfTest < Minitest::Test
 
   def test_transformer_encoder_checkpoint_wrappers_are_not_rebuilt_per_call
     calls = 0
-    original_checkpoint = MLX::NN.method(:checkpoint)
+    trace = TracePoint.new(:call) do |tp|
+      next unless tp.method_id == :checkpoint
+      next unless tp.defined_class.equal?(MLX::NN.singleton_class)
 
-    MLX::NN.define_singleton_method(:checkpoint) do |module_obj, fn = nil, &block|
       calls += 1
-      original_checkpoint.call(module_obj, fn, &block)
     end
 
-    encoder = MLX::NN::TransformerEncoder.new(
-      2,
-      8,
-      2,
-      checkpoint: true,
-      dropout: 0.0
-    )
+    trace.enable do
+      encoder = MLX::NN::TransformerEncoder.new(
+        2,
+        8,
+        2,
+        checkpoint: true,
+        dropout: 0.0
+      )
 
-    x = MLX::Core.array([[[0.1] * 8, [0.2] * 8]], MLX::Core.float32)
+      x = MLX::Core.array([[[0.1] * 8, [0.2] * 8]], MLX::Core.float32)
 
-    encoder.call(x, nil)
-    encoder.call(x, nil)
+      encoder.call(x, nil)
+      encoder.call(x, nil)
+    end
 
     assert_equal 2, calls
-  ensure
-    MLX::NN.define_singleton_method(:checkpoint, original_checkpoint) unless original_checkpoint.nil?
   end
 end

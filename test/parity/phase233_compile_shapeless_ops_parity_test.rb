@@ -3,8 +3,11 @@
 require_relative "test_helper"
 
 class Phase233CompileShapelessOpsParityTest < Minitest::Test
+  def run
+    run_without_timeout
+  end
+
   def setup
-    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
@@ -15,6 +18,7 @@ class Phase233CompileShapelessOpsParityTest < Minitest::Test
   end
 
   def test_shapeless_compile_unflatten_gather_full_like
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     gather_idx = MLX::Core.array([[1, 0], [0, 1]], MLX::Core.int32)
     compiled = MLX::Core.compile(lambda do |x|
       flat = MLX::Core.reshape(x, [x.shape.reduce(:*)])
@@ -31,6 +35,7 @@ class Phase233CompileShapelessOpsParityTest < Minitest::Test
   end
 
   def test_shapeless_compile_matmul_slice_update_and_reshape
+    skip("pending: timeout-sensitive parity coverage; re-enable in final CI")
     w = MLX::Core.array([[1.0], [2.0]], MLX::Core.float32)
     update = MLX::Core.array([[9.0, 9.0]], MLX::Core.float32)
     compiled = MLX::Core.compile(lambda do |x|
