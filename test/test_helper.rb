@@ -20,18 +20,61 @@ module TestSupport
     ext_dir = File.join(RUBY_ROOT, "ext", "mlx")
     makefile_path = File.join(ext_dir, "Makefile")
     bundle_path = File.join(ext_dir, "native.#{RbConfig::CONFIG.fetch('DLEXT', 'bundle')}")
+    signature_path = native_build_signature_path(ext_dir)
+    signature_mismatch = native_build_signature_mismatch?(signature_path)
 
     if reuse_loadable_native_bundle_without_sources?(bundle_path)
       @native_built = true
       return
     end
 
-    if native_build_required?(bundle_path)
-      run_cmd!(%w[ruby extconf.rb], ext_dir) if makefile_stale?(makefile_path)
+    if native_build_required?(bundle_path) || signature_mismatch
+      run_cmd!(%w[ruby extconf.rb], ext_dir) if makefile_stale?(makefile_path) || signature_mismatch
       run_cmd!(%w[make], ext_dir)
+      write_native_build_signature!(signature_path)
     end
 
     @native_built = true
+  end
+
+  def native_build_signature_path(ext_dir)
+    File.join(ext_dir, ".native_build_signature")
+  end
+
+  def native_build_signature_mismatch?(signature_path)
+    return false unless native_rebuild_sources_available?
+
+    expected = current_native_build_signature
+    return true unless File.exist?(signature_path)
+
+    File.read(signature_path).strip != expected
+  end
+
+  def write_native_build_signature!(signature_path)
+    return unless native_rebuild_sources_available?
+
+    File.write(signature_path, "#{current_native_build_signature}\n")
+  end
+
+  def current_native_build_signature
+    [
+      RUBY_VERSION,
+      RbConfig::CONFIG.fetch("arch", ""),
+      newest_native_input_mtime.to_i,
+      git_head_revision(RUBY_ROOT),
+      git_head_revision(REPO_ROOT)
+    ].join("|")
+  end
+
+  def git_head_revision(path)
+    return nil unless Dir.exist?(path)
+
+    stdout, _stderr, status = Open3.capture3("git", "-C", path, "rev-parse", "HEAD")
+    return nil unless status.success?
+
+    stdout.strip
+  rescue Errno::ENOENT
+    nil
   end
 
   def reuse_loadable_native_bundle_without_sources?(bundle_path)
@@ -150,6 +193,12 @@ module TestSupport
       yield dir
     end
   end
+end
+
+begin
+  TestSupport.build_native_extension!
+rescue StandardError
+  nil
 end
 
 raw_test_timeout = ENV.fetch("MLX_TEST_TIMEOUT", "10").to_i

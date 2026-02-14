@@ -57,6 +57,28 @@ class TestHelperBuildPolicyTest < Minitest::Test
     assert_includes calls, %w[make]
   end
 
+  def test_signature_mismatch_triggers_rebuild_when_sources_are_available
+    calls = []
+    writes = []
+
+    stub_singleton_method(:native_build_required?) { |_bundle_path| false }
+    stub_singleton_method(:native_rebuild_sources_available?) { true }
+    stub_singleton_method(:native_build_signature_mismatch?) { |_signature_path| true }
+    stub_singleton_method(:makefile_stale?) { |_makefile_path| false }
+    stub_singleton_method(:run_cmd!) do |cmd, _chdir|
+      calls << cmd
+    end
+    stub_singleton_method(:write_native_build_signature!) do |signature_path|
+      writes << signature_path
+    end
+
+    TestSupport.build_native_extension!
+
+    assert_includes calls, %w[ruby extconf.rb]
+    assert_includes calls, %w[make]
+    assert_equal 1, writes.length
+  end
+
   private
 
   def stub_singleton_method(name, &block)

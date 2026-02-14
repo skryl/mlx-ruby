@@ -100,6 +100,8 @@ p y.to_a           # => [1.414..., 1.732..., 2.0]
 
 ### Minimal trainable module
 
+#### Non-DSL
+
 ```ruby
 require "mlx"
 
@@ -140,7 +142,43 @@ end
 
 Important: when defining `MLX::NN::Module`, register trainable arrays/submodules with `self.<name> = ...` (not only `@ivar = ...`) so they are tracked in `parameters` and optimized correctly.
 
+#### DSL
+
+```ruby
+require "mlx"
+
+mx = MLX::Core
+
+class LinearRegressorDsl < MLX::DSL::Model
+  option :in_dim, default: 3
+  option :out_dim, default: 1
+  layer :linear, MLX::NN::Linear, -> { in_dim }, -> { out_dim }
+
+  def call(x)
+    linear.call(x)
+  end
+end
+
+model = LinearRegressorDsl.new
+optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-2)
+
+step = model.train_step(optimizer: optimizer, sync: :step) do |x:, y:|
+  diff = model.call(x) - y
+  mx.mean(diff * diff)
+end
+
+x = mx.array([[1.0, 2.0, 3.0], [2.0, 1.0, 0.0]], mx.float32)
+y = mx.array([[1.0], [0.0]], mx.float32)
+
+5.times do |iter|
+  loss = step.call(x: x, y: y)
+  puts "step=#{iter} loss=#{loss.item}"
+end
+```
+
 ### Small CNN (single training step)
+
+#### Non-DSL
 
 ```ruby
 require "mlx"
@@ -187,7 +225,59 @@ mx.eval(loss, model.parameters, optimizer.state)
 puts "cnn_loss=#{loss.item}"
 ```
 
+#### DSL
+
+```ruby
+require "mlx"
+
+mx = MLX::Core
+
+class SmallCnnDsl < MLX::DSL::Model
+  option :num_classes, default: 10
+
+  layer :features do
+    sequential do
+      conv2d 1, 16, 3, padding: 1
+      relu
+      max_pool2d 2, stride: 2
+      conv2d 16, 32, 3, padding: 1
+      relu
+      max_pool2d 2, stride: 2
+    end
+  end
+
+  layer :classifier do
+    sequential do
+      fn { |x| MLX::Core.reshape(x, [x.shape[0], 32 * 7 * 7]) }
+      linear 32 * 7 * 7, 64
+      relu
+      linear 64, num_classes
+    end
+  end
+
+  def call(x)
+    classifier.call(features.call(x))
+  end
+end
+
+model = SmallCnnDsl.new(num_classes: 10)
+optimizer = MLX::Optimizers::Adam.new(learning_rate: 1e-3)
+
+step = model.train_step(optimizer: optimizer, sync: :step) do |images:, labels:|
+  logits = model.call(images)
+  MLX::NN.cross_entropy(logits, labels, reduction: "mean")
+end
+
+images = mx.random_uniform([4, 28, 28, 1], 0.0, 1.0, mx.float32)
+labels = mx.array([1, 3, 4, 7], mx.int32)
+
+loss = step.call(images: images, labels: labels)
+puts "cnn_loss=#{loss.item}"
+```
+
 ### Karpathy-style nano GPT (single training step)
+
+#### Non-DSL
 
 ```ruby
 require "mlx"
@@ -252,7 +342,63 @@ mx.eval(loss, model.parameters, optimizer.state)
 puts "nanogpt_loss=#{loss.item}"
 ```
 
-### Ruby DSL (experimental ergonomic layer)
+#### DSL
+
+```ruby
+require "mlx"
+
+mx = MLX::Core
+vocab_size = 65
+seq_len = 32
+batch_size = 4
+dims = 128
+heads = 4
+layers = 2
+
+class NanoGptDsl < MLX::DSL::Model
+  option :vocab_size
+  option :seq_len
+  option :dims
+  option :heads
+  option :layers
+
+  layer :token_embedding, MLX::NN::Embedding, -> { vocab_size }, -> { dims }
+  layer :pos_embedding, MLX::NN::Embedding, -> { seq_len }, -> { dims }
+  layer :encoder, MLX::NN::TransformerEncoder, -> { layers }, -> { dims }, -> { heads },
+    mlp_dims: -> { dims * 4 },
+    dropout: 0.0,
+    norm_first: true
+  layer :head, MLX::NN::Linear, -> { dims }, -> { vocab_size }
+
+  def call(input_ids)
+    positions = MLX::Core.arange(0, input_ids.shape[1], 1, MLX::Core.int32)
+    hidden = MLX::Core.add(token_embedding.call(input_ids), pos_embedding.call(positions))
+    mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(input_ids.shape[1])
+    head.call(encoder.call(hidden, mask))
+  end
+end
+
+tokens = Array.new(batch_size) { Array.new(seq_len) { rand(vocab_size) } }
+targets = tokens.map { |row| row[1..] + [0] }
+
+input_ids = mx.array(tokens, mx.int32)
+target_ids = mx.array(targets, mx.int32)
+
+model = NanoGptDsl.new(vocab_size: vocab_size, seq_len: seq_len, dims: dims, heads: heads, layers: layers)
+optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-3)
+
+step = model.train_step(optimizer: optimizer, sync: :step) do |input_ids:, target_ids:|
+  logits = model.call(input_ids)
+  logits2d = MLX::Core.reshape(logits, [batch_size * seq_len, vocab_size])
+  labels1d = MLX::Core.reshape(target_ids, [batch_size * seq_len])
+  MLX::NN.cross_entropy(logits2d, labels1d, reduction: "mean")
+end
+
+loss = step.call(input_ids: input_ids, target_ids: target_ids)
+puts "nanogpt_loss=#{loss.item}"
+```
+
+### Ruby DSL
 
 `MLX::DSL` provides Ruby-style declarations on top of the existing `MLX::NN::Module` behavior.
 
