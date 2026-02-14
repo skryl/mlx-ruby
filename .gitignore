@@ -82,6 +82,9 @@ uv.lock
 !/test/parity/reports/phase0_contract.json
 /test/tmp/
 
+# Generated docs autosummary directories
+/docs/**/_autosummary/
+
 # Generated native extension artifacts
 /ext/mlx/Makefile
 /ext/mlx/mkmf.log
