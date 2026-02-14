@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    mlx (0.30.7.1)
+    mlx (0.30.7.2)
 
 GEM
   remote: https://rubygems.org/
