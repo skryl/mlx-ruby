@@ -89,9 +89,9 @@ CCDLFLAGS = -fno-common
 CFLAGS   = $(CCDLFLAGS) $(cflags) -fno-common -pipe $(ARCH_FLAG)
 INCFLAGS = -I. -I$(arch_hdrdir) -I$(hdrdir)/ruby/backward -I$(hdrdir) -I$(srcdir)
 DEFS     = 
-CPPFLAGS =  -I/Users/skryl/Dev/mlx-ruby/codex-dsl/mlx -D_XOPEN_SOURCE -D_DARWIN_C_SOURCE -D_DARWIN_UNLIMITED_SELECT -D_REENTRANT $(DEFS) $(cppflags) -I/Users/skryl/Dev/mlx-ruby/codex-dsl/mlx
+CPPFLAGS =  -I/Users/skryl/Dev/mlx-ruby/master/mlx -D_XOPEN_SOURCE -D_DARWIN_C_SOURCE -D_DARWIN_UNLIMITED_SELECT -D_REENTRANT $(DEFS) $(cppflags) -I/Users/skryl/Dev/mlx-ruby/master/mlx
 CXXFLAGS = $(CCDLFLAGS) -fdeclspec -std=c++20 $(ARCH_FLAG)
-ldflags  = -L. -fstack-protector-strong -L/opt/homebrew/Cellar/gmp/6.3.0/lib -L/Users/skryl/Dev/mlx-ruby/codex-dsl/ext/mlx/build/install/lib -Wl,-rpath,/Users/skryl/Dev/mlx-ruby/codex-dsl/ext/mlx/build/install/lib
+ldflags  = -L. -fstack-protector-strong -L/opt/homebrew/Cellar/gmp/6.3.0/lib -L/Users/skryl/Dev/mlx-ruby/master/ext/mlx/build/install/lib -Wl,-rpath,/Users/skryl/Dev/mlx-ruby/master/ext/mlx/build/install/lib
 dldflags = -L/opt/homebrew/Cellar/gmp/6.3.0/lib -Wl,-undefined,dynamic_lookup 
 ARCH_FLAG = -arch arm64
 DLDFLAGS = $(ldflags) $(dldflags) $(ARCH_FLAG)
@@ -130,8 +130,8 @@ TOUCH = exit >
 #### End of system configuration section. ####
 
 preload = 
-libpath = . $(libdir) /Users/skryl/Dev/mlx-ruby/codex-dsl/ext/mlx/build/install/lib
-LIBPATH = -L. -L$(libdir) -L/Users/skryl/Dev/mlx-ruby/codex-dsl/ext/mlx/build/install/lib
+libpath = . $(libdir) /Users/skryl/Dev/mlx-ruby/master/ext/mlx/build/install/lib
+LIBPATH = -L. -L$(libdir) -L/Users/skryl/Dev/mlx-ruby/master/ext/mlx/build/install/lib
 DEFFILE = 
 
 CLEANFILES = mkmf.log
