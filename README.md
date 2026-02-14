@@ -73,6 +73,16 @@ gem "mlx", path: "/absolute/path/to/mlx-ruby"
 bundle exec ruby -e 'require "mlx"; puts MLX::VERSION; puts "native=#{MLX.native_available?}"'
 ```
 
+## Examples
+
+For end-to-end examples, see [`skryl/mlx-ruby-examples`](https://github.com/skryl/mlx-ruby-examples).
+
+- [Transformer](https://github.com/skryl/mlx-ruby-examples/tree/main/transformer_lm)
+- [LLaMA](https://github.com/skryl/mlx-ruby-examples/tree/main/llms/llama)
+- [LoRA](https://github.com/skryl/mlx-ruby-examples/tree/main/lora)
+- [Stable Diffusion](https://github.com/skryl/mlx-ruby-examples/tree/main/stable_diffusion)
+- [Whisper](https://github.com/skryl/mlx-ruby-examples/tree/main/whisper)
+
 ## Quickstart
 
 ### Arrays and lazy execution
