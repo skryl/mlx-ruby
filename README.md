@@ -33,6 +33,22 @@ This repository packages:
 
 ## Installation
 
+### macOS prerequisite: install MetalToolchain
+
+On macOS, install the Apple Metal toolchain before installing the gem:
+
+```bash
+xcode-select --install
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+xcodebuild -downloadComponent MetalToolchain
+```
+
+Optional check:
+
+```bash
+xcrun --find metal
+```
+
 ### Install from RubyGems
 
 ```bash
