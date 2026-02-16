@@ -1,11 +1,15 @@
 import argparse
 import json
 import os
-import random
 import time
 
 import mlx.core as mx
 import mlx.optimizers as optim
+from benchmark_digest import BATCH_OFFSET
+from benchmark_digest import BATCH_STRIDE
+from benchmark_digest import assign_deterministic_parameters
+from benchmark_digest import digest_array
+from benchmark_digest import digest_value
 from mlx import nn
 from mlx.nn import losses
 from mlx.nn.layers.dropout import Dropout
@@ -42,18 +46,23 @@ def load_dataset(path):
             "Add benchmark/fixtures/karpathy.txt before running this benchmark."
         )
 
-    with open(path, "r", encoding="utf-8") as handle:
-        text = handle.read()
+    with open(path, "rb") as handle:
+        raw = list(handle.read())
 
-    chars = sorted(set(text))
-    if len(chars) == 0:
+    vocab = sorted(set(raw))
+    if len(vocab) == 0:
         raise ValueError(f"Dataset at {path} is empty.")
 
-    stoi = {char: idx for idx, char in enumerate(chars)}
-    data = [stoi[char] for char in text]
-    vocab_size = len(chars)
+    stoi = {value: idx for idx, value in enumerate(vocab)}
+    data = [stoi[value] for value in raw]
+    vocab_size = len(vocab)
     split = len(data) * 9 // 10
     return data[:split], vocab_size
+
+
+def deterministic_starts(max_start, batch_size, step_index):
+    base = step_index * BATCH_STRIDE
+    return [((base + (idx * BATCH_OFFSET)) % max_start) for idx in range(batch_size)]
 
 
 def main():
@@ -96,18 +105,19 @@ def main():
             x = self.ln(x)
             return self.lm_head(x)
 
-    def get_batch():
+    def get_batch_for_step(step_index):
         max_start = len(train_data) - args.sequence_length - 1
         if max_start <= 0:
             raise ValueError(
                 f"Sequence length {args.sequence_length} is too large for dataset size {len(train_data)}."
             )
-        starts = [random.randrange(max_start) for _ in range(args.batch_size)]
+        starts = deterministic_starts(max_start, args.batch_size, step_index)
         x = [train_data[start : start + args.sequence_length] for start in starts]
         y = [train_data[start + 1 : start + args.sequence_length + 1] for start in starts]
         return mx.array(x, mx.int32), mx.array(y, mx.int32)
 
     model = GPT2Model()
+    assign_deterministic_parameters(model)
 
     def loss_fn(x, y):
         logits = model(x)
@@ -122,22 +132,40 @@ def main():
     step = value_and_grad(model, loss_fn)
     optimizer = optim.AdamW(learning_rate=1e-3)
 
-    sample_input, _ = get_batch()
+    sample_input, sample_target = get_batch_for_step(0)
     out = model(sample_input)
+    input_digest = digest_value(
+        {
+            "train_data": train_data,
+            "batch_size": args.batch_size,
+            "sequence_length": args.sequence_length,
+            "batch_stride": BATCH_STRIDE,
+            "batch_offset": BATCH_OFFSET,
+            "sample_input": sample_input,
+            "sample_target": sample_target,
+        }
+    )
+    reference_output_digest = digest_array(out)
+    path_signature = "value_and_grad_update_eval_loss"
 
-    for i in range(args.warmup):
-        x, y = get_batch()
+    def run_step(step_index):
+        x, y = get_batch_for_step(step_index)
         loss, grads = step(x, y)
         optimizer.update(model, grads)
+        return loss
+
+    step_index = 0
+    for i in range(args.warmup):
+        loss = run_step(step_index)
+        step_index += 1
         mx.eval(loss)
         if (i + 1) == args.warmup or (i + 1) % warmup_every == 0:
             print(f"[python/karpathy_gpt2] warmup {i + 1}/{args.warmup}", flush=True)
 
     start = time.perf_counter()
     for i in range(args.iterations):
-        x, y = get_batch()
-        loss, grads = step(x, y)
-        optimizer.update(model, grads)
+        loss = run_step(step_index)
+        step_index += 1
         mx.eval(loss)
         if (i + 1) == args.iterations or (i + 1) % iter_every == 0:
             print(f"[python/karpathy_gpt2] iter {i + 1}/{args.iterations}", flush=True)
@@ -150,6 +178,9 @@ def main():
                 "iterations": args.iterations,
                 "warmup": args.warmup,
                 "output_shape": list(out.shape),
+                "input_digest": input_digest,
+                "reference_output_digest": reference_output_digest,
+                "path_signature": path_signature,
             }
         )
     )

@@ -3,6 +3,11 @@ import json
 import time
 
 import mlx.core as mx
+from benchmark_digest import INPUT_BASE_OFFSET
+from benchmark_digest import assign_deterministic_parameters
+from benchmark_digest import deterministic_tensor
+from benchmark_digest import digest_array
+from benchmark_digest import digest_value
 from mlx.nn.layers.transformer import MultiHeadAttention
 from mlx.nn.layers.transformer import Transformer
 
@@ -32,17 +37,15 @@ def main():
     warmup_every = max(1, args.warmup // 5)
     iter_every = max(1, args.iterations // 5)
 
-    src = mx.random.uniform(
-        low=-1.0,
-        high=1.0,
-        shape=(args.batch_size, args.source_sequence_length, args.dims),
-        dtype=mx.float32,
+    src = deterministic_tensor(
+        (args.batch_size, args.source_sequence_length, args.dims),
+        mx.float32,
+        offset=0,
     )
-    tgt = mx.random.uniform(
-        low=-1.0,
-        high=1.0,
-        shape=(args.batch_size, args.target_sequence_length, args.dims),
-        dtype=mx.float32,
+    tgt = deterministic_tensor(
+        (args.batch_size, args.target_sequence_length, args.dims),
+        mx.float32,
+        offset=INPUT_BASE_OFFSET,
     )
     src_mask = MultiHeadAttention.create_additive_causal_mask(
         args.source_sequence_length, mx.float32
@@ -50,6 +53,7 @@ def main():
     tgt_mask = MultiHeadAttention.create_additive_causal_mask(
         args.target_sequence_length, mx.float32
     )
+    input_digest = digest_value([src, tgt, src_mask, tgt_mask])
 
     model = Transformer(
         dims=args.dims,
@@ -59,17 +63,24 @@ def main():
         mlp_dims=args.dims * 4,
         dropout=0.0,
     )
+    assign_deterministic_parameters(model)
+
+    def run_step():
+        return model(src, tgt, src_mask, tgt_mask, None)
+
+    reference_output_digest = digest_array(run_step())
+    path_signature = "forward_only_eval_output"
 
     out = None
     for i in range(args.warmup):
-        out = model(src, tgt, src_mask, tgt_mask, None)
+        out = run_step()
         mx.eval(out)
         if (i + 1) == args.warmup or (i + 1) % warmup_every == 0:
             print(f"[python/transformer] warmup {i + 1}/{args.warmup}", flush=True)
 
     start = time.perf_counter()
     for i in range(args.iterations):
-        out = model(src, tgt, src_mask, tgt_mask, None)
+        out = run_step()
         mx.eval(out)
         if (i + 1) == args.iterations or (i + 1) % iter_every == 0:
             print(f"[python/transformer] iter {i + 1}/{args.iterations}", flush=True)
@@ -82,6 +93,9 @@ def main():
                 "iterations": args.iterations,
                 "warmup": args.warmup,
                 "output_shape": list(out.shape),
+                "input_digest": input_digest,
+                "reference_output_digest": reference_output_digest,
+                "path_signature": path_signature,
             }
         )
     )
