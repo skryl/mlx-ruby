@@ -1,11 +1,12 @@
 PATH
   remote: .
   specs:
-    mlx (0.30.7.2)
+    mlx (0.30.7.3)
 
 GEM
   remote: https://rubygems.org/
   specs:
+    benchmark (0.5.0)
     minitest (6.0.1)
       prism (~> 1.5)
     prism (1.9.0)
@@ -16,6 +17,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  benchmark
   minitest
   mlx!
   rake

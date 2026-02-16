@@ -34,3 +34,19 @@ Suggested reading path:
    )
 
    puts report[:best_monitor]
+
+Generation helper example:
+
+.. code-block:: ruby
+
+   generator = MLX::DSL::Generate.new(
+     model: model,
+     tokenizer: tokenizer,
+     eos_id: tokenizer.eos_id,
+     sampler: { strategy: :argmax },
+     mode: :decoder_only
+   )
+
+   generator.each_token(prompt: "Hello", max_tokens: 32) do |_token_id, chunk|
+     print chunk if chunk
+   end

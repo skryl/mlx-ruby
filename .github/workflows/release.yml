@@ -14,6 +14,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RUBY_CRASH_REPORT: ${{ runner.temp }}/ruby-crash-report.log
     steps:
       - uses: actions/checkout@v6
         with:
@@ -35,7 +37,19 @@ jobs:
       - name: Install dependencies
         run: bundle install
       - name: Run test suite
+        env:
+          RUBYOPT: -W:deprecated -W:performance
         run: bundle exec rake test
+      - name: Show Ruby crash report (if present)
+        if: always()
+        run: |
+          if [ -f "${RUBY_CRASH_REPORT}" ]; then
+            echo "::group::Ruby crash report"
+            cat "${RUBY_CRASH_REPORT}"
+            echo "::endgroup::"
+          else
+            echo "No Ruby crash report emitted."
+          fi
       - name: Build gem
         run: gem build mlx.gemspec
       - name: Upload gem artifact

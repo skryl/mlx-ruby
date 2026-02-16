@@ -13,7 +13,7 @@ Gem::Specification.new do |spec|
   spec.homepage = "https://github.com/skryl/mlx-ruby"
   spec.license = "MIT"
 
-  spec.required_ruby_version = ">= 3.1"
+  spec.required_ruby_version = ">= 3.3"
 
   spec.files = Dir.chdir(__dir__) do
     include_globs = [
@@ -33,6 +33,9 @@ Gem::Specification.new do |spec|
   end
   spec.require_paths = ["lib"]
   spec.extensions = ["ext/mlx/extconf.rb"]
+  spec.add_development_dependency "rake"
+  spec.add_development_dependency "minitest"
+  spec.add_development_dependency "benchmark"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage

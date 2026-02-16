@@ -52,6 +52,7 @@ Reference pages:
 
 - :doc:`model_declaration`
 - :doc:`builder_and_graphs`
+- :doc:`runtime_primitives`
 - :doc:`train_step`
 - :doc:`trainer_core`
 - :doc:`trainer_data`

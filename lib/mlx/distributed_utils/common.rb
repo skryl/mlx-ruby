@@ -5,7 +5,7 @@ require "json"
 
 module MLX
   module DistributedUtils
-    Host = Struct.new(:rank, :ssh_hostname, :ips, :rdma, keyword_init: true)
+    Host = Data.define(:rank, :ssh_hostname, :ips, :rdma)
 
     class Hostfile
       attr_accessor :hosts, :backend, :envs

@@ -18,7 +18,7 @@ silicon computer is
 To install from RubyGems your system must meet the following requirements:
 
 - Using an M series chip (Apple silicon)
-- Using a native Ruby >= 3.10
+- Using a native Ruby >= 3.3
 - macOS >= 14.0
 
 .. note::

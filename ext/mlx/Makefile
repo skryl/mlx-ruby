@@ -13,12 +13,12 @@ NULLCMD = :
 #### Start of system configuration section. ####
 
 srcdir = .
-topdir = /Users/skryl/.asdf/installs/ruby/3.4.2/include/ruby-3.4.0
+topdir = /Users/skryl/.asdf/installs/ruby/4.0.1/include/ruby-4.0.0
 hdrdir = $(topdir)
-arch_hdrdir = /Users/skryl/.asdf/installs/ruby/3.4.2/include/ruby-3.4.0/arm64-darwin24
+arch_hdrdir = /Users/skryl/.asdf/installs/ruby/4.0.1/include/ruby-4.0.0/arm64-darwin25
 PATH_SEPARATOR = :
 VPATH = $(srcdir):$(arch_hdrdir)/ruby:$(hdrdir)/ruby
-prefix = $(DESTDIR)/Users/skryl/.asdf/installs/ruby/3.4.2
+prefix = $(DESTDIR)/Users/skryl/.asdf/installs/ruby/4.0.1
 rubysitearchprefix = $(rubylibprefix)/$(sitearch)
 rubyarchprefix = $(rubylibprefix)/$(arch)
 rubylibprefix = $(libdir)/$(RUBY_BASE_NAME)
@@ -89,29 +89,29 @@ CCDLFLAGS = -fno-common
 CFLAGS   = $(CCDLFLAGS) $(cflags) -fno-common -pipe $(ARCH_FLAG)
 INCFLAGS = -I. -I$(arch_hdrdir) -I$(hdrdir)/ruby/backward -I$(hdrdir) -I$(srcdir)
 DEFS     = 
-CPPFLAGS =  -I/Users/skryl/Dev/mlx-ruby/master/mlx -D_XOPEN_SOURCE -D_DARWIN_C_SOURCE -D_DARWIN_UNLIMITED_SELECT -D_REENTRANT $(DEFS) $(cppflags) -I/Users/skryl/Dev/mlx-ruby/master/mlx
+CPPFLAGS =  -I/Users/skryl/Documents/dev/projects/mlx-ruby/master/mlx -D_XOPEN_SOURCE -D_DARWIN_C_SOURCE -D_DARWIN_UNLIMITED_SELECT -D_REENTRANT $(DEFS) $(cppflags) -I/Users/skryl/Documents/dev/projects/mlx-ruby/master/mlx
 CXXFLAGS = $(CCDLFLAGS) -fdeclspec -std=c++20 $(ARCH_FLAG)
-ldflags  = -L. -fstack-protector-strong -L/opt/homebrew/Cellar/gmp/6.3.0/lib -L/Users/skryl/Dev/mlx-ruby/master/ext/mlx/build/install/lib -Wl,-rpath,/Users/skryl/Dev/mlx-ruby/master/ext/mlx/build/install/lib
+ldflags  = -L. -fstack-protector-strong -L/opt/homebrew/Cellar/gmp/6.3.0/lib -L/Users/skryl/Documents/dev/projects/mlx-ruby/master/ext/mlx/build/install/lib -Wl,-rpath,/Users/skryl/Documents/dev/projects/mlx-ruby/master/ext/mlx/build/install/lib
 dldflags = -L/opt/homebrew/Cellar/gmp/6.3.0/lib -Wl,-undefined,dynamic_lookup 
 ARCH_FLAG = -arch arm64
 DLDFLAGS = $(ldflags) $(dldflags) $(ARCH_FLAG)
 LDSHARED = $(CC) -dynamic -bundle
 LDSHAREDXX = $(CXX) -dynamic -bundle
 POSTLINK = dsymutil $@ 2>/dev/null; { test -z '$(RUBY_CODESIGN)' || codesign -s '$(RUBY_CODESIGN)' $@; }
-AR = llvm-ar
+AR = ar
 LD = ld
 EXEEXT = 
 
 RUBY_INSTALL_NAME = $(RUBY_BASE_NAME)
-RUBY_SO_NAME = ruby.3.4
+RUBY_SO_NAME = ruby.4.0
 RUBYW_INSTALL_NAME = 
 RUBY_VERSION_NAME = $(RUBY_BASE_NAME)-$(ruby_version)
 RUBYW_BASE_NAME = rubyw
 RUBY_BASE_NAME = ruby
 
-arch = arm64-darwin24
+arch = arm64-darwin25
 sitearch = $(arch)
-ruby_version = 3.4.0
+ruby_version = 4.0.0
 ruby = $(bindir)/$(RUBY_BASE_NAME)
 RUBY = $(ruby)
 BUILTRUBY = $(bindir)/$(RUBY_BASE_NAME)
@@ -120,8 +120,8 @@ ruby_headers = $(hdrdir)/ruby.h $(hdrdir)/ruby/backward.h $(hdrdir)/ruby/ruby.h 
 RM = rm -f
 RM_RF = rm -fr
 RMDIRS = rmdir -p
-MAKEDIRS = mkdir -p
-INSTALL = /usr/bin/install -c
+MAKEDIRS = /opt/homebrew/bin/gmkdir -p
+INSTALL = /opt/homebrew/bin/ginstall -c
 INSTALL_PROG = $(INSTALL) -m 0755
 INSTALL_DATA = $(INSTALL) -m 644
 COPY = cp
@@ -130,8 +130,8 @@ TOUCH = exit >
 #### End of system configuration section. ####
 
 preload = 
-libpath = . $(libdir) /Users/skryl/Dev/mlx-ruby/master/ext/mlx/build/install/lib
-LIBPATH = -L. -L$(libdir) -L/Users/skryl/Dev/mlx-ruby/master/ext/mlx/build/install/lib
+libpath = . $(libdir) /Users/skryl/Documents/dev/projects/mlx-ruby/master/ext/mlx/build/install/lib
+LIBPATH = -L. -L$(libdir) -L/Users/skryl/Documents/dev/projects/mlx-ruby/master/ext/mlx/build/install/lib
 DEFFILE = 
 
 CLEANFILES = mkmf.log

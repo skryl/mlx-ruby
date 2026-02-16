@@ -26,12 +26,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-22.04
-            ruby: "3.3"
-          - os: macos-14
-            ruby: "3.3"
+        os: [ubuntu-22.04, macos-14]
+        ruby: ["3.4", "4.0"]
     runs-on: ${{ matrix.os }}
+    env:
+      RUBY_CRASH_REPORT: ${{ runner.temp }}/ruby-crash-report.log
     steps:
       - uses: actions/checkout@v6
         with:
@@ -60,4 +59,16 @@ jobs:
       - name: Install dependencies
         run: bundle install
       - name: Run Ruby test suite
+        env:
+          RUBYOPT: -W:deprecated -W:performance
         run: bundle exec rake test
+      - name: Show Ruby crash report (if present)
+        if: always()
+        run: |
+          if [ -f "${RUBY_CRASH_REPORT}" ]; then
+            echo "::group::Ruby crash report"
+            cat "${RUBY_CRASH_REPORT}"
+            echo "::endgroup::"
+          else
+            echo "No Ruby crash report emitted."
+          fi

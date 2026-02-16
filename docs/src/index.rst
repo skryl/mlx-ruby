@@ -70,6 +70,7 @@ are the CPU and GPU.
    ruby_dsl/index
    ruby_dsl/model_declaration
    ruby_dsl/builder_and_graphs
+   ruby_dsl/runtime_primitives
    ruby_dsl/train_step
    ruby_dsl/trainer_core
    ruby_dsl/trainer_data

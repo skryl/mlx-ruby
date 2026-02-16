@@ -8,13 +8,14 @@ require "shellwords"
 
 module MLX
   module DistributedUtils
-    SSHInfo = Struct.new(:can_ssh, :has_sudo, keyword_init: true) do
+    SSHInfo = Data.define(:can_ssh, :has_sudo) do
       def to_bool
         can_ssh
       end
     end
-    ThunderboltPort = Struct.new(:iface, :uuid, :connected_to, keyword_init: true)
-    ThunderboltHost = Struct.new(:name, :ports, keyword_init: true)
+    ThunderboltPort = Data.define(:iface, :uuid, :connected_to)
+    ThunderboltHost = Data.define(:name, :ports)
+    CommandResult = Data.define(:stdout, :stderr, :status)
 
     class IPConfigurator
       attr_reader :ips, :hosts, :tb_hosts
@@ -509,6 +510,8 @@ module MLX
       end
 
       def config_main(argv = ARGV, runner: nil)
+        Process.warmup if Process.respond_to?(:warmup)
+
         opts = {
           verbose: false,
           hosts: "127.0.0.1",
@@ -577,7 +580,7 @@ module MLX
         return runner.call(cmd) unless runner.nil?
 
         stdout, stderr, status = Open3.capture3(*cmd)
-        Struct.new(:stdout, :stderr, :status, keyword_init: true).new(stdout: stdout, stderr: stderr, status: status)
+        CommandResult.new(stdout: stdout, stderr: stderr, status: status)
       end
 
       def stdout_for(result)
