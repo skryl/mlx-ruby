@@ -14,8 +14,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      RUBY_CRASH_REPORT: ${{ runner.temp }}/ruby-crash-report.log
     steps:
       - uses: actions/checkout@v6
         with:
@@ -24,6 +22,8 @@ jobs:
         with:
           ruby-version: "3.3"
           bundler-cache: true
+      - name: Set Ruby crash report path
+        run: echo "RUBY_CRASH_REPORT=${RUNNER_TEMP}/ruby-crash-report.log" >> "$GITHUB_ENV"
       - name: Install build tools
         run: |
           sudo apt-get update

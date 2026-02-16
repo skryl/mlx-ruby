@@ -29,8 +29,6 @@ jobs:
         os: [ubuntu-22.04, macos-14]
         ruby: ["3.4", "4.0"]
     runs-on: ${{ matrix.os }}
-    env:
-      RUBY_CRASH_REPORT: ${{ runner.temp }}/ruby-crash-report.log
     steps:
       - uses: actions/checkout@v6
         with:
@@ -39,6 +37,8 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
+      - name: Set Ruby crash report path
+        run: echo "RUBY_CRASH_REPORT=${RUNNER_TEMP}/ruby-crash-report.log" >> "$GITHUB_ENV"
       - name: Install Linux build tools
         if: runner.os == 'Linux'
         run: |
