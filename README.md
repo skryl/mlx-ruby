@@ -760,6 +760,12 @@ Run all benchmark suites:
 bundle exec rake benchmark:all
 ```
 
+Install benchmark Python dependencies into your active Python environment (for asdf users, this is the Python selected by your current shell / `.tool-versions`):
+
+```bash
+bundle exec rake benchmark:deps
+```
+
 Benchmark environment variables:
 
 | Variable | Default | Purpose |
@@ -779,21 +785,34 @@ Benchmark environment variables:
 
 MLX Ruby has full Metal support through the upstream MLX runtime. On Apple silicon, use `DEVICE=metal` (or `DEVICE=gpu`) to run on Metal.
 
-The table below is from:
+The tables below are from:
 
 ```bash
-bundle exec rake benchmark:all DEVICE=gpu ITERATIONS=1000 WARMUP=50 BATCH=2 SEQUENCE_LENGTH=32 TARGET_SEQUENCE_LENGTH=16 DIMENSIONS=64 HEADS=4 LAYERS=2
-bundle exec rake benchmark:all DEVICE=cpu ITERATIONS=1000 WARMUP=50 BATCH=2 SEQUENCE_LENGTH=32 TARGET_SEQUENCE_LENGTH=16 DIMENSIONS=64 HEADS=4 LAYERS=2
+bundle exec rake benchmark:all DEVICE=cpu WARMUP=50 ITERATIONS=1000
+bundle exec rake benchmark:all DEVICE=gpu WARMUP=50 ITERATIONS=1000
 ```
 
-Updated with reversed ratios (`Python/Ruby`), so `< 1x` means Ruby is slower.
+Ratios use `Python/Ruby` (`< 1x` means Ruby is slower). Parity columns are from the benchmark harness checks (`output_shape`, `input_digest`, `reference_output_digest`).
 
-| Model | Ruby CPU (ms) | Python CPU (ms) | Python/Ruby CPU (x) | Ruby GPU (ms) | Python GPU (ms) | Python/Ruby GPU (x) |
+CPU (`DEVICE=cpu`, `WARMUP=50`, `ITERATIONS=1000`)
+
+| Model | Ruby avg ms | Python avg ms | Python/Ruby | Match Shapes | Match Inputs | Match Outputs |
 | --- | --- | --- | --- | --- | --- | --- |
-| transformer | 1.771 | 1.242 | 0.70x | 1.315 | 0.830 | 0.63x |
-| cnn | 4.070 | 4.271 | 1.05x | 1.113 | 0.958 | 0.86x |
-| mlp | 0.168 | 0.258 | 1.54x | 0.313 | 0.218 | 0.70x |
-| rnn | 0.919 | 0.532 | 0.58x | 1.168 | 0.644 | 0.55x |
+| transformer | 30.681 | 34.646 | 1.13x | [x] | [x] | [x] |
+| cnn | 4.625 | 4.429 | 0.96x | [x] | [x] | [x] |
+| mlp | 0.481 | 0.468 | 0.97x | [x] | [x] | [x] |
+| rnn | 7.385 | 6.048 | 0.82x | [x] | [x] | [x] |
+| karpathy_gpt2 | 64.817 | 60.346 | 0.93x | [x] | [x] | [x] |
+
+GPU (`DEVICE=gpu`, `WARMUP=50`, `ITERATIONS=1000`)
+
+| Model | Ruby avg ms | Python avg ms | Python/Ruby | Match Shapes | Match Inputs | Match Outputs |
+| --- | --- | --- | --- | --- | --- | --- |
+| transformer | 7.773 | 6.630 | 0.85x | [x] | [x] | [x] |
+| cnn | 0.786 | 0.475 | 0.60x | [x] | [x] | [x] |
+| mlp | 0.355 | 0.309 | 0.87x | [x] | [x] | [x] |
+| rnn | 6.950 | 4.573 | 0.66x | [x] | [x] | [x] |
+| karpathy_gpt2 | 16.821 | 11.978 | 0.71x | [x] | [x] | [x] |
 
 ### Build docs
 

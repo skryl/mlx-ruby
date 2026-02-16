@@ -511,6 +511,14 @@ namespace :gem do
 end
 
 namespace :benchmark do
+  def self.requirements_path
+    File.join(__dir__, "requirements.txt")
+  end
+
+  def self.python_bin
+    ENV.fetch("PYTHON", "python3")
+  end
+
   def self.task_class
     require_relative "tasks/benchmark_task"
     BenchmarkTask
@@ -533,8 +541,16 @@ namespace :benchmark do
       num_heads: ENV.fetch("HEADS", BenchmarkTask::DEFAULT_HEADS).to_i,
       num_layers: ENV.fetch("LAYERS", BenchmarkTask::DEFAULT_LAYERS).to_i,
       compute_device: compute_device,
-      python_bin: ENV.fetch("PYTHON", "python3")
+      python_bin: python_bin
     }
+  end
+
+  desc "Install Python benchmark dependencies into the active Python from requirements.txt."
+  task :deps do
+    requirements = requirements_path
+
+    raise "Missing requirements file: #{requirements}" unless File.exist?(requirements)
+    sh python_bin, "-m", "pip", "install", "-r", requirements
   end
 
   desc "Compare Ruby and Python transformer implementations."
@@ -570,5 +586,8 @@ namespace :benchmark do
   desc "Run all configured benchmarks (transformer, cnn, mlp, rnn, karpathy_gpt2)."
   task all: %i[transformer cnn mlp rnn karpathy_gpt2]
 end
+
+desc "Alias for benchmark:all."
+task benchmark: "benchmark:all"
 
 task default: :test

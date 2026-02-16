@@ -3,6 +3,9 @@ import json
 import time
 
 import mlx.core as mx
+from benchmark_digest import assign_deterministic_parameters
+from benchmark_digest import deterministic_tensor
+from benchmark_digest import digest_array
 from mlx.nn.layers.activations import ReLU
 from mlx.nn.layers.linear import Linear
 
@@ -33,36 +36,39 @@ def main():
     warmup_every = max(1, args.warmup // 5)
     iter_every = max(1, args.iterations // 5)
 
+    x = deterministic_tensor(
+        (args.batch_size, input_size),
+        mx.float32,
+        offset=0,
+    )
+    input_digest = digest_array(x)
+
     layer1 = Linear(input_size, hidden_size)
     layer2 = Linear(hidden_size, hidden_size)
     layer3 = Linear(hidden_size, output_size)
     relu = ReLU()
+    assign_deterministic_parameters([layer1, layer2, layer3])
 
-    x = mx.random.uniform(
-        low=-1.0,
-        high=1.0,
-        shape=(args.batch_size, input_size),
-        dtype=mx.float32,
-    )
-
-    out = None
-    for i in range(args.warmup):
+    def run_step():
         y = layer1(x)
         y = relu(y)
         y = layer2(y)
         y = relu(y)
-        out = layer3(y)
+        return layer3(y)
+
+    reference_output_digest = digest_array(run_step())
+    path_signature = "forward_only_eval_output"
+
+    out = None
+    for i in range(args.warmup):
+        out = run_step()
         mx.eval(out)
         if (i + 1) == args.warmup or (i + 1) % warmup_every == 0:
             print(f"[python/mlp] warmup {i + 1}/{args.warmup}", flush=True)
 
     start = time.perf_counter()
     for i in range(args.iterations):
-        y = layer1(x)
-        y = relu(y)
-        y = layer2(y)
-        y = relu(y)
-        out = layer3(y)
+        out = run_step()
         mx.eval(out)
         if (i + 1) == args.iterations or (i + 1) % iter_every == 0:
             print(f"[python/mlp] iter {i + 1}/{args.iterations}", flush=True)
@@ -75,6 +81,9 @@ def main():
                 "iterations": args.iterations,
                 "warmup": args.warmup,
                 "output_shape": list(out.shape),
+                "input_digest": input_digest,
+                "reference_output_digest": reference_output_digest,
+                "path_signature": path_signature,
             }
         )
     )

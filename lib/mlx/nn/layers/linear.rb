@@ -23,11 +23,10 @@ module MLX
       end
 
       def call(x)
-        out = MLX::Core.matmul(x, weight.T)
         if state.key?("bias")
-          MLX::Core.add(out, bias)
+          MLX::Core.addmm(bias, x, weight.T)
         else
-          out
+          MLX::Core.matmul(x, weight.T)
         end
       end
 

@@ -1,17 +1,21 @@
 # frozen_string_literal: true
 
 require "mlx"
+require_relative "benchmark_digest"
 
 module BenchmarkExamples
   class KarpathyGpt2Example
+    BATCH_STRIDE = 9_973
+    BATCH_OFFSET = 7_919
+
     class KarpathyGpt2Model < MLX::NN::Module
       def initialize(vocab_size:, dims:, num_heads:, num_layers:, block_size:, dropout: 0.0)
         super()
 
-        @token_embedding = MLX::NN::Embedding.new(vocab_size, dims)
-        @pos_embedding = MLX::NN::Embedding.new(block_size, dims)
-        @dropout = MLX::NN::Dropout.new(dropout)
-        @transformer_blocks = Array.new(num_layers) do
+        self.tok_embedding = MLX::NN::Embedding.new(vocab_size, dims)
+        self.pos_embedding = MLX::NN::Embedding.new(block_size, dims)
+        self.dropout = MLX::NN::Dropout.new(dropout)
+        self.blocks = Array.new(num_layers) do
           MLX::NN::TransformerEncoderLayer.new(
             dims,
             num_heads,
@@ -20,24 +24,24 @@ module BenchmarkExamples
             norm_first: true
           )
         end
-        @layer_norm = MLX::NN::LayerNorm.new(dims)
-        @proj = MLX::NN::Linear.new(dims, vocab_size)
-        @causal_mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(block_size)
+        self.ln = MLX::NN::LayerNorm.new(dims)
+        self.lm_head = MLX::NN::Linear.new(dims, vocab_size)
+        self.causal_mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(block_size, MLX::Core.float32)
       end
 
       def call(input_ids)
         positions = MLX::Core.arange(0, input_ids.shape[1], 1, MLX::Core.int32)
         hidden = MLX::Core.add(
-          @token_embedding.call(input_ids),
-          @pos_embedding.call(positions)
+          tok_embedding.call(input_ids),
+          pos_embedding.call(positions)
         )
-        hidden = @dropout.call(hidden)
+        hidden = dropout.call(hidden)
 
-        @transformer_blocks.each do |transformer_block|
-          hidden = transformer_block.call(hidden, @causal_mask)
+        blocks.each do |transformer_block|
+          hidden = transformer_block.call(hidden, causal_mask)
         end
 
-        @proj.call(@layer_norm.call(hidden))
+        lm_head.call(ln.call(hidden))
       end
     end
 
@@ -47,6 +51,7 @@ module BenchmarkExamples
       @label = "karpathy_gpt2"
       @batch_size = batch_size
       @sequence_length = sequence_length
+      @step_index = 0
 
       dataset = prepare_dataset(repo_root)
       @train_data = dataset.fetch("train")
@@ -59,19 +64,46 @@ module BenchmarkExamples
         num_layers: num_layers,
         block_size: sequence_length
       )
+      BenchmarkDigest.assign_deterministic_parameters!(@model)
       @value_grad = MLX::NN.value_and_grad(@model, method(:loss))
       @optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-3)
-      @rng = Random.new(0)
 
-      sample_input, = next_batch
-      @output_shape = @model.call(sample_input).shape
+      sample_input, sample_target = batch_for_step(0)
+      reference_output = @model.call(sample_input)
+      @output_shape = reference_output.shape
+      @input_digest = BenchmarkDigest.digest_value(
+        {
+          "train_data" => @train_data,
+          "batch_size" => @batch_size,
+          "sequence_length" => @sequence_length,
+          "batch_stride" => BATCH_STRIDE,
+          "batch_offset" => BATCH_OFFSET,
+          "sample_input" => sample_input,
+          "sample_target" => sample_target
+        }
+      )
+      @reference_output_digest = BenchmarkDigest.digest_array(reference_output)
+      @path_signature = "value_and_grad_update_eval_loss"
     end
 
     def run_step
-      input_batch, target_batch = next_batch
+      input_batch, target_batch = batch_for_step(@step_index)
+      @step_index += 1
       loss_value, grads = @value_grad.call(input_batch, target_batch)
       @optimizer.update(@model, grads)
       loss_value
+    end
+
+    def verification_input_digest
+      @input_digest
+    end
+
+    def verification_reference_output_digest
+      @reference_output_digest
+    end
+
+    def benchmark_path_signature
+      @path_signature
     end
 
     private
@@ -101,8 +133,7 @@ module BenchmarkExamples
               "Add benchmark/fixtures/karpathy.txt before running this benchmark."
       end
 
-      text = File.read(data_path)
-      bytes = text.bytes
+      bytes = File.binread(data_path).bytes
       raise "Karpathy GPT-2 dataset at #{data_path} is empty." if bytes.empty?
 
       vocab = bytes.uniq.sort
@@ -118,16 +149,23 @@ module BenchmarkExamples
       }
     end
 
-    def next_batch
+    def batch_for_step(step_index)
       max_start = @train_data.length - @sequence_length - 1
       if max_start <= 0
         raise "Tiny Shakespeare dataset is too short for block size #{@sequence_length}."
       end
 
-      starts = Array.new(@batch_size) { @rng.rand(max_start) }
+      starts = deterministic_starts(max_start, step_index)
       inputs = starts.map { |start| @train_data[start, @sequence_length] }
       targets = starts.map { |start| @train_data[(start + 1), @sequence_length] }
       [MLX::Core.array(inputs, MLX::Core.int32), MLX::Core.array(targets, MLX::Core.int32)]
+    end
+
+    def deterministic_starts(max_start, step_index)
+      base = step_index * BATCH_STRIDE
+      Array.new(@batch_size) do |index|
+        (base + (index * BATCH_OFFSET)) % max_start
+      end
     end
   end
 end

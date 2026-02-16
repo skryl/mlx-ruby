@@ -58,6 +58,7 @@ class BenchmarkTask
 
     ruby_result = benchmark_ruby(model_name)
     python_result = benchmark_python(model_name)
+    ensure_benchmark_parity!(model_name, ruby_result, python_result)
     speedup = python_result.fetch("average_ms") / ruby_result.fetch("average_ms")
 
     puts "Benchmark (ruby vs python): #{model_name}"
@@ -79,6 +80,8 @@ class BenchmarkTask
   end
 
   private
+
+  PARITY_KEYS = %w[output_shape input_digest reference_output_digest path_signature].freeze
 
   def available_models
     [:transformer, :cnn, :mlp, :rnn, :karpathy_gpt2]
@@ -207,12 +210,24 @@ class BenchmarkTask
     end
     finish = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-    {
+    result = {
       "average_ms" => (finish - start) * 1000.0 / @iterations,
       "iterations" => @iterations,
       "warmup" => @warmup,
       "output_shape" => example.respond_to?(:output_shape) && example.output_shape ? example.output_shape : output.shape
     }
+
+    if example.respond_to?(:verification_input_digest)
+      result["input_digest"] = example.verification_input_digest
+    end
+    if example.respond_to?(:verification_reference_output_digest)
+      result["reference_output_digest"] = example.verification_reference_output_digest
+    end
+    if example.respond_to?(:benchmark_path_signature)
+      result["path_signature"] = example.benchmark_path_signature
+    end
+
+    result
   end
 
   def karpathy_gpt2_dataset_path
@@ -220,16 +235,14 @@ class BenchmarkTask
   end
 
   def benchmark_python(model_name)
+    ensure_python_mlx_available!
+
     script_path = python_script_path(model_name)
     command = [@python_bin, script_path, *python_script_args(model_name)]
 
-    env = {
-      "PYTHONPATH" => [File.join(@repo_root, "mlx", "python"), ENV["PYTHONPATH"]].compact.join(File::PATH_SEPARATOR)
-    }
-
     output_lines = []
     status = nil
-    Open3.popen2e(env, *command, chdir: @repo_root) do |_stdin, stream, wait_thr|
+    Open3.popen2e(*command, chdir: @repo_root) do |_stdin, stream, wait_thr|
       while (line = stream.gets)
         puts line
         output_lines << line
@@ -245,6 +258,45 @@ class BenchmarkTask
     raise "Python benchmark did not return JSON output: #{output_lines.join}" unless result_line
 
     JSON.parse(result_line)
+  end
+
+  def ensure_benchmark_parity!(model_name, ruby_result, python_result)
+    PARITY_KEYS.each do |key|
+      ruby_value = ruby_result[key]
+      python_value = python_result[key]
+      next if ruby_value == python_value
+
+      raise <<~MSG
+        Benchmark parity mismatch for #{model_name} on #{key}.
+        ruby: #{ruby_value.inspect}
+        python: #{python_value.inspect}
+      MSG
+    end
+  end
+
+  def ensure_python_mlx_available!
+    return if @python_mlx_checked
+
+    stdout, stderr, status = Open3.capture3(@python_bin, "-c", "import mlx.core")
+    if status.success?
+      @python_mlx_checked = true
+      return
+    end
+
+    error_output = [stdout, stderr].join.strip
+    raise <<~MSG
+      Python executable '#{@python_bin}' cannot import mlx.core.
+      Run `bundle exec rake benchmark:deps` to install requirements into this Python,
+      or set PYTHON=/path/to/python for a preconfigured environment.
+      Python output:
+      #{error_output}
+    MSG
+  rescue Errno::ENOENT
+    raise <<~MSG
+      Python executable not found: #{@python_bin}
+      Ensure your asdf Python is active (or set PYTHON=/path/to/python),
+      then run `bundle exec rake benchmark:deps`.
+    MSG
   end
 
   def python_script_path(model_name)

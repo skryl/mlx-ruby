@@ -1,0 +1,2 @@
+# Python dependencies used by `rake benchmark:deps` / benchmark comparisons.
+mlx

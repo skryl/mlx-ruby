@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "mlx"
+require_relative "benchmark_digest"
 
 module BenchmarkExamples
   class MlpExample
@@ -14,11 +15,17 @@ module BenchmarkExamples
       @hidden_size = dims * MLP_FACTOR
       @output_size = dims
 
-      @input = MLX::Core.random_uniform([batch_size, @input_size], -1.0, 1.0, dtype)
+      @input = BenchmarkDigest.deterministic_tensor([batch_size, @input_size], dtype, offset: 0)
+
       @relu = MLX::NN::ReLU.new
       @layer1 = MLX::NN::Linear.new(@input_size, @hidden_size)
       @layer2 = MLX::NN::Linear.new(@hidden_size, @hidden_size)
       @layer3 = MLX::NN::Linear.new(@hidden_size, @output_size)
+      BenchmarkDigest.assign_deterministic_parameters!([@layer1, @layer2, @layer3])
+
+      @input_digest = BenchmarkDigest.digest_array(@input)
+      @reference_output_digest = BenchmarkDigest.digest_array(run_step)
+      @path_signature = "forward_only_eval_output"
     end
 
     def run_step
@@ -27,6 +34,18 @@ module BenchmarkExamples
       y = @layer2.call(y)
       y = @relu.call(y)
       @layer3.call(y)
+    end
+
+    def verification_input_digest
+      @input_digest
+    end
+
+    def verification_reference_output_digest
+      @reference_output_digest
+    end
+
+    def benchmark_path_signature
+      @path_signature
     end
   end
 end
