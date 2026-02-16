@@ -6625,7 +6625,8 @@ static VALUE core_clear_cache(VALUE) {
 
 static VALUE core_metal_is_available(VALUE) {
   try {
-    return mxmetal::is_available() ? Qtrue : Qfalse;
+    const mx::Device gpu_device(mx::Device::gpu, 0);
+    return mx::is_available(gpu_device) ? Qtrue : Qfalse;
   } catch (const std::exception& error) {
     raise_std_exception(error);
     return Qnil;
@@ -6654,7 +6655,12 @@ static VALUE core_metal_stop_capture(VALUE) {
 
 static VALUE core_metal_device_info(VALUE) {
   try {
-    const auto& info = mxmetal::device_info();
+    const mx::Device gpu_device(mx::Device::gpu, 0);
+    if (!mx::is_available(gpu_device)) {
+      rb_raise(rb_eRuntimeError, "[metal_device_info] Metal GPU device is not available");
+    }
+
+    const auto& info = mx::device_info(gpu_device);
     VALUE hash = rb_hash_new();
     for (const auto& [key, value] : info) {
       VALUE ruby_key = rb_utf8_str_new(key.c_str(), static_cast<long>(key.size()));

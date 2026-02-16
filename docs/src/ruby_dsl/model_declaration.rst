@@ -76,6 +76,26 @@ Runtime helpers
    puts model.summary(as: :text)
    model.unfreeze_paths!("encoder.*")
 
+Typed config helpers
+--------------------
+
+The DSL also includes ``MLX::DSL::ConfigSchema`` for typed model/config
+objects with defaults and validators.
+
+.. code-block:: ruby
+
+   class ModelConfig
+     include MLX::DSL::ConfigSchema
+
+     field :hidden_size, Integer, required: true
+     field :num_heads, Integer, required: true
+     field :num_kv_heads, Integer, default: ->(cfg) { cfg.num_heads }
+   end
+
+   config = ModelConfig.from_hash(hidden_size: 1024, num_heads: 16)
+
+See also :doc:`runtime_primitives`.
+
 Checkpoint format notes
 -----------------------
 

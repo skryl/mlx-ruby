@@ -266,6 +266,14 @@ module MLX
         push(MLX::NN::Transformer.new(*args, **kwargs))
       end
 
+      def attention(*args, **kwargs)
+        push(MLX::DSL::Attention.new(*args, **kwargs))
+      end
+
+      def transformer_block(*args, **kwargs)
+        push(MLX::DSL::TransformerBlock.new(*args, **kwargs))
+      end
+
       def rope(*args, **kwargs)
         push(MLX::NN::RoPE.new(*args, **kwargs))
       end

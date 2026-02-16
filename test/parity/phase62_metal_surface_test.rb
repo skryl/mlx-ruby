@@ -32,7 +32,7 @@ class Phase62MetalSurfaceTest < Minitest::Test
       puts JSON.generate(MLX::Core.metal_device_info)
     RUBY
     stdout, stderr, status = Open3.capture3("ruby", "-rjson", "-e", probe)
-    skip("metal_device_info probe failed: #{stderr}") unless status.success?
+    assert status.success?, "metal_device_info probe failed: #{stderr}"
 
     info = JSON.parse(stdout)
     assert_instance_of Hash, info

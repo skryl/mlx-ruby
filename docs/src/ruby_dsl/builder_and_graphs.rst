@@ -83,6 +83,29 @@ recurrent layers, and transformer components.
      end
    end
 
+Transformer-oriented shorthands
+-------------------------------
+
+Builder also exposes transformer-focused DSL wrappers:
+
+- ``attention(dims:, num_heads:, kv_heads:, rope:, cache:)``
+- ``transformer_block(dims:, num_heads:, kv_heads:, norm:, ffn:, cache:)``
+
+.. code-block:: ruby
+
+   layer :decoder_block do
+     transformer_block(
+       dims: dims,
+       num_heads: heads,
+       kv_heads: kv_heads,
+       norm: :rms,
+       ffn: { kind: :swiglu, hidden_dims: ffn_dims },
+       cache: true
+     )
+   end
+
+See also :doc:`runtime_primitives`.
+
 See implementation:
 
 - ``lib/mlx/dsl/builder.rb``

@@ -22,6 +22,8 @@ jobs:
         with:
           ruby-version: "3.3"
           bundler-cache: true
+      - name: Set Ruby crash report path
+        run: echo "RUBY_CRASH_REPORT=${RUNNER_TEMP}/ruby-crash-report.log" >> "$GITHUB_ENV"
       - name: Install build tools
         run: |
           sudo apt-get update
@@ -35,7 +37,19 @@ jobs:
       - name: Install dependencies
         run: bundle install
       - name: Run test suite
+        env:
+          RUBYOPT: -W:deprecated -W:performance
         run: bundle exec rake test
+      - name: Show Ruby crash report (if present)
+        if: always()
+        run: |
+          if [ -f "${RUBY_CRASH_REPORT}" ]; then
+            echo "::group::Ruby crash report"
+            cat "${RUBY_CRASH_REPORT}"
+            echo "::endgroup::"
+          else
+            echo "No Ruby crash report emitted."
+          fi
       - name: Build gem
         run: gem build mlx.gemspec
       - name: Upload gem artifact

@@ -20,6 +20,40 @@ def strict_test_timeout_seconds
   value.positive? ? value : 10
 end
 
+def gem_platform_warning_line?(line)
+  return true if line.include?("warning: already initialized constant Gem::Platform::")
+  return false unless line.include?("warning: previous definition of")
+
+  line.include?("/rubygems/platform.rb:")
+end
+
+def with_filtered_gem_platform_warnings
+  read_io, write_io = IO.pipe
+  original_stderr = STDERR.dup
+  stderr_reader = Thread.new do
+    begin
+      read_io.each_line do |line|
+        next if gem_platform_warning_line?(line)
+
+        original_stderr.write(line)
+      end
+    ensure
+      read_io.close unless read_io.closed?
+    end
+  end
+
+  STDERR.reopen(write_io)
+  $stderr = STDERR
+  write_io.close unless write_io.closed?
+
+  yield
+ensure
+  STDERR.reopen(original_stderr) if original_stderr && !original_stderr.closed?
+  $stderr = STDERR
+  original_stderr.close if original_stderr && !original_stderr.closed?
+  stderr_reader.join if stderr_reader
+end
+
 def test_file_list
   Rake::FileList["test/**/*_test.rb"]
 end
@@ -121,8 +155,10 @@ def parse_test_devices_arg(raw_devices)
 end
 
 def run_base_test_task
-  Rake::Task[:test_base].reenable
-  Rake::Task[:test_base].invoke
+  with_filtered_gem_platform_warnings do
+    Rake::Task[:test_base].reenable
+    Rake::Task[:test_base].invoke
+  end
 end
 
 def run_test_suite_for_device(device = nil)

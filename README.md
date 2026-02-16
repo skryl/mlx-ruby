@@ -24,7 +24,7 @@ This repository packages:
 
 ## Requirements
 
-- Ruby `>= 3.1` (from `mlx.gemspec`).
+- Ruby `>= 3.3` (from `mlx.gemspec`).
 - Git (with submodule support).
 - CMake `>= 3.25`.
 - A C++20-capable toolchain.
@@ -843,7 +843,7 @@ ruby -e 'require "rbconfig"; puts RbConfig::CONFIG["host_cpu"]'
 - Keep parity artifacts in `test/parity/reports/` in sync with tool/script changes.
 - Follow upstream MLX contributor guidance where applicable: [mlx/CONTRIBUTING.md](https://github.com/ml-explore/mlx/blob/main/CONTRIBUTING.md).
 
-CI currently runs on `ubuntu-22.04` and `macos-14` with Ruby `3.3`.
+CI currently runs on `ubuntu-22.04` and `macos-14` with Ruby `3.4` and `4.0`.
 
 ## License
 

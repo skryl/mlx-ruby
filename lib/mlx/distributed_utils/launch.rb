@@ -314,6 +314,8 @@ module MLX
       end
 
       def main(argv = ARGV)
+        Process.warmup if Process.respond_to?(:warmup)
+
         opts = {
           print_python: false,
           verbose: false,
