@@ -8,13 +8,20 @@ require "rbconfig"
 require "tmpdir"
 require "fileutils"
 
-RUBY_ROOT = File.expand_path("..", __dir__)
-REPO_ROOT = File.expand_path("..", RUBY_ROOT)
+default_ruby_root = File.expand_path("..", __dir__)
+RUBY_ROOT = File.expand_path(ENV.fetch("MLX_TEST_RUBY_ROOT", default_ruby_root))
+default_repo_root = File.expand_path("..", RUBY_ROOT)
+REPO_ROOT = File.expand_path(ENV.fetch("MLX_TEST_REPO_ROOT", default_repo_root))
 
 module TestSupport
   module_function
 
   def build_native_extension!
+    if ENV["MLX_TEST_SKIP_NATIVE_BUILD"] == "1"
+      @native_built = true
+      return
+    end
+
     return if @native_built
 
     ext_dir = File.join(RUBY_ROOT, "ext", "mlx")
