@@ -133,6 +133,10 @@ def main():
     optimizer = optim.AdamW(learning_rate=1e-3)
 
     sample_input, sample_target = get_batch_for_step(0)
+    input_shape = {
+        "sample_input": list(sample_input.shape),
+        "sample_target": list(sample_target.shape),
+    }
     out = model(sample_input)
     input_digest = digest_value(
         {
@@ -177,6 +181,7 @@ def main():
                 "average_ms": (elapsed / args.iterations) * 1000.0,
                 "iterations": args.iterations,
                 "warmup": args.warmup,
+                "input_shape": input_shape,
                 "output_shape": list(out.shape),
                 "input_digest": input_digest,
                 "reference_output_digest": reference_output_digest,

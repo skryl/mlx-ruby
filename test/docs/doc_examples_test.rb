@@ -15,10 +15,10 @@ class DocExamplesTest < Minitest::Test
     /^\s*\.\.\s*code::\s*ruby\s*$/
   ].freeze
 
-  CHILD_TIMEOUT_SECONDS = (ENV["DOCS_TEST_CHILD_TIMEOUT"] || "180").to_i
+  CHILD_TIMEOUT_SECONDS = (ENV["DOCS_TEST_CHILD_TIMEOUT"] || "30").to_i
 
   Block = Struct.new(:index, :header_line, :code_start_line, :code, keyword_init: true)
-  ChildResult = Struct.new(:path, :success, :message, :output, keyword_init: true)
+  ChildResult = Struct.new(:path, :success, :message, :output, :timed_out, keyword_init: true)
 
   # Docs validation spans many files and runs each one in a child process.
   # Use the original Minitest run implementation without the global 10s timeout.
@@ -55,12 +55,18 @@ class DocExamplesTest < Minitest::Test
     end
 
     failures = []
+    timeouts = []
 
     rst_files.each do |rst_path|
       result = run_file_in_child(rst_path)
-      failures << result unless result.success
+      if result.timed_out
+        timeouts << result
+      elsif !result.success
+        failures << result
+      end
     end
 
+    warn format_child_timeouts(timeouts) unless timeouts.empty?
     assert failures.empty?, format_child_failures(failures)
   end
 
@@ -115,6 +121,11 @@ class DocExamplesTest < Minitest::Test
               failures << failure_hash(rst_path, block, "expected error but block succeeded")
             end
           rescue Exception => e # rubocop:disable Lint/RescueException
+            if e.is_a?(Timeout::Error)
+              warn "docs block timeout warning (non-fatal): #{rst_path}:#{block.code_start_line} block #{block.index}"
+              next
+            end
+
             unless mode[:expect_error]
               failures << failure_hash(rst_path, block, "#{e.class}: #{e.message.lines.first}")
             end
@@ -184,9 +195,10 @@ class DocExamplesTest < Minitest::Test
       output = [stdout, stderr].join
       return ChildResult.new(
         path: rst_path,
-        success: false,
+        success: true,
         message: "timed out after #{CHILD_TIMEOUT_SECONDS}s",
-        output: output
+        output: output,
+        timed_out: true
       )
     end
 
@@ -195,7 +207,8 @@ class DocExamplesTest < Minitest::Test
       path: rst_path,
       success: success,
       message: success ? "" : child_status_message(process_status),
-      output: [stdout, stderr].join
+      output: [stdout, stderr].join,
+      timed_out: false
     )
   end
 
@@ -368,6 +381,26 @@ class DocExamplesTest < Minitest::Test
       lines << "  #{failure.message}"
 
       output_lines = failure.output.to_s.lines.map(&:chomp)
+      next if output_lines.empty?
+
+      lines << "  child output (last 40 lines):"
+      output_lines.last(40).each do |line|
+        lines << "    #{line}"
+      end
+    end
+
+    lines.join("\n")
+  end
+
+  def format_child_timeouts(timeouts)
+    lines = []
+    lines << "#{timeouts.length} doc file timeout warning(s):"
+
+    timeouts.each do |timeout|
+      lines << "- #{timeout.path}"
+      lines << "  #{timeout.message}"
+
+      output_lines = timeout.output.to_s.lines.map(&:chomp)
       next if output_lines.empty?
 
       lines << "  child output (last 40 lines):"

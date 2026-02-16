@@ -785,34 +785,21 @@ Benchmark environment variables:
 
 MLX Ruby has full Metal support through the upstream MLX runtime. On Apple silicon, use `DEVICE=metal` (or `DEVICE=gpu`) to run on Metal.
 
-The tables below are from:
+The table below is from:
 
 ```bash
-bundle exec rake benchmark:all DEVICE=cpu WARMUP=50 ITERATIONS=1000
-bundle exec rake benchmark:all DEVICE=gpu WARMUP=50 ITERATIONS=1000
+bundle exec rake benchmark WARMUP=50 ITERATIONS=1000
 ```
 
-Ratios use `Python/Ruby` (`< 1x` means Ruby is slower). Parity columns are from the benchmark harness checks (`output_shape`, `input_digest`, `reference_output_digest`).
+Ratios are shown per column (`py_cpu/gpu`, `rb_cpu/gpu`, `rb/py_cpu`, `rb/py_gpu`). Parity columns come from harness checks (`input_shape`, `input_digest`, `output_shape`, `reference_output_digest`).
 
-CPU (`DEVICE=cpu`, `WARMUP=50`, `ITERATIONS=1000`)
-
-| Model | Ruby avg ms | Python avg ms | Python/Ruby | Match Shapes | Match Inputs | Match Outputs |
-| --- | --- | --- | --- | --- | --- | --- |
-| transformer | 30.681 | 34.646 | 1.13x | [x] | [x] | [x] |
-| cnn | 4.625 | 4.429 | 0.96x | [x] | [x] | [x] |
-| mlp | 0.481 | 0.468 | 0.97x | [x] | [x] | [x] |
-| rnn | 7.385 | 6.048 | 0.82x | [x] | [x] | [x] |
-| karpathy_gpt2 | 64.817 | 60.346 | 0.93x | [x] | [x] | [x] |
-
-GPU (`DEVICE=gpu`, `WARMUP=50`, `ITERATIONS=1000`)
-
-| Model | Ruby avg ms | Python avg ms | Python/Ruby | Match Shapes | Match Inputs | Match Outputs |
-| --- | --- | --- | --- | --- | --- | --- |
-| transformer | 7.773 | 6.630 | 0.85x | [x] | [x] | [x] |
-| cnn | 0.786 | 0.475 | 0.60x | [x] | [x] | [x] |
-| mlp | 0.355 | 0.309 | 0.87x | [x] | [x] | [x] |
-| rnn | 6.950 | 4.573 | 0.66x | [x] | [x] | [x] |
-| karpathy_gpt2 | 16.821 | 11.978 | 0.71x | [x] | [x] | [x] |
+| model | py_cpu_s | py_gpu_s | py_cpu/gpu | rb_cpu_s | rb_gpu_s | rb_cpu/gpu | rb/py_cpu | rb/py_gpu | in_shape (cpu/gpu) | in_content (cpu/gpu) | out_shape (cpu/gpu) | out_content (cpu/gpu) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: | :---: |
+| transformer | 0.034 | 0.008 | 4.48x | 0.029 | 0.008 | 3.67x | 0.84x | 1.03x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
+| cnn | 0.004 | 0.000 | 9.54x | 0.004 | 0.001 | 4.68x | 1.05x | 2.13x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
+| mlp | 0.000 | 0.000 | 1.66x | 0.000 | 0.000 | 1.28x | 0.98x | 1.27x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
+| rnn | 0.006 | 0.004 | 1.39x | 0.007 | 0.007 | 0.91x | 1.16x | 1.79x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
+| karpathy_gpt2 | 0.058 | 0.011 | 5.06x | 0.060 | 0.016 | 3.84x | 1.03x | 1.36x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
 
 ### Build docs
 

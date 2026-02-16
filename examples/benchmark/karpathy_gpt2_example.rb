@@ -69,6 +69,10 @@ module BenchmarkExamples
       @optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-3)
 
       sample_input, sample_target = batch_for_step(0)
+      @input_shape = {
+        "sample_input" => sample_input.shape,
+        "sample_target" => sample_target.shape
+      }
       reference_output = @model.call(sample_input)
       @output_shape = reference_output.shape
       @input_digest = BenchmarkDigest.digest_value(
@@ -96,6 +100,10 @@ module BenchmarkExamples
 
     def verification_input_digest
       @input_digest
+    end
+
+    def verification_input_shape
+      @input_shape
     end
 
     def verification_reference_output_digest

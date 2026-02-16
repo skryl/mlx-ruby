@@ -52,36 +52,59 @@ class BenchmarkTask
     @repo_root = File.expand_path("..", __dir__)
   end
 
-  def run(model: :transformer)
+  def run(model: :transformer, enforce_parity: true, print_summary: true)
     model_name = model.to_sym
     raise "Unknown benchmark model: #{model_name}" unless available_models.include?(model_name)
 
-    ruby_result = benchmark_ruby(model_name)
-    python_result = benchmark_python(model_name)
-    ensure_benchmark_parity!(model_name, ruby_result, python_result)
-    speedup = python_result.fetch("average_ms") / ruby_result.fetch("average_ms")
+    ruby_result, ruby_status, ruby_error = run_with_status do
+      benchmark_ruby(model_name)
+    end
+    python_result, python_status, python_error = run_with_status do
+      benchmark_python(model_name)
+    end
 
-    puts "Benchmark (ruby vs python): #{model_name}"
-    puts "  configuration: #{configuration_summary(model_name)}"
-    puts "  compute device: #{compute_device_name}"
-    puts "  iterations: #{@iterations}, warmup: #{@warmup}"
-    puts "  ruby_avg_ms:   #{format('%.3f', ruby_result.fetch('average_ms'))}"
-    puts "  python_avg_ms: #{format('%.3f', python_result.fetch('average_ms'))}"
-    puts "  python/ruby:   #{format('%.2f', speedup)}x"
-    puts "  output shape:  #{ruby_result.fetch('output_shape').join('x')} (ruby), " \
-      "#{python_result.fetch('output_shape').join('x')} (python)"
-    puts
+    parity_checks = parity_checks_for(ruby_result, python_result)
+    parity_failures = parity_checks.select { |_key, value| value != true }.keys
+    ok = ruby_status.zero? && python_status.zero? && parity_failures.empty?
+    speedup = if ruby_result && python_result
+      python_result.fetch("average_ms") / ruby_result.fetch("average_ms")
+    end
 
-    {
+    print_run_summary(
+      model_name,
+      ruby_result: ruby_result,
+      python_result: python_result,
+      speedup: speedup,
+      ruby_status: ruby_status,
+      python_status: python_status,
+      ruby_error: ruby_error,
+      python_error: python_error,
+      parity_failures: parity_failures
+    ) if print_summary
+
+    result = {
+      "model" => model_name.to_s,
+      "device" => compute_device_name,
       "ruby" => ruby_result,
       "python" => python_result,
-      "python_per_ruby" => speedup
+      "python_per_ruby" => speedup,
+      "ruby_status" => ruby_status,
+      "python_status" => python_status,
+      "ruby_error" => ruby_error,
+      "python_error" => python_error,
+      "checks" => parity_checks,
+      "ok" => ok
     }
+
+    return result unless enforce_parity
+    return result if ok
+
+    raise parity_failure_message(model_name, ruby_status, python_status, ruby_error, python_error, parity_failures)
   end
 
   private
 
-  PARITY_KEYS = %w[output_shape input_digest reference_output_digest path_signature].freeze
+  PARITY_KEYS = %w[input_shape output_shape input_digest reference_output_digest path_signature].freeze
 
   def available_models
     [:transformer, :cnn, :mlp, :rnn, :karpathy_gpt2]
@@ -220,6 +243,9 @@ class BenchmarkTask
     if example.respond_to?(:verification_input_digest)
       result["input_digest"] = example.verification_input_digest
     end
+    if example.respond_to?(:verification_input_shape)
+      result["input_shape"] = example.verification_input_shape
+    end
     if example.respond_to?(:verification_reference_output_digest)
       result["reference_output_digest"] = example.verification_reference_output_digest
     end
@@ -260,18 +286,74 @@ class BenchmarkTask
     JSON.parse(result_line)
   end
 
-  def ensure_benchmark_parity!(model_name, ruby_result, python_result)
-    PARITY_KEYS.each do |key|
-      ruby_value = ruby_result[key]
-      python_value = python_result[key]
-      next if ruby_value == python_value
+  def run_with_status
+    [yield, 0, nil]
+  rescue => e
+    [nil, status_from_exception(e), e.message]
+  end
 
-      raise <<~MSG
-        Benchmark parity mismatch for #{model_name} on #{key}.
-        ruby: #{ruby_value.inspect}
-        python: #{python_value.inspect}
-      MSG
+  def status_from_exception(exception)
+    match = exception.message.match(/exit code (\d+)/)
+    return match[1].to_i if match
+
+    1
+  end
+
+  def parity_checks_for(ruby_result, python_result)
+    checks = {}
+    PARITY_KEYS.each do |key|
+      checks[key] = if ruby_result && python_result
+        ruby_result[key] == python_result[key]
+      else
+        nil
+      end
     end
+    checks
+  end
+
+  def print_run_summary(
+    model_name,
+    ruby_result:,
+    python_result:,
+    speedup:,
+    ruby_status:,
+    python_status:,
+    ruby_error:,
+    python_error:,
+    parity_failures:
+  )
+    puts "Benchmark (ruby vs python): #{model_name}"
+    puts "  configuration: #{configuration_summary(model_name)}"
+    puts "  compute device: #{compute_device_name}"
+    puts "  iterations: #{@iterations}, warmup: #{@warmup}"
+
+    if ruby_result && python_result
+      puts "  ruby_avg_ms:   #{format('%.3f', ruby_result.fetch('average_ms'))}"
+      puts "  python_avg_ms: #{format('%.3f', python_result.fetch('average_ms'))}"
+      puts "  python/ruby:   #{format('%.2f', speedup)}x"
+      puts "  output shape:  #{ruby_result.fetch('output_shape').join('x')} (ruby), " \
+        "#{python_result.fetch('output_shape').join('x')} (python)"
+    else
+      puts "  ruby_status:   #{ruby_status}"
+      puts "  python_status: #{python_status}"
+      puts "  ruby_error:    #{ruby_error}" if ruby_error
+      puts "  python_error:  #{python_error}" if python_error
+    end
+
+    unless parity_failures.empty?
+      puts "  parity mismatches: #{parity_failures.join(', ')}"
+    end
+    puts
+  end
+
+  def parity_failure_message(model_name, ruby_status, python_status, ruby_error, python_error, parity_failures)
+    details = +"Benchmark parity failure for #{model_name} on #{compute_device_name}.\n"
+    details << "ruby_status: #{ruby_status}\n"
+    details << "python_status: #{python_status}\n"
+    details << "ruby_error: #{ruby_error}\n" if ruby_error
+    details << "python_error: #{python_error}\n" if python_error
+    details << "parity_mismatches: #{parity_failures.join(', ')}\n" unless parity_failures.empty?
+    details
   end
 
   def ensure_python_mlx_available!
@@ -372,5 +454,76 @@ class BenchmarkTask
 
   def log_interval(total)
     [1, total / 5].max
+  end
+
+  public
+
+  def self.print_dual_device_table(results_by_model)
+    puts
+    puts "| model | py_cpu_s | py_gpu_s | py_cpu/gpu | rb_cpu_s | rb_gpu_s | rb_cpu/gpu | rb/py_cpu | rb/py_gpu | in_shape (cpu/gpu) | in_content (cpu/gpu) | out_shape (cpu/gpu) | out_content (cpu/gpu) |"
+    puts "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: | :---: |"
+
+    results_by_model.each do |model_name, by_device|
+      cpu = by_device[:cpu]
+      gpu = by_device[:gpu]
+
+      py_cpu_s = seconds_for(cpu, "python")
+      py_gpu_s = seconds_for(gpu, "python")
+      rb_cpu_s = seconds_for(cpu, "ruby")
+      rb_gpu_s = seconds_for(gpu, "ruby")
+
+      row = [
+        model_name.to_s,
+        format_seconds(py_cpu_s),
+        format_seconds(py_gpu_s),
+        format_ratio(py_cpu_s, py_gpu_s),
+        format_seconds(rb_cpu_s),
+        format_seconds(rb_gpu_s),
+        format_ratio(rb_cpu_s, rb_gpu_s),
+        format_ratio(rb_cpu_s, py_cpu_s),
+        format_ratio(rb_gpu_s, py_gpu_s),
+        check_pair(cpu, gpu, "input_shape"),
+        check_pair(cpu, gpu, "input_digest"),
+        check_pair(cpu, gpu, "output_shape"),
+        check_pair(cpu, gpu, "reference_output_digest")
+      ]
+
+      puts "| #{row.join(' | ')} |"
+    end
+    puts
+  end
+
+  def self.seconds_for(result, side)
+    return nil unless result && result[side] && result[side]["average_ms"]
+
+    result[side]["average_ms"] / 1000.0
+  end
+
+  def self.format_seconds(value)
+    return "n/a" if value.nil?
+
+    format("%.3f", value)
+  end
+
+  def self.format_ratio(numerator, denominator)
+    return "n/a" if numerator.nil? || denominator.nil? || denominator.zero?
+
+    format("%.2fx", numerator / denominator)
+  end
+
+  def self.check_pair(cpu_result, gpu_result, key)
+    "#{check_mark(check_value(cpu_result, key))}/#{check_mark(check_value(gpu_result, key))}"
+  end
+
+  def self.check_value(result, key)
+    return nil unless result && result["checks"].is_a?(Hash)
+
+    result["checks"][key]
+  end
+
+  def self.check_mark(value)
+    return "-" if value.nil?
+
+    value ? "✓" : "✗"
   end
 end

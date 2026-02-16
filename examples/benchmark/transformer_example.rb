@@ -17,6 +17,12 @@ module BenchmarkExamples
       )
       @src_mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(sequence_length, MLX::Core.float32)
       @tgt_mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(target_sequence_length, MLX::Core.float32)
+      @input_shape = {
+        "src" => @src.shape,
+        "tgt" => @tgt.shape,
+        "src_mask" => @src_mask.shape,
+        "tgt_mask" => @tgt_mask.shape
+      }
 
       @input_digest = BenchmarkDigest.digest_value([@src, @tgt, @src_mask, @tgt_mask])
 
@@ -40,6 +46,10 @@ module BenchmarkExamples
 
     def verification_input_digest
       @input_digest
+    end
+
+    def verification_input_shape
+      @input_shape
     end
 
     def verification_reference_output_digest

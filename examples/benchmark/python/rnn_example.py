@@ -39,6 +39,7 @@ def main():
         mx.float32,
         offset=0,
     )
+    input_shape = list(x.shape)
     input_digest = digest_array(x)
 
     rnn = RNN(args.dims, hidden_size)
@@ -71,6 +72,7 @@ def main():
                 "average_ms": (elapsed / args.iterations) * 1000.0,
                 "iterations": args.iterations,
                 "warmup": args.warmup,
+                "input_shape": input_shape,
                 "output_shape": list(out.shape),
                 "input_digest": input_digest,
                 "reference_output_digest": reference_output_digest,

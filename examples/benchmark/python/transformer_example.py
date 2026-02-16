@@ -53,6 +53,12 @@ def main():
     tgt_mask = MultiHeadAttention.create_additive_causal_mask(
         args.target_sequence_length, mx.float32
     )
+    input_shape = {
+        "src": list(src.shape),
+        "tgt": list(tgt.shape),
+        "src_mask": list(src_mask.shape),
+        "tgt_mask": list(tgt_mask.shape),
+    }
     input_digest = digest_value([src, tgt, src_mask, tgt_mask])
 
     model = Transformer(
@@ -92,6 +98,7 @@ def main():
                 "average_ms": (elapsed / args.iterations) * 1000.0,
                 "iterations": args.iterations,
                 "warmup": args.warmup,
+                "input_shape": input_shape,
                 "output_shape": list(out.shape),
                 "input_digest": input_digest,
                 "reference_output_digest": reference_output_digest,

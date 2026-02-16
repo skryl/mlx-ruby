@@ -26,6 +26,7 @@ module BenchmarkExamples
       @linear = MLX::NN::Linear.new(@flattened_features, CNN_CLASSES)
       BenchmarkDigest.assign_deterministic_parameters!([@conv1, @conv2, @linear])
 
+      @input_shape = @input.shape
       @input_digest = BenchmarkDigest.digest_array(@input)
       @reference_output_digest = BenchmarkDigest.digest_array(run_step)
       @path_signature = "forward_only_eval_output"
@@ -44,6 +45,10 @@ module BenchmarkExamples
 
     def verification_input_digest
       @input_digest
+    end
+
+    def verification_input_shape
+      @input_shape
     end
 
     def verification_reference_output_digest

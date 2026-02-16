@@ -511,6 +511,8 @@ namespace :gem do
 end
 
 namespace :benchmark do
+  MODELS = %i[transformer cnn mlp rnn karpathy_gpt2].freeze
+
   def self.requirements_path
     File.join(__dir__, "requirements.txt")
   end
@@ -524,25 +526,39 @@ namespace :benchmark do
     BenchmarkTask
   end
 
-  def self.options
-    raw_device = ENV.fetch("DEVICE", "gpu").downcase
-    compute_device = raw_device == "metal" ? "gpu" : raw_device
+  def self.normalize_device(raw_device)
+    compute_device = raw_device.to_s.downcase
+    compute_device = "gpu" if compute_device == "metal"
     unless %w[cpu gpu].include?(compute_device)
       raise "Invalid DEVICE='#{raw_device}'. Use cpu or gpu."
     end
+    compute_device
+  end
 
+  def self.base_options
+    benchmark_class = task_class
     {
-      iterations: ENV.fetch("ITERATIONS", BenchmarkTask::DEFAULT_ITERATIONS).to_i,
-      warmup: ENV.fetch("WARMUP", BenchmarkTask::DEFAULT_WARMUP).to_i,
-      batch_size: ENV.fetch("BATCH", BenchmarkTask::DEFAULT_BATCH_SIZE).to_i,
-      sequence_length: ENV.fetch("SEQUENCE_LENGTH", BenchmarkTask::DEFAULT_SEQUENCE_LENGTH).to_i,
-      target_sequence_length: ENV.fetch("TARGET_SEQUENCE_LENGTH", BenchmarkTask::DEFAULT_TARGET_SEQUENCE_LENGTH).to_i,
-      dims: ENV.fetch("DIMENSIONS", BenchmarkTask::DEFAULT_DIMS).to_i,
-      num_heads: ENV.fetch("HEADS", BenchmarkTask::DEFAULT_HEADS).to_i,
-      num_layers: ENV.fetch("LAYERS", BenchmarkTask::DEFAULT_LAYERS).to_i,
-      compute_device: compute_device,
+      iterations: ENV.fetch("ITERATIONS", benchmark_class::DEFAULT_ITERATIONS).to_i,
+      warmup: ENV.fetch("WARMUP", benchmark_class::DEFAULT_WARMUP).to_i,
+      batch_size: ENV.fetch("BATCH", benchmark_class::DEFAULT_BATCH_SIZE).to_i,
+      sequence_length: ENV.fetch("SEQUENCE_LENGTH", benchmark_class::DEFAULT_SEQUENCE_LENGTH).to_i,
+      target_sequence_length: ENV.fetch("TARGET_SEQUENCE_LENGTH", benchmark_class::DEFAULT_TARGET_SEQUENCE_LENGTH).to_i,
+      dims: ENV.fetch("DIMENSIONS", benchmark_class::DEFAULT_DIMS).to_i,
+      num_heads: ENV.fetch("HEADS", benchmark_class::DEFAULT_HEADS).to_i,
+      num_layers: ENV.fetch("LAYERS", benchmark_class::DEFAULT_LAYERS).to_i,
       python_bin: python_bin
     }
+  end
+
+  def self.single_device_options
+    raw_device = ENV.fetch("DEVICE", "gpu")
+    base_options.merge(compute_device: normalize_device(raw_device))
+  end
+
+  def self.matrix_devices
+    ENV.fetch("BENCHMARK_DEVICES", "cpu,gpu").split(",").map do |raw|
+      normalize_device(raw.strip)
+    end.map(&:to_sym).uniq
   end
 
   desc "Install Python benchmark dependencies into the active Python from requirements.txt."
@@ -555,36 +571,62 @@ namespace :benchmark do
 
   desc "Compare Ruby and Python transformer implementations."
   task :transformer do
-    task = task_class.new(**options)
+    task = task_class.new(**single_device_options)
     task.run(model: :transformer)
   end
 
   desc "Compare Ruby and Python CNN implementations."
   task :cnn do
-    task = task_class.new(**options)
+    task = task_class.new(**single_device_options)
     task.run(model: :cnn)
   end
 
   desc "Compare Ruby and Python MLP implementations."
   task :mlp do
-    task = task_class.new(**options)
+    task = task_class.new(**single_device_options)
     task.run(model: :mlp)
   end
 
   desc "Compare Ruby and Python RNN implementations."
   task :rnn do
-    task = task_class.new(**options)
+    task = task_class.new(**single_device_options)
     task.run(model: :rnn)
   end
 
   desc "Compare Ruby and Python GPT-2 implementation (Karpathy tiny-shakespeare full training loop)."
   task :karpathy_gpt2 do
-    task = task_class.new(**options)
+    task = task_class.new(**single_device_options)
     task.run(model: :karpathy_gpt2)
   end
 
-  desc "Run all configured benchmarks (transformer, cnn, mlp, rnn, karpathy_gpt2)."
-  task all: %i[transformer cnn mlp rnn karpathy_gpt2]
+  desc "Run all configured benchmarks on cpu and gpu, then print a final comparison table."
+  task :all do
+    benchmark_class = task_class
+    devices = matrix_devices
+    results_by_model = MODELS.each_with_object({}) { |model, out| out[model] = {} }
+
+    devices.each do |device|
+      puts "== Running benchmark suite on #{device} =="
+      task = benchmark_class.new(**base_options.merge(compute_device: device))
+      MODELS.each do |model|
+        results_by_model[model][device] = task.run(
+          model: model,
+          enforce_parity: false,
+          print_summary: true
+        )
+      end
+    end
+
+    benchmark_class.print_dual_device_table(results_by_model)
+
+    failed_rows = MODELS.select do |model|
+      devices.any? { |device| !results_by_model[model][device]["ok"] }
+    end
+
+    unless failed_rows.empty?
+      raise "Benchmark matrix had failures for: #{failed_rows.join(', ')}"
+    end
+  end
 end
 
 desc "Alias for benchmark:all."
