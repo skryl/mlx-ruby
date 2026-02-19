@@ -4,3 +4,9 @@ mlx
 onnx
 # Optional local runtime validation.
 onnxruntime
+
+# Documentation build dependencies.
+sphinx
+breathe
+sphinx-book-theme
+sphinx-copybutton

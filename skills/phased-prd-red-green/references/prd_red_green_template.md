@@ -1,4 +1,4 @@
-# PRD/RFP + Red/Green Template
+# PRD + Red/Green Template
 
 ## Header
 

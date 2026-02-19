@@ -7,15 +7,15 @@ Apply this workflow to all non-trivial tasks in this repo unless the user explic
 ## Default Process
 
 1. Understand the request and constraints.
-2. Find existing design docs (`rfp/`, issue notes, prior PRDs) before creating new ones.
+2. Find existing design docs (`prd/`, issue notes, prior PRDs) before creating new ones.
 3. Use phased planning plus red/green testing for implementation.
 4. Ship incrementally and keep status/checklists current.
 
-## PRD/RFP Process
+## PRD Process
 
-### When To Use A PRD/RFP
+### When To Use A PRD
 
-Create or update a PRD/RFP when work involves one or more of:
+Create or update a PRD when work involves one or more of:
 
 1. Multiple phases or milestones.
 2. Cross-cutting changes across subsystems.
@@ -26,8 +26,8 @@ For very small, single-file fixes, a brief in-message plan is enough.
 
 ### Where To Put It
 
-1. Store in `rfp/`.
-2. Use naming: `YYYY_MM_DD_<topic>_rfp.md` (or `_prd.md` when explicitly requested).
+1. Store in `prd/`.
+2. Use naming: `YYYY_MM_DD_<topic>_prd.md` (or `_prd.md` when explicitly requested).
 
 ### Required Sections
 
@@ -74,4 +74,4 @@ Treat work as complete only when all are true:
 1. Phase checklist items are updated.
 2. New/updated tests are green.
 3. Regressions in touched areas are checked.
-4. PRD/RFP status reflects reality (`Completed` only when fully done).
+4. PRD status reflects reality (`Completed` only when fully done).

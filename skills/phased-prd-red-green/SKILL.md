@@ -1,6 +1,6 @@
 ---
 name: phased-prd-red-green
-description: Create or update a phased PRD/RFP and then execute delivery using a strict red/green workflow. Use when a task spans multiple steps, has cross-cutting impact, needs explicit exit criteria, or requires reliable test-driven implementation sequencing.
+description: Create or update a phased PRD and then execute delivery using a strict red/green workflow. Use when a task spans multiple steps, has cross-cutting impact, needs explicit exit criteria, or requires reliable test-driven implementation sequencing.
 ---
 
 # Phased PRD + Red/Green Delivery
@@ -9,20 +9,20 @@ description: Create or update a phased PRD/RFP and then execute delivery using a
 
 Use this skill to drive a task from planning to completion with explicit phase gates.
 
-Read `references/prd_red_green_template.md` before writing a new PRD/RFP.
+Read `references/prd_red_green_template.md` before writing a new PRD.
 
 ## Workflow
 
 1. Confirm scope, success target, and constraints.
-2. Decide whether to create/update a PRD/RFP.
-3. Draft or revise the PRD/RFP with phased red/green structure.
+2. Decide whether to create/update a PRD.
+3. Draft or revise the PRD with phased red/green structure.
 4. Execute each phase in order: red -> green -> refactor.
 5. Track completion in the checklist and update status.
 
-## PRD/RFP Authoring Rules
+## PRD Authoring Rules
 
-1. Place documents in `rfp/`.
-2. Use dated file names: `YYYY_MM_DD_<topic>_rfp.md` (or `_prd.md` if requested).
+1. Place documents in `prd/`.
+2. Use dated file names: `YYYY_MM_DD_<topic>_prd.md`.
 3. Include at minimum:
    - Status
    - Context
@@ -47,7 +47,7 @@ Read `references/prd_red_green_template.md` before writing a new PRD/RFP.
 1. Report which commands ran and which did not run.
 2. Include key pass/fail outputs for each phase gate.
 3. Do not mark a phase complete until exit criteria are verified.
-4. Mark PRD/RFP as `Completed` only when all checklist items are done.
+4. Mark PRD as `Completed` only when all checklist items are done.
 
 ## Reference
 

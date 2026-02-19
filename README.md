@@ -57,7 +57,7 @@ This repository packages:
   - Python 3 + `pip`
   - `doxygen`
   - `make`
-  - Python docs deps from `docs/requirements.txt`
+  - Python deps from `requirements.txt`
 
 ## Installation
 
@@ -444,7 +444,7 @@ Install docs dependencies:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r docs/requirements.txt
+pip install -r requirements.txt
 ```
 
 Build docs:
