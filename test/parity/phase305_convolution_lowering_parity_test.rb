@@ -84,6 +84,23 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
     assert_match("input_dilation", error.message)
   end
 
+  def test_flip_convolution_propagates_dtype_to_downstream_add
+    payload = flip_convolution_add_int32_payload
+
+    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    onnx_nodes = stub.fetch("graph").fetch("nodes")
+    assert_equal ["Transpose", "Transpose", "ConvTranspose", "Transpose", "Cast", "Add"],
+                 onnx_nodes.map { |node| node.fetch("op_type") }
+
+    cast = onnx_nodes[-2]
+    assert_equal ["B"], cast.fetch("inputs")
+    assert_equal({ "to" => "FLOAT" }, cast.fetch("attributes"))
+
+    add = onnx_nodes[-1]
+    assert_equal "conv", add.fetch("inputs").first
+    refute_equal "B", add.fetch("inputs")[1]
+  end
+
   private
 
   def python_module_available?(name)
@@ -116,6 +133,48 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
     x = MLX::Core.array([[[[1.0], [2.0]], [[3.0], [4.0]]]], MLX::Core.float32)
     weight = MLX::Core.array([[[[1.0], [1.0]], [[1.0], [1.0]]]], MLX::Core.float32)
     JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, weight))
+  end
+
+  def flip_convolution_add_int32_payload
+    {
+      "ir_version" => 1,
+      "shapeless" => false,
+      "inputs" => [
+        { "name" => "A", "shape" => [1, 2, 2, 1], "dtype" => "float32" }
+      ],
+      "keyword_inputs" => [],
+      "outputs" => [
+        { "name" => "Y", "shape" => [1, 5, 4, 1], "dtype" => "float32" }
+      ],
+      "constants" => [
+        {
+          "name" => "W",
+          "shape" => [1, 2, 2, 1],
+          "dtype" => "float32",
+          "values" => [[[[1.0], [0.5]], [[-0.5], [1.5]]]]
+        },
+        {
+          "name" => "B",
+          "shape" => [],
+          "dtype" => "int32",
+          "values" => 1
+        }
+      ],
+      "nodes" => [
+        {
+          "op" => "Convolution",
+          "inputs" => ["A", "W"],
+          "outputs" => ["conv"],
+          "arguments" => [[1, 1], [1, 1], [2, 1], [1, 1], [2, 2], 1, true]
+        },
+        {
+          "op" => "Add",
+          "inputs" => ["conv", "B"],
+          "outputs" => ["Y"],
+          "arguments" => []
+        }
+      ]
+    }
   end
 
   def run_exported_onnx(payload, feeds)

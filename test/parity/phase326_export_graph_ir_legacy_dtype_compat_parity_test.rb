@@ -70,6 +70,56 @@ class Phase326ExportGraphIrLegacyDtypeCompatParityTest < Minitest::Test
     end
   end
 
+  def test_export_graph_ir_io_target_delegates_normalization_when_graph_ir_delegate_exists
+    payload = legacy_payload_with_missing_astype_arguments
+    delegate_calls = []
+
+    with_stubbed_native_export_graph_ir(JSON.generate(payload)) do
+      rewrite = method(:rewrite_astype_dtype_argument)
+      delegate = lambda do |path, include_content:|
+        delegate_calls << include_content
+        updated = rewrite.call(path, "int16")
+        include_content ? updated : nil
+      end
+      with_stubbed_graph_ir_normalize_exported_graph_ir_file(delegate) do
+        io = StringIO.new
+        content = MLX::Core.export_graph_ir(io, ->(_x) { nil }, :seed)
+        normalized = JSON.parse(content)
+        node = normalized.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
+        assert_equal ["int16"], node.fetch("arguments")
+        assert_equal content, io.string
+      end
+    end
+
+    assert_equal [true], delegate_calls
+  end
+
+  def test_export_graph_ir_path_target_delegates_normalization_when_graph_ir_delegate_exists
+    payload = legacy_payload_with_missing_astype_arguments
+    delegate_calls = []
+
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "graph_ir.json")
+      with_stubbed_native_export_graph_ir(JSON.generate(payload)) do
+        rewrite = method(:rewrite_astype_dtype_argument)
+        delegate = lambda do |delegate_path, include_content:|
+          delegate_calls << include_content
+          updated = rewrite.call(delegate_path, "int16")
+          include_content ? updated : nil
+        end
+        with_stubbed_graph_ir_normalize_exported_graph_ir_file(delegate) do
+          assert_nil MLX::Core.export_graph_ir(path, ->(_x) { nil }, :seed)
+        end
+      end
+
+      normalized = JSON.parse(File.binread(path))
+      node = normalized.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
+      assert_equal ["int16"], node.fetch("arguments")
+    end
+
+    assert_equal [false], delegate_calls
+  end
+
   private
 
   def with_stubbed_native_export_graph_ir(raw_payload)
@@ -92,6 +142,37 @@ class Phase326ExportGraphIrLegacyDtypeCompatParityTest < Minitest::Test
         remove_method backup
       end
     end
+  end
+
+  def with_stubbed_graph_ir_normalize_exported_graph_ir_file(stub)
+    singleton = MLX::GraphIR.singleton_class
+    backup = :__phase326_original_graph_ir_normalize_exported_graph_ir_file
+    had_original = singleton.method_defined?(:normalize_exported_graph_ir_file!) ||
+                   singleton.private_method_defined?(:normalize_exported_graph_ir_file!)
+
+    singleton.class_eval do
+      remove_method(backup) if method_defined?(backup)
+      alias_method backup, :normalize_exported_graph_ir_file! if had_original
+      define_method(:normalize_exported_graph_ir_file!, &stub)
+    end
+    yield
+  ensure
+    singleton.class_eval do
+      remove_method :normalize_exported_graph_ir_file! if method_defined?(:normalize_exported_graph_ir_file!)
+      if method_defined?(backup)
+        alias_method :normalize_exported_graph_ir_file!, backup
+        remove_method backup
+      end
+    end
+  end
+
+  def rewrite_astype_dtype_argument(path, dtype_name)
+    payload = JSON.parse(File.binread(path))
+    node = payload.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
+    node["arguments"] = [dtype_name]
+    content = JSON.generate(payload)
+    File.binwrite(path, content)
+    content
   end
 
   def legacy_payload_with_missing_astype_arguments

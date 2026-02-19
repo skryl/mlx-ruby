@@ -7464,62 +7464,7 @@ static VALUE core_export_function(int argc, VALUE* argv, VALUE) {
   }
 }
 
-static std::string json_escape(const std::string& value) {
-  static constexpr char hex[] = "0123456789abcdef";
-  std::string out;
-  out.reserve(value.size());
-  for (unsigned char c : value) {
-    switch (c) {
-      case '\\':
-        out.append("\\\\");
-        break;
-      case '"':
-        out.append("\\\"");
-        break;
-      case '\b':
-        out.append("\\b");
-        break;
-      case '\f':
-        out.append("\\f");
-        break;
-      case '\n':
-        out.append("\\n");
-        break;
-      case '\r':
-        out.append("\\r");
-        break;
-      case '\t':
-        out.append("\\t");
-        break;
-      default:
-        if (c < 0x20) {
-          out.append("\\u00");
-          out.push_back(hex[(c >> 4) & 0x0f]);
-          out.push_back(hex[c & 0x0f]);
-        } else {
-          out.push_back(static_cast<char>(c));
-        }
-        break;
-    }
-  }
-  return out;
-}
-
 using GraphTensorInfo = std::tuple<std::string, mx::Shape, mx::Dtype>;
-
-struct GraphNodeInfo {
-  std::string op;
-  std::vector<GraphTensorInfo> inputs;
-  std::vector<GraphTensorInfo> outputs;
-  std::string arguments_json = "[]";
-};
-
-struct GraphConstantInfo {
-  std::string name;
-  mx::Shape shape;
-  mx::Dtype dtype;
-  std::string values_json;
-};
 
 static std::string dtype_to_string(mx::Dtype dtype) {
   std::ostringstream out;
@@ -7527,167 +7472,134 @@ static std::string dtype_to_string(mx::Dtype dtype) {
   return out.str();
 }
 
-static void append_json_string(std::ostringstream& payload, const std::string& value) {
-  payload << '"' << json_escape(value) << '"';
+static VALUE ruby_string_from_std(const std::string& value) {
+  return rb_str_new(value.data(), static_cast<long>(value.size()));
 }
 
-static void append_json_shape(std::ostringstream& payload, const mx::Shape& shape) {
-  payload << "[";
-  for (size_t i = 0; i < shape.size(); ++i) {
-    if (i > 0) {
-      payload << ",";
-    }
-    payload << shape[i];
+static void ruby_hash_set_cstr(VALUE hash, const char* key, VALUE value) {
+  rb_hash_aset(hash, rb_str_new_cstr(key), value);
+}
+
+static VALUE ruby_shape_from_mx_shape(const mx::Shape& shape) {
+  VALUE out = rb_ary_new_capa(static_cast<long>(shape.size()));
+  for (size_t dim : shape) {
+    rb_ary_push(out, SIZET2NUM(dim));
   }
-  payload << "]";
+  return out;
 }
 
-static void append_json_tensor_info(std::ostringstream& payload, const GraphTensorInfo& info) {
-  payload << "{\"name\":";
-  append_json_string(payload, std::get<0>(info));
-  payload << ",\"shape\":";
-  append_json_shape(payload, std::get<1>(info));
-  payload << ",\"dtype\":";
-  append_json_string(payload, dtype_to_string(std::get<2>(info)));
-  payload << "}";
-}
-
-static void append_json_tensor_infos(std::ostringstream& payload, const std::vector<GraphTensorInfo>& infos) {
-  payload << "[";
-  for (size_t i = 0; i < infos.size(); ++i) {
-    if (i > 0) {
-      payload << ",";
-    }
-    append_json_tensor_info(payload, infos[i]);
+template <typename Container, typename ConvertFn>
+static VALUE ruby_array_from_container(const Container& values, ConvertFn convert) {
+  VALUE out = rb_ary_new_capa(static_cast<long>(values.size()));
+  for (const auto& value : values) {
+    rb_ary_push(out, convert(value));
   }
-  payload << "]";
+  return out;
 }
 
-static void append_json_tensor_names(std::ostringstream& payload, const std::vector<GraphTensorInfo>& infos) {
-  payload << "[";
-  for (size_t i = 0; i < infos.size(); ++i) {
-    if (i > 0) {
-      payload << ",";
-    }
-    append_json_string(payload, std::get<0>(infos[i]));
+static VALUE ruby_tensor_info_from_graph_tensor(const GraphTensorInfo& info) {
+  VALUE out = rb_hash_new();
+  ruby_hash_set_cstr(out, "name", ruby_string_from_std(std::get<0>(info)));
+  ruby_hash_set_cstr(out, "shape", ruby_shape_from_mx_shape(std::get<1>(info)));
+  ruby_hash_set_cstr(out, "dtype", ruby_string_from_std(dtype_to_string(std::get<2>(info))));
+  return out;
+}
+
+static VALUE ruby_tensor_infos_from_graph_tensors(const std::vector<GraphTensorInfo>& infos) {
+  VALUE out = rb_ary_new_capa(static_cast<long>(infos.size()));
+  for (const auto& info : infos) {
+    rb_ary_push(out, ruby_tensor_info_from_graph_tensor(info));
   }
-  payload << "]";
+  return out;
 }
 
-static void append_json_state_value(std::ostringstream& payload, const mx::StateT& value);
-
-template <typename Container>
-static void append_json_numeric_container(std::ostringstream& payload, const Container& values) {
-  payload << "[";
-  bool first = true;
-  for (const auto& item : values) {
-    if (!first) {
-      payload << ",";
-    }
-    first = false;
-    payload << item;
+static VALUE ruby_tensor_names_from_graph_tensors(const std::vector<GraphTensorInfo>& infos) {
+  VALUE out = rb_ary_new_capa(static_cast<long>(infos.size()));
+  for (const auto& info : infos) {
+    rb_ary_push(out, ruby_string_from_std(std::get<0>(info)));
   }
-  payload << "]";
+  return out;
 }
 
-static void append_json_state_value(std::ostringstream& payload, const mx::StateT& value) {
+static VALUE ruby_state_value_from_mx_state(const mx::StateT& value);
+
+static VALUE ruby_state_value_from_mx_state(const mx::StateT& value) {
   if (std::holds_alternative<bool>(value)) {
-    payload << (std::get<bool>(value) ? "true" : "false");
-    return;
+    return std::get<bool>(value) ? Qtrue : Qfalse;
   }
   if (std::holds_alternative<int>(value)) {
-    payload << std::get<int>(value);
-    return;
+    return INT2NUM(std::get<int>(value));
   }
   if (std::holds_alternative<size_t>(value)) {
-    payload << std::get<size_t>(value);
-    return;
+    return SIZET2NUM(std::get<size_t>(value));
   }
   if (std::holds_alternative<float>(value)) {
-    payload << std::get<float>(value);
-    return;
+    return DBL2NUM(static_cast<double>(std::get<float>(value)));
   }
   if (std::holds_alternative<double>(value)) {
-    payload << std::get<double>(value);
-    return;
+    return DBL2NUM(std::get<double>(value));
   }
   if (std::holds_alternative<mx::Dtype>(value)) {
-    append_json_string(payload, dtype_to_string(std::get<mx::Dtype>(value)));
-    return;
+    return ruby_string_from_std(dtype_to_string(std::get<mx::Dtype>(value)));
   }
   if (std::holds_alternative<mx::Shape>(value)) {
-    append_json_numeric_container(payload, std::get<mx::Shape>(value));
-    return;
+    return ruby_array_from_container(
+        std::get<mx::Shape>(value), [](size_t dim) { return SIZET2NUM(dim); });
   }
   if (std::holds_alternative<mx::Strides>(value)) {
-    append_json_numeric_container(payload, std::get<mx::Strides>(value));
-    return;
+    return ruby_array_from_container(
+        std::get<mx::Strides>(value), [](auto stride) { return LL2NUM(static_cast<long long>(stride)); });
   }
   if (std::holds_alternative<std::vector<int>>(value)) {
-    append_json_numeric_container(payload, std::get<std::vector<int>>(value));
-    return;
+    return ruby_array_from_container(
+        std::get<std::vector<int>>(value), [](int item) { return INT2NUM(item); });
   }
   if (std::holds_alternative<std::vector<size_t>>(value)) {
-    append_json_numeric_container(payload, std::get<std::vector<size_t>>(value));
-    return;
+    return ruby_array_from_container(
+        std::get<std::vector<size_t>>(value), [](size_t item) { return SIZET2NUM(item); });
   }
   if (std::holds_alternative<std::vector<std::tuple<bool, bool, bool>>>(value)) {
-    payload << "[";
+    VALUE out = rb_ary_new();
     const auto& tuples = std::get<std::vector<std::tuple<bool, bool, bool>>>(value);
-    for (size_t i = 0; i < tuples.size(); ++i) {
-      if (i > 0) {
-        payload << ",";
-      }
-      payload << "[";
-      payload << (std::get<0>(tuples[i]) ? "true" : "false") << ",";
-      payload << (std::get<1>(tuples[i]) ? "true" : "false") << ",";
-      payload << (std::get<2>(tuples[i]) ? "true" : "false");
-      payload << "]";
+    for (const auto& item : tuples) {
+      VALUE row = rb_ary_new_capa(3);
+      rb_ary_push(row, std::get<0>(item) ? Qtrue : Qfalse);
+      rb_ary_push(row, std::get<1>(item) ? Qtrue : Qfalse);
+      rb_ary_push(row, std::get<2>(item) ? Qtrue : Qfalse);
+      rb_ary_push(out, row);
     }
-    payload << "]";
-    return;
+    return out;
   }
   if (std::holds_alternative<std::vector<std::variant<bool, int, float>>>(value)) {
-    payload << "[";
+    VALUE out = rb_ary_new();
     const auto& vars = std::get<std::vector<std::variant<bool, int, float>>>(value);
-    for (size_t i = 0; i < vars.size(); ++i) {
-      if (i > 0) {
-        payload << ",";
-      }
-      if (std::holds_alternative<bool>(vars[i])) {
-        payload << (std::get<bool>(vars[i]) ? "true" : "false");
-      } else if (std::holds_alternative<int>(vars[i])) {
-        payload << std::get<int>(vars[i]);
+    for (const auto& item : vars) {
+      if (std::holds_alternative<bool>(item)) {
+        rb_ary_push(out, std::get<bool>(item) ? Qtrue : Qfalse);
+      } else if (std::holds_alternative<int>(item)) {
+        rb_ary_push(out, INT2NUM(std::get<int>(item)));
       } else {
-        payload << std::get<float>(vars[i]);
+        rb_ary_push(out, DBL2NUM(static_cast<double>(std::get<float>(item))));
       }
     }
-    payload << "]";
-    return;
+    return out;
   }
   if (std::holds_alternative<std::optional<float>>(value)) {
     const auto& opt = std::get<std::optional<float>>(value);
     if (opt.has_value()) {
-      payload << opt.value();
-    } else {
-      payload << "null";
+      return DBL2NUM(static_cast<double>(opt.value()));
     }
-    return;
+    return Qnil;
   }
-  append_json_string(payload, std::get<std::string>(value));
+  return ruby_string_from_std(std::get<std::string>(value));
 }
 
-static std::string json_state_values(const std::vector<mx::StateT>& values) {
-  std::ostringstream payload;
-  payload << "[";
-  for (size_t i = 0; i < values.size(); ++i) {
-    if (i > 0) {
-      payload << ",";
-    }
-    append_json_state_value(payload, values[i]);
+static VALUE ruby_state_values_from_mx_states(const std::vector<mx::StateT>& values) {
+  VALUE out = rb_ary_new_capa(static_cast<long>(values.size()));
+  for (const auto& value : values) {
+    rb_ary_push(out, ruby_state_value_from_mx_state(value));
   }
-  payload << "]";
-  return payload.str();
+  return out;
 }
 
 static std::string json_generate_from_ruby(VALUE value) {
@@ -7695,25 +7607,6 @@ static std::string json_generate_from_ruby(VALUE value) {
   VALUE json_module = rb_const_get(rb_cObject, rb_intern("JSON"));
   VALUE generated = rb_funcall(json_module, rb_intern("generate"), 1, value);
   return string_from_ruby(generated);
-}
-
-static void append_json_constants(std::ostringstream& payload, const std::vector<GraphConstantInfo>& constants) {
-  payload << "[";
-  for (size_t i = 0; i < constants.size(); ++i) {
-    if (i > 0) {
-      payload << ",";
-    }
-    payload << "{\"name\":";
-    append_json_string(payload, constants[i].name);
-    payload << ",\"shape\":";
-    append_json_shape(payload, constants[i].shape);
-    payload << ",\"dtype\":";
-    append_json_string(payload, dtype_to_string(constants[i].dtype));
-    payload << ",\"values\":";
-    payload << constants[i].values_json;
-    payload << "}";
-  }
-  payload << "]";
 }
 
 static VALUE core_export_graph_ir(int argc, VALUE* argv, VALUE) {
@@ -7767,11 +7660,11 @@ static VALUE core_export_graph_ir(int argc, VALUE* argv, VALUE) {
           "[export_graph_ir] Inputs must include at least one positional or keyword array");
     }
 
-    std::vector<GraphTensorInfo> graph_inputs;
-    std::vector<std::pair<std::string, std::string>> keyword_inputs;
-    std::vector<GraphTensorInfo> graph_outputs;
-    std::vector<GraphConstantInfo> graph_constants;
-    std::vector<GraphNodeInfo> graph_nodes;
+    VALUE graph_inputs = rb_ary_new();
+    VALUE keyword_inputs = rb_ary_new();
+    VALUE graph_outputs = rb_ary_new();
+    VALUE graph_constants = rb_ary_new();
+    VALUE graph_nodes = rb_ary_new();
     mx::export_function(
         [&graph_inputs, &keyword_inputs, &graph_outputs, &graph_constants, &graph_nodes](
             const mx::ExportCallbackInput& data) {
@@ -7785,7 +7678,8 @@ static VALUE core_export_graph_ir(int argc, VALUE* argv, VALUE) {
             auto inputs_it = data.find("inputs");
             if (inputs_it != data.end() &&
                 std::holds_alternative<std::vector<GraphTensorInfo>>(inputs_it->second)) {
-              graph_inputs = std::get<std::vector<GraphTensorInfo>>(inputs_it->second);
+              graph_inputs =
+                  ruby_tensor_infos_from_graph_tensors(std::get<std::vector<GraphTensorInfo>>(inputs_it->second));
             }
             return;
           }
@@ -7795,8 +7689,15 @@ static VALUE core_export_graph_ir(int argc, VALUE* argv, VALUE) {
             if (keywords_it != data.end() &&
                 std::holds_alternative<std::vector<std::pair<std::string, std::string>>>(
                     keywords_it->second)) {
-              keyword_inputs = std::get<std::vector<std::pair<std::string, std::string>>>(
-                  keywords_it->second);
+              keyword_inputs = rb_ary_new();
+              const auto& keywords =
+                  std::get<std::vector<std::pair<std::string, std::string>>>(keywords_it->second);
+              for (const auto& [name, tensor] : keywords) {
+                VALUE entry = rb_hash_new();
+                ruby_hash_set_cstr(entry, "name", ruby_string_from_std(name));
+                ruby_hash_set_cstr(entry, "tensor", ruby_string_from_std(tensor));
+                rb_ary_push(keyword_inputs, entry);
+              }
             }
             return;
           }
@@ -7805,7 +7706,8 @@ static VALUE core_export_graph_ir(int argc, VALUE* argv, VALUE) {
             auto outputs_it = data.find("outputs");
             if (outputs_it != data.end() &&
                 std::holds_alternative<std::vector<GraphTensorInfo>>(outputs_it->second)) {
-              graph_outputs = std::get<std::vector<GraphTensorInfo>>(outputs_it->second);
+              graph_outputs =
+                  ruby_tensor_infos_from_graph_tensors(std::get<std::vector<GraphTensorInfo>>(outputs_it->second));
             }
             return;
           }
@@ -7815,12 +7717,17 @@ static VALUE core_export_graph_ir(int argc, VALUE* argv, VALUE) {
             if (constants_it != data.end() &&
                 std::holds_alternative<std::vector<std::pair<std::string, mx::array>>>(
                     constants_it->second)) {
+              graph_constants = rb_ary_new();
               for (const auto& [name, arr] :
                    std::get<std::vector<std::pair<std::string, mx::array>>>(constants_it->second)) {
                 VALUE arr_value = array_wrap(arr);
                 VALUE ruby_values = array_to_a(arr_value);
-                graph_constants.push_back(
-                    {name, arr.shape(), arr.dtype(), json_generate_from_ruby(ruby_values)});
+                VALUE entry = rb_hash_new();
+                ruby_hash_set_cstr(entry, "name", ruby_string_from_std(name));
+                ruby_hash_set_cstr(entry, "shape", ruby_shape_from_mx_shape(arr.shape()));
+                ruby_hash_set_cstr(entry, "dtype", ruby_string_from_std(dtype_to_string(arr.dtype())));
+                ruby_hash_set_cstr(entry, "values", ruby_values);
+                rb_ary_push(graph_constants, entry);
               }
             }
             return;
@@ -7835,80 +7742,58 @@ static VALUE core_export_graph_ir(int argc, VALUE* argv, VALUE) {
             return;
           }
 
-          GraphNodeInfo node;
-          node.op = std::get<std::string>(name_it->second);
+          VALUE node = rb_hash_new();
+          ruby_hash_set_cstr(node, "op", ruby_string_from_std(std::get<std::string>(name_it->second)));
 
+          VALUE node_inputs = rb_ary_new();
           auto inputs_it = data.find("inputs");
           if (inputs_it != data.end() &&
               std::holds_alternative<std::vector<GraphTensorInfo>>(inputs_it->second)) {
-            node.inputs = std::get<std::vector<GraphTensorInfo>>(inputs_it->second);
+            node_inputs =
+                ruby_tensor_names_from_graph_tensors(std::get<std::vector<GraphTensorInfo>>(inputs_it->second));
           }
+          ruby_hash_set_cstr(node, "inputs", node_inputs);
 
+          VALUE node_outputs = rb_ary_new();
           auto outputs_it = data.find("outputs");
           if (outputs_it != data.end() &&
               std::holds_alternative<std::vector<GraphTensorInfo>>(outputs_it->second)) {
-            node.outputs = std::get<std::vector<GraphTensorInfo>>(outputs_it->second);
+            node_outputs =
+                ruby_tensor_names_from_graph_tensors(std::get<std::vector<GraphTensorInfo>>(outputs_it->second));
           }
+          ruby_hash_set_cstr(node, "outputs", node_outputs);
 
+          VALUE node_arguments = rb_ary_new();
           auto arguments_it = data.find("arguments");
           if (arguments_it != data.end() &&
               std::holds_alternative<std::vector<mx::StateT>>(arguments_it->second)) {
-            node.arguments_json = json_state_values(std::get<std::vector<mx::StateT>>(arguments_it->second));
+            node_arguments =
+                ruby_state_values_from_mx_states(std::get<std::vector<mx::StateT>>(arguments_it->second));
           }
+          ruby_hash_set_cstr(node, "arguments", node_arguments);
 
-          graph_nodes.push_back(std::move(node));
+          rb_ary_push(graph_nodes, node);
         },
         args_kwargs_function_from_callable(fun),
         args,
         kwargs,
         shapeless);
 
-    std::ostringstream payload;
-    payload << "{\"ir_version\":1,\"shapeless\":" << (shapeless ? "true" : "false");
-    payload << ",\"inputs\":";
-    append_json_tensor_infos(payload, graph_inputs);
-
-    payload << ",\"keyword_inputs\":[";
-    for (size_t i = 0; i < keyword_inputs.size(); ++i) {
-      if (i > 0) {
-        payload << ",";
-      }
-      payload << "{\"name\":";
-      append_json_string(payload, keyword_inputs[i].first);
-      payload << ",\"tensor\":";
-      append_json_string(payload, keyword_inputs[i].second);
-      payload << "}";
-    }
-    payload << "]";
-
-    payload << ",\"outputs\":";
-    append_json_tensor_infos(payload, graph_outputs);
-
-    payload << ",\"constants\":";
-    append_json_constants(payload, graph_constants);
-
-    payload << ",\"nodes\":[";
-    for (size_t i = 0; i < graph_nodes.size(); ++i) {
-      if (i > 0) {
-        payload << ",";
-      }
-      payload << "{\"op\":";
-      append_json_string(payload, graph_nodes[i].op);
-      payload << ",\"inputs\":";
-      append_json_tensor_names(payload, graph_nodes[i].inputs);
-      payload << ",\"outputs\":";
-      append_json_tensor_names(payload, graph_nodes[i].outputs);
-      payload << ",\"arguments\":";
-      payload << graph_nodes[i].arguments_json;
-      payload << "}";
-    }
-    payload << "]}";
+    VALUE payload_hash = rb_hash_new();
+    ruby_hash_set_cstr(payload_hash, "ir_version", INT2NUM(1));
+    ruby_hash_set_cstr(payload_hash, "shapeless", shapeless ? Qtrue : Qfalse);
+    ruby_hash_set_cstr(payload_hash, "inputs", graph_inputs);
+    ruby_hash_set_cstr(payload_hash, "keyword_inputs", keyword_inputs);
+    ruby_hash_set_cstr(payload_hash, "outputs", graph_outputs);
+    ruby_hash_set_cstr(payload_hash, "constants", graph_constants);
+    ruby_hash_set_cstr(payload_hash, "nodes", graph_nodes);
+    std::string payload = json_generate_from_ruby(payload_hash);
 
     std::ofstream out(string_from_ruby(file));
     if (!out.is_open()) {
       rb_raise(rb_eRuntimeError, "failed to open output file");
     }
-    out << payload.str();
+    out << payload;
     if (!out.good()) {
       rb_raise(rb_eRuntimeError, "failed to write graph IR");
     }

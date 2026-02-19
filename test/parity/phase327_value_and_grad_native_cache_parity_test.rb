@@ -56,6 +56,44 @@ class Phase327ValueAndGradNativeCacheParityTest < Minitest::Test
     assert_equal [10.0, 20.0], second[1]["y"].to_a
   end
 
+  def test_value_and_grad_reentrant_call_with_same_selection_key_is_safe
+    reentered = false
+    inner_observation = nil
+    wrapped = nil
+
+    install_singleton_override(:native_value_and_grad) do |lifted, _argnums|
+      lambda do |*flat_vars|
+        unless reentered
+          reentered = true
+          inner_value, inner_grad = wrapped.call(MLX::Core.array([5.0, -1.0], MLX::Core.float32))
+          MLX::Core.eval(inner_value, inner_grad)
+          inner_observation = [inner_value.item, inner_grad.to_a]
+        end
+
+        value = lifted.call(*flat_vars)
+        grad = MLX::Core.multiply(flat_vars[0], MLX::Core.array(2.0, flat_vars[0].dtype))
+        [value, grad]
+      end
+    end
+
+    fn = lambda do |x|
+      MLX::Core.sum(MLX::Core.multiply(x, x))
+    end
+    wrapped = MLX::Core.value_and_grad(fn)
+
+    value, grad = wrapped.call(MLX::Core.array([2.0, -3.0], MLX::Core.float32))
+    MLX::Core.eval(value, grad)
+
+    assert_equal true, reentered
+    refute_nil inner_observation
+    assert_in_delta 26.0, inner_observation[0], 1e-5
+    assert_equal [10.0, -2.0], inner_observation[1]
+    assert_in_delta 13.0, value.item, 1e-5
+    assert_equal [4.0, -6.0], grad.to_a
+  ensure
+    restore_singleton_override(:native_value_and_grad)
+  end
+
   private
 
   def install_singleton_override(method_name, &block)

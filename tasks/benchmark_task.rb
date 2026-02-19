@@ -7,10 +7,7 @@ require "rbconfig"
 require "tmpdir"
 require "stringio"
 LIB_ROOT = File.expand_path("../lib", __dir__)
-$LOAD_PATH.unshift(LIB_ROOT) unless $LOAD_PATH.include?(LIB_ROOT)
-require "mlx"
 EXAMPLES_ROOT = File.expand_path("../examples/benchmark", __dir__)
-Dir[File.join(EXAMPLES_ROOT, "*.rb")].sort.each { |path| require path }
 
 class BenchmarkTask
   CNN_CHANNELS = 3
@@ -28,7 +25,7 @@ class BenchmarkTask
   DEFAULT_DIMS = 256
   DEFAULT_HEADS = 8
   DEFAULT_LAYERS = 4
-  DEFAULT_DTYPE = MLX::Core.float32
+  DEFAULT_DTYPE = :float32
   WEBGPU_DEFAULT_TIMEOUT_SECONDS = 180
   WEBGPU_DEFAULT_BENCHMARK_WARMUP = 1
   WEBGPU_DEFAULT_BENCHMARK_MEASURE = 3
@@ -52,6 +49,7 @@ class BenchmarkTask
     compute_device: :gpu,
     python_bin: "python3"
   )
+    self.class.ensure_benchmark_runtime!
     @iterations = iterations
     @warmup = warmup
     @batch_size = batch_size
@@ -63,6 +61,7 @@ class BenchmarkTask
     @compute_device = parse_compute_device(compute_device)
     @python_bin = python_bin
     @repo_root = File.expand_path("..", __dir__)
+    @dtype = self.class.default_dtype
   end
 
   def run(model: :transformer, enforce_parity: true, print_summary: true)
@@ -223,14 +222,14 @@ class BenchmarkTask
         dims: @dims,
         num_heads: @num_heads,
         num_layers: @num_layers,
-        dtype: DEFAULT_DTYPE
+        dtype: @dtype
       )
       trace = ->(_seed) { example.run_step }
       expected = example.run_step.to_a
     when :cnn
       example = BenchmarkExamples::CnnExample.new(
         batch_size: @batch_size,
-        dtype: DEFAULT_DTYPE
+        dtype: @dtype
       )
       trace = ->(_seed) { example.run_step }
       expected = example.run_step.to_a
@@ -238,7 +237,7 @@ class BenchmarkTask
       example = BenchmarkExamples::MlpExample.new(
         batch_size: @batch_size,
         dims: @dims,
-        dtype: DEFAULT_DTYPE
+        dtype: @dtype
       )
       trace = ->(_seed) { example.run_step }
       expected = example.run_step.to_a
@@ -247,7 +246,7 @@ class BenchmarkTask
         batch_size: @batch_size,
         sequence_length: @sequence_length,
         dims: @dims,
-        dtype: DEFAULT_DTYPE
+        dtype: @dtype
       )
       trace = ->(_seed) { example.run_step }
       expected = example.run_step.to_a
@@ -394,25 +393,25 @@ class BenchmarkTask
         dims: @dims,
         num_heads: @num_heads,
         num_layers: @num_layers,
-        dtype: DEFAULT_DTYPE
+        dtype: @dtype
       )
     when :cnn
       BenchmarkExamples::CnnExample.new(
         batch_size: @batch_size,
-        dtype: DEFAULT_DTYPE
+        dtype: @dtype
       )
     when :mlp
       BenchmarkExamples::MlpExample.new(
         batch_size: @batch_size,
         dims: @dims,
-        dtype: DEFAULT_DTYPE
+        dtype: @dtype
       )
     when :rnn
       BenchmarkExamples::RnnExample.new(
         batch_size: @batch_size,
         sequence_length: @sequence_length,
         dims: @dims,
-        dtype: DEFAULT_DTYPE
+        dtype: @dtype
       )
     when :karpathy_gpt2
       BenchmarkExamples::Gpt2MiniExample.new(
@@ -767,6 +766,20 @@ class BenchmarkTask
 
   def self.requirements_path
     File.join(REPO_ROOT, "requirements.txt")
+  end
+
+  def self.ensure_benchmark_runtime!
+    return if @benchmark_runtime_loaded
+
+    $LOAD_PATH.unshift(LIB_ROOT) unless $LOAD_PATH.include?(LIB_ROOT)
+    require "mlx"
+    Dir[File.join(EXAMPLES_ROOT, "*.rb")].sort.each { |path| require path }
+    @benchmark_runtime_loaded = true
+  end
+
+  def self.default_dtype
+    ensure_benchmark_runtime!
+    MLX::Core.public_send(DEFAULT_DTYPE)
   end
 
   def self.python_bin
