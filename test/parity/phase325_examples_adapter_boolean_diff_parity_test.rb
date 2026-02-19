@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "test_helper"
-require_relative "../../tasks/examples_models_benchmark_adapter"
+require_relative "../../examples/benchmark/benchmark_mlx_examples"
 
 class Phase325ExamplesAdapterBooleanDiffParityTest < Minitest::Test
   def setup

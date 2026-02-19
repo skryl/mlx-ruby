@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] ||= "180"
+ENV["MLX_TEST_TIMEOUT"] = "180"
 
 require "json"
 require "open3"
@@ -16,7 +16,7 @@ class Phase322ExamplesOnnxCaptureHookModelSelectionParityTest < Minitest::Test
     @runner = File.join(@submodule_root, "benchmark", "runner.rb")
     @run_with_dryrun = File.join(@submodule_root, "benchmark", "ruby", "run_with_dryrun.rb")
     @force_cpu = File.join(@submodule_root, "benchmark", "ruby", "force_cpu.rb")
-    @capture_hook = File.join(@repo_root, "tasks", "examples_models_onnx_capture_hook.rb")
+    @capture_hook = File.join(@repo_root, "examples", "benchmark", "benchmark_mlx_examples", "onnx_capture_hook.rb")
   end
 
   def test_cvae_capture_prefers_model_graph_not_trivial_probe

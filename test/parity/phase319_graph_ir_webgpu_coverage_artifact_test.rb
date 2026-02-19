@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] ||= "120"
+ENV["MLX_TEST_TIMEOUT"] = "120"
 
 require "json"
 require "open3"

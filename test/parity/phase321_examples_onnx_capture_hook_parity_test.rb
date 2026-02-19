@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] ||= "120"
+ENV["MLX_TEST_TIMEOUT"] = "120"
 
 require "json"
 require "open3"
@@ -16,7 +16,7 @@ class Phase321ExamplesOnnxCaptureHookParityTest < Minitest::Test
     @runner = File.join(@submodule_root, "benchmark", "runner.rb")
     @run_with_dryrun = File.join(@submodule_root, "benchmark", "ruby", "run_with_dryrun.rb")
     @force_gpu = File.join(@submodule_root, "benchmark", "ruby", "force_gpu.rb")
-    @capture_hook = File.join(@repo_root, "tasks", "examples_models_onnx_capture_hook.rb")
+    @capture_hook = File.join(@repo_root, "examples", "benchmark", "benchmark_mlx_examples", "onnx_capture_hook.rb")
   end
 
   def test_capture_hook_exports_non_empty_graph_ir_for_examples_script

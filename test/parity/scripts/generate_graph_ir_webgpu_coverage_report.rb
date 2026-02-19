@@ -16,7 +16,7 @@ SUBMODULE_ROOT = REPO_ROOT.join("mlx-ruby-examples").freeze
 SUBMODULE_RUNNER = SUBMODULE_ROOT.join("benchmark", "runner.rb").freeze
 SUBMODULE_FORCE_CPU = SUBMODULE_ROOT.join("benchmark", "ruby", "force_cpu.rb").freeze
 SUBMODULE_DRYRUN = SUBMODULE_ROOT.join("benchmark", "ruby", "run_with_dryrun.rb").freeze
-SUBMODULE_CAPTURE_HOOK = REPO_ROOT.join("tasks", "examples_models_onnx_capture_hook.rb").freeze
+SUBMODULE_CAPTURE_HOOK = REPO_ROOT.join("examples", "benchmark", "benchmark_mlx_examples", "onnx_capture_hook.rb").freeze
 
 $LOAD_PATH.unshift(LIB_ROOT.to_s) unless $LOAD_PATH.include?(LIB_ROOT.to_s)
 require "mlx"
@@ -24,7 +24,7 @@ require_relative "../../../examples/benchmark/transformer_example"
 require_relative "../../../examples/benchmark/cnn_example"
 require_relative "../../../examples/benchmark/mlp_example"
 require_relative "../../../examples/benchmark/rnn_example"
-require_relative "../../../examples/benchmark/karpathy_gpt2_example"
+require_relative "../../../examples/benchmark/gpt2mini_example"
 
 LOCAL_MODELS = %i[transformer cnn mlp rnn karpathy_gpt2].freeze
 
@@ -65,7 +65,7 @@ def benchmark_payload(model_name)
     )
     ->(_seed) { example.run_step }
   when :karpathy_gpt2
-    example = BenchmarkExamples::KarpathyGpt2Example.new(
+    example = BenchmarkExamples::Gpt2MiniExample.new(
       batch_size: 1,
       sequence_length: 16,
       dims: 32,

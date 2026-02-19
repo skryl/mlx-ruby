@@ -18,20 +18,19 @@ class Phase295ConcatenateFlattenUnsupportedParityTest < Minitest::Test
     $LOAD_PATH.delete(File.join(RUBY_ROOT, "lib"))
   end
 
-  def test_flatten_with_unknown_intermediate_shape_is_reported_unsupported
+  def test_flatten_after_add_with_static_shape_is_supported
     payload = flatten_after_add_payload
     assert_equal %w[Add Flatten], payload.fetch("nodes").map { |node| node.fetch("op") }
     assert_equal [0, 1], payload.fetch("nodes")[1].fetch("arguments")
 
     report = MLX::Core.graph_ir_webgpu_compatibility_report(payload)
-    assert_equal false, report.fetch("ready_for_stub_conversion")
-    assert_equal 1, report.fetch("unsupported_nodes")
-    assert_equal ["Flatten"], report.fetch("unsupported_ops")
+    assert_equal true, report.fetch("ready_for_stub_conversion")
+    assert_equal 0, report.fetch("unsupported_nodes")
+    assert_equal [], report.fetch("unsupported_ops")
 
-    error = assert_raises(NotImplementedError) do
-      MLX::Core.graph_ir_to_onnx_stub(payload)
-    end
-    assert_match(/without known static shape/i, error.message)
+    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    onnx_nodes = stub.fetch("graph").fetch("nodes")
+    assert_equal %w[Add Reshape], onnx_nodes.map { |node| node.fetch("op_type") }
   end
 
   private

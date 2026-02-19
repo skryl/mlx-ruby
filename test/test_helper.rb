@@ -216,7 +216,14 @@ module Minitest
     alias_method :run_without_timeout, :run
 
     def run
-      Timeout.timeout(TEST_TIMEOUT_SECONDS) { run_without_timeout }
+      Timeout.timeout(self.class.current_test_timeout_seconds) { run_without_timeout }
+    end
+
+    def self.current_test_timeout_seconds
+      raw = ENV.fetch("MLX_TEST_TIMEOUT", TEST_TIMEOUT_SECONDS.to_s).to_i
+      raw.positive? ? raw : TEST_TIMEOUT_SECONDS
+    rescue StandardError
+      TEST_TIMEOUT_SECONDS
     end
   end
 end

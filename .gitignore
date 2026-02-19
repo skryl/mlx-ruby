@@ -14,7 +14,7 @@ __pycache__/
 python/mlx/core
 python/mlx/share
 python/mlx/include
-tmp/
+/tmp/
 .Python
 build/
 develop-eggs/
@@ -81,6 +81,9 @@ uv.lock
 /test/parity/reports/*.json
 !/test/parity/reports/phase0_contract.json
 /test/tmp/
+
+# Generated web demo assets (`rake web:assets`)
+/web/assets/
 
 # Generated docs autosummary directories
 /docs/**/_autosummary*/

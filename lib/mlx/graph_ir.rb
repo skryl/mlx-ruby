@@ -139,6 +139,7 @@ module MLX
     DTYPE_PROMOTION_RANK = DTYPE_PROMOTION_ORDER.each_with_index.each_with_object({}) do |(dtype, rank), out|
       out[dtype] = rank
     end.freeze
+    FILE_READ_CHUNK_BYTES = 8 * 1024 * 1024
 
     def load_payload(payload_or_source)
       payload = case payload_or_source
@@ -146,7 +147,7 @@ module MLX
         deep_copy_hash(payload_or_source)
       when String
         if File.file?(payload_or_source)
-          parse_json_payload(File.binread(payload_or_source), "graph ir file")
+          parse_json_payload(read_file_with_fallback(payload_or_source), "graph ir file")
         else
           parse_json_payload(payload_or_source, "graph ir string")
         end
@@ -159,6 +160,19 @@ module MLX
       end
       normalize_hash_keys(payload)
     end
+
+    def read_file_with_fallback(path)
+      File.binread(path)
+    rescue Errno::EINVAL
+      File.open(path, "rb") do |io|
+        content = +""
+        while (chunk = io.read(FILE_READ_CHUNK_BYTES))
+          content << chunk
+        end
+        content
+      end
+    end
+    private_class_method :read_file_with_fallback
 
     def validate!(payload_or_source)
       payload = load_payload(payload_or_source)

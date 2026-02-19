@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] ||= "1200"
+ENV["MLX_TEST_TIMEOUT"] = "1200"
 
 require "json"
 require "open3"
@@ -63,7 +63,7 @@ class Phase324ExamplesSubmoduleOnnxRuntimeParityTest < Minitest::Test
     @submodule_runner = File.join(@submodule_root, "benchmark", "runner.rb")
     @force_cpu = File.join(@submodule_root, "benchmark", "ruby", "force_cpu.rb")
     @run_with_dryrun = File.join(@submodule_root, "benchmark", "ruby", "run_with_dryrun.rb")
-    @capture_hook = File.join(@repo_root, "tasks", "examples_models_onnx_capture_hook.rb")
+    @capture_hook = File.join(@repo_root, "examples", "benchmark", "benchmark_mlx_examples", "onnx_capture_hook.rb")
     @lib_root = File.join(@repo_root, "lib")
 
     skip "mlx-ruby-examples submodule is not available" unless File.exist?(@submodule_runner)

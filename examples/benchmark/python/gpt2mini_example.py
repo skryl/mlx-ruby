@@ -42,8 +42,8 @@ def set_device(device_name):
 def load_dataset(path):
     if not os.path.exists(path):
         raise FileNotFoundError(
-            f"Karpathy GPT-2 fixture missing at {path}. "
-            "Add benchmark/fixtures/karpathy.txt before running this benchmark."
+            f"GPT-2 fixture missing at {path}. "
+            "Add test/fixtures/karpathy.txt before running this benchmark."
         )
 
     with open(path, "rb") as handle:
@@ -164,7 +164,7 @@ def main():
         step_index += 1
         mx.eval(loss)
         if (i + 1) == args.warmup or (i + 1) % warmup_every == 0:
-            print(f"[python/karpathy_gpt2] warmup {i + 1}/{args.warmup}", flush=True)
+            print(f"[python/gpt2mini] warmup {i + 1}/{args.warmup}", flush=True)
 
     start = time.perf_counter()
     for i in range(args.iterations):
@@ -172,7 +172,7 @@ def main():
         step_index += 1
         mx.eval(loss)
         if (i + 1) == args.iterations or (i + 1) % iter_every == 0:
-            print(f"[python/karpathy_gpt2] iter {i + 1}/{args.iterations}", flush=True)
+            print(f"[python/gpt2mini] iter {i + 1}/{args.iterations}", flush=True)
     elapsed = time.perf_counter() - start
 
     print(

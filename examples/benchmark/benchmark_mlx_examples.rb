@@ -9,7 +9,7 @@ require "stringio"
 require "timeout"
 require "tmpdir"
 
-EXAMPLES_ADAPTER_LIB_ROOT = File.expand_path("../lib", __dir__)
+EXAMPLES_ADAPTER_LIB_ROOT = File.expand_path("../../lib", __dir__)
 $LOAD_PATH.unshift(EXAMPLES_ADAPTER_LIB_ROOT) unless $LOAD_PATH.include?(EXAMPLES_ADAPTER_LIB_ROOT)
 require "mlx"
 
@@ -397,7 +397,7 @@ class ExamplesModelsBenchmarkAdapter
       "-r",
       force_device_script,
       "-r",
-      File.join(@repo_root, "tasks", "examples_models_onnx_capture_hook.rb"),
+      File.join(@repo_root, "examples", "benchmark", "benchmark_mlx_examples", "onnx_capture_hook.rb"),
       File.join(@submodule_root, "benchmark", "ruby", "run_with_dryrun.rb"),
       ruby_script_path(spec)
     ]

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] ||= "120"
+ENV["MLX_TEST_TIMEOUT"] = "120"
 
 require "json"
 require "open3"
@@ -11,7 +11,7 @@ require_relative "../../examples/benchmark/transformer_example"
 require_relative "../../examples/benchmark/cnn_example"
 require_relative "../../examples/benchmark/mlp_example"
 require_relative "../../examples/benchmark/rnn_example"
-require_relative "../../examples/benchmark/karpathy_gpt2_example"
+require_relative "../../examples/benchmark/gpt2mini_example"
 
 class Phase314BenchmarkModelOnnxRuntimeParityTest < Minitest::Test
   MODELS = %i[transformer cnn mlp rnn karpathy_gpt2].freeze
@@ -120,7 +120,7 @@ class Phase314BenchmarkModelOnnxRuntimeParityTest < Minitest::Test
       trace = ->(_seed) { example.run_step }
       expected = example.run_step.to_a
     when :karpathy_gpt2
-      example = BenchmarkExamples::KarpathyGpt2Example.new(
+      example = BenchmarkExamples::Gpt2MiniExample.new(
         batch_size: 1,
         sequence_length: 16,
         dims: 32,

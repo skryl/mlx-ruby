@@ -508,6 +508,47 @@ module MLX
       end
 
       ARRAY_LEAF = :__mlx_array_leaf__
+      GRAPH_IR_NORMALIZATION_MAX_BYTES = 2_000_000_000
+      FILE_READ_CHUNK_BYTES = 8 * 1024 * 1024
+      LEGACY_GRAPH_IR_DTYPE_PRESERVING_UNARY_OPS = %w[
+        Exp
+        Log
+        Sin
+        Cos
+        Erf
+        Sqrt
+        Abs
+        Floor
+        Negative
+        Relu
+        Sigmoid
+        Tanh
+        Softmax
+        Reshape
+        Flatten
+        Unflatten
+        Transpose
+        Squeeze
+        ExpandDims
+        Broadcast
+        Pad
+        Slice
+        Scan
+        LogSumExp
+      ].freeze
+      LEGACY_GRAPH_IR_DTYPE_UNIFORM_OPS = %w[
+        Add
+        Subtract
+        Multiply
+        Divide
+        Maximum
+        Minimum
+        Power
+        Matmul
+        AddMM
+        Convolution
+        ConvolutionTranspose
+      ].freeze
 
       def load(file, format = nil, return_metadata = false)
         ensure_native!
@@ -556,13 +597,16 @@ module MLX
           Dir.mktmpdir do |dir|
             path = File.join(dir, "graph_ir.json")
             native_export_graph_ir(path, fun, *extras)
-            content = File.binread(path)
+            content = normalize_exported_graph_ir_file!(path)
             target.write(content)
             target.rewind if target.respond_to?(:rewind)
             content
           end
         else
-          native_export_graph_ir(target, fun, *extras)
+          path = file_path(target)
+          native_export_graph_ir(path, fun, *extras)
+          normalize_exported_graph_ir_file!(path, include_content: false)
+          nil
         end
       end
 
@@ -613,7 +657,9 @@ module MLX
         Dir.mktmpdir("mlx-ruby-onnx") do |dir|
           stub_path = File.join(dir, "graph_stub.json")
           onnx_path = File.join(dir, "graph.onnx")
-          File.binwrite(stub_path, JSON.generate(json_safe_stub))
+          File.open(stub_path, "wb") do |io|
+            JSON.dump(json_safe_stub, io)
+          end
           run_python!(
             python_bin,
             "-c",
@@ -988,6 +1034,225 @@ module MLX
         end
       end
 
+      def normalize_exported_graph_ir_file!(path, include_content: true)
+        if skip_graph_ir_normalization?(path)
+          return read_binary_file_with_fallback(path) if include_content
+
+          return nil
+        end
+
+        content = read_binary_file_with_fallback(path)
+        normalized = normalize_exported_graph_ir_content(content)
+        if normalized.nil?
+          return content if include_content
+
+          return nil
+        end
+
+        File.binwrite(path, normalized)
+        include_content ? normalized : nil
+      end
+
+      def skip_graph_ir_normalization?(path)
+        File.size(path) > GRAPH_IR_NORMALIZATION_MAX_BYTES
+      rescue Errno::ENOENT
+        false
+      end
+
+      def read_binary_file_with_fallback(path)
+        File.binread(path)
+      rescue Errno::EINVAL
+        read_binary_file_in_chunks(path)
+      end
+
+      def read_binary_file_in_chunks(path)
+        File.open(path, "rb") do |io|
+          content = +""
+          while (chunk = io.read(FILE_READ_CHUNK_BYTES))
+            content << chunk
+          end
+          content
+        end
+      end
+
+      def normalize_exported_graph_ir_content(content)
+        payload = JSON.parse(content)
+        return nil unless backfill_legacy_graph_ir_dtype_arguments!(payload)
+
+        JSON.generate(payload)
+      rescue JSON::ParserError
+        nil
+      end
+
+      def backfill_legacy_graph_ir_dtype_arguments!(payload)
+        nodes = payload["nodes"]
+        return false unless nodes.is_a?(::Array)
+
+        dtype_by_tensor = infer_graph_ir_tensor_dtypes(payload)
+        changed = false
+        nodes.each do |node|
+          next unless node.is_a?(Hash)
+
+          case node["op"]
+          when "AsType"
+            changed = true if backfill_legacy_astype_arguments!(node, dtype_by_tensor)
+          when "NumberOfElements"
+            changed = true if backfill_legacy_number_of_elements_arguments!(node, dtype_by_tensor)
+          end
+        end
+        changed
+      end
+
+      def backfill_legacy_astype_arguments!(node, dtype_by_tensor)
+        arguments = node["arguments"]
+        if arguments.is_a?(::Array) && arguments.first.is_a?(String) && !arguments.first.empty?
+          return false
+        end
+
+        output_dtype = unique_known_dtype(dtype_by_tensor, node["outputs"])
+        return false if output_dtype.nil?
+
+        node["arguments"] = [output_dtype]
+        true
+      end
+
+      def backfill_legacy_number_of_elements_arguments!(node, dtype_by_tensor)
+        arguments = node["arguments"]
+        return false unless arguments.is_a?(::Array) && arguments.length == 2
+
+        output_dtype = unique_known_dtype(dtype_by_tensor, node["outputs"])
+        return false if output_dtype.nil?
+
+        node["arguments"] = [arguments[0], arguments[1], output_dtype]
+        true
+      end
+
+      def infer_graph_ir_tensor_dtypes(payload)
+        known = extract_graph_ir_tensor_dtypes(payload)
+        nodes = payload["nodes"]
+        return known unless nodes.is_a?(::Array)
+
+        loop do
+          changed = false
+          nodes.each do |node|
+            next unless node.is_a?(Hash)
+
+            inputs = node["inputs"].is_a?(::Array) ? node["inputs"] : []
+            outputs = node["outputs"].is_a?(::Array) ? node["outputs"] : []
+            case node["op"]
+            when "AsType"
+              arguments = node["arguments"]
+              target = arguments.is_a?(::Array) ? arguments.first : nil
+              next unless target.is_a?(String) && !target.empty?
+
+              outputs.each do |name|
+                changed = true if assign_inferred_dtype!(known, name, target)
+              end
+            when "Equal", "Greater", "Less"
+              outputs.each do |name|
+                changed = true if assign_inferred_dtype!(known, name, "bool")
+              end
+            when "ArgReduce"
+              outputs.each do |name|
+                changed = true if assign_inferred_dtype!(known, name, "int64")
+              end
+            when "AsStrided", "Gather", "GatherAxis", "Split"
+              changed = true if propagate_primary_input_dtype!(known, inputs, outputs)
+            when "Concatenate"
+              changed = true if propagate_uniform_dtype_between_tensors!(known, inputs, outputs)
+            when "Select"
+              changed = true if propagate_uniform_dtype_between_tensors!(known, inputs.drop(1), outputs)
+              changed = true if assign_inferred_dtype!(known, inputs.first, "bool")
+            when *LEGACY_GRAPH_IR_DTYPE_PRESERVING_UNARY_OPS
+              changed = true if propagate_primary_input_dtype!(known, inputs, outputs)
+            when *LEGACY_GRAPH_IR_DTYPE_UNIFORM_OPS
+              changed = true if propagate_uniform_dtype_between_tensors!(known, inputs, outputs)
+            end
+          end
+          break unless changed
+        end
+
+        known
+      end
+
+      def extract_graph_ir_tensor_dtypes(payload)
+        %w[inputs outputs constants].each_with_object({}) do |section, out|
+          tensors = payload[section]
+          next unless tensors.is_a?(::Array)
+
+          tensors.each do |tensor|
+            next unless tensor.is_a?(Hash)
+
+            name = tensor["name"]
+            dtype = tensor["dtype"]
+            next unless name.is_a?(String) && !name.empty?
+            next unless dtype.is_a?(String) && !dtype.empty?
+
+            out[name] = dtype
+          end
+        end
+      end
+
+      def propagate_primary_input_dtype!(known, inputs, outputs)
+        return false unless inputs.is_a?(::Array) && outputs.is_a?(::Array)
+        input_name = inputs.first
+        return false unless input_name.is_a?(String) && !input_name.empty?
+
+        changed = false
+        input_dtype = known[input_name]
+        output_dtype = unique_known_dtype(known, outputs)
+
+        if input_dtype.nil?
+          changed = true if assign_inferred_dtype!(known, input_name, output_dtype)
+        else
+          outputs.each do |name|
+            changed = true if assign_inferred_dtype!(known, name, input_dtype)
+          end
+        end
+        changed
+      end
+
+      def propagate_uniform_dtype_between_tensors!(known, left_names, right_names)
+        return false unless left_names.is_a?(::Array) && right_names.is_a?(::Array)
+
+        left_dtype = unique_known_dtype(known, left_names)
+        right_dtype = unique_known_dtype(known, right_names)
+        dtype = left_dtype || right_dtype
+        return false if dtype.nil?
+
+        changed = false
+        left_names.each do |name|
+          changed = true if assign_inferred_dtype!(known, name, dtype)
+        end
+        right_names.each do |name|
+          changed = true if assign_inferred_dtype!(known, name, dtype)
+        end
+        changed
+      end
+
+      def unique_known_dtype(known, names)
+        return nil unless names.is_a?(::Array)
+
+        known_values = names.filter_map do |name|
+          name.is_a?(String) && !name.empty? ? known[name] : nil
+        end.uniq
+        return nil unless known_values.length == 1
+
+        known_values.first
+      end
+
+      def assign_inferred_dtype!(known, tensor_name, dtype)
+        return false unless tensor_name.is_a?(String) && !tensor_name.empty?
+        return false unless dtype.is_a?(String) && !dtype.empty?
+
+        existing = known[tensor_name]
+        return false if existing == dtype
+        return false unless existing.nil?
+
+        known[tensor_name] = dtype
+        true
+      end
+
       def normalize_onnx_external_data_options(
         target:,
         external_data:,
@@ -1249,27 +1514,64 @@ module MLX
       end
 
       def build_grad_like_function(fun, argnums, argnames, with_value)
+        cache = {}
+
         lambda do |*args, **kwargs|
           selections, flat_inputs = build_target_selections(args, kwargs, argnums, argnames)
-          native_argnums = (0...flat_inputs.length).to_a
-          captured_value = nil
-          lifted = lambda do |*flat_vars|
-            call_args, call_kwargs = apply_flat_vars_to_targets(args, kwargs, selections, flat_vars)
-            raw_value = fun.call(*call_args, **call_kwargs)
-            captured_value = raw_value
-            extract_loss(raw_value)
+          cache_key = grad_selection_cache_key(selections)
+          entry = cache[cache_key]
+          unless entry
+            call_state = {}
+            lifted = lambda do |*flat_vars|
+              state = call_state[:current]
+              if state.nil?
+                raise RuntimeError, "gradient transform invoked without call state"
+              end
+
+              call_args, call_kwargs = apply_flat_vars_to_targets(
+                state[:args],
+                state[:kwargs],
+                state[:selections],
+                flat_vars
+              )
+              raw_value = fun.call(*call_args, **call_kwargs)
+              state[:captured_value] = raw_value
+              extract_loss(raw_value)
+            end
+
+            native_argnums = (0...flat_inputs.length).to_a
+            native_fn = if with_value
+              native_value_and_grad(lifted, native_argnums)
+            else
+              native_grad(lifted, native_argnums)
+            end
+
+            entry = {
+              native_fn: native_fn,
+              call_state: call_state
+            }
+            cache[cache_key] = entry
           end
 
+          state = {
+            args: args,
+            kwargs: kwargs,
+            selections: selections,
+            captured_value: nil
+          }
+          entry[:call_state][:current] = state
+
           if with_value
-            native_fn = native_value_and_grad(lifted, native_argnums)
-            _loss, raw_grads = native_fn.call(*flat_inputs)
-            value = captured_value.nil? ? fun.call(*args, **kwargs) : captured_value
+            _loss, raw_grads = entry[:native_fn].call(*flat_inputs)
+            value = state[:captured_value]
+            value = fun.call(*args, **kwargs) if value.nil?
             [value, rebuild_grad_result(raw_grads, selections, argnames)]
           else
-            native_fn = native_grad(lifted, native_argnums)
-            raw_grads = native_fn.call(*flat_inputs)
+            raw_grads = entry[:native_fn].call(*flat_inputs)
             rebuild_grad_result(raw_grads, selections, argnames)
           end
+        ensure
+          entry[:call_state].delete(:current) unless entry.nil?
         end
       end
 
@@ -1417,6 +1719,16 @@ module MLX
         else
           raise ArgumentError, "invalid tree specification"
         end
+      end
+
+      def grad_selection_cache_key(selections)
+        positional = selections[:positional].map do |entry|
+          "#{entry[:index]}:#{structure_cache_key(entry[:spec])}"
+        end
+        keyword = selections[:keyword].map do |entry|
+          "#{entry[:name]}:#{entry[:key]}:#{structure_cache_key(entry[:spec])}"
+        end
+        "P[#{positional.join(',')}]K[#{keyword.join(',')}]"
       end
 
       def inflate_tree_from_arrays(spec, arrays, cursor)

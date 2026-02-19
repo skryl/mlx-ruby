@@ -4,11 +4,11 @@ require "mlx"
 require_relative "benchmark_digest"
 
 module BenchmarkExamples
-  class KarpathyGpt2Example
+  class Gpt2MiniExample
     BATCH_STRIDE = 9_973
     BATCH_OFFSET = 7_919
 
-    class KarpathyGpt2Model < MLX::NN::Module
+    class Gpt2MiniModel < MLX::NN::Module
       def initialize(vocab_size:, dims:, num_heads:, num_layers:, block_size:, dropout: 0.0)
         super()
 
@@ -48,7 +48,7 @@ module BenchmarkExamples
     attr_reader :label, :output_shape
 
     def initialize(batch_size:, sequence_length:, dims:, num_heads:, num_layers:, repo_root:)
-      @label = "karpathy_gpt2"
+      @label = "gpt2mini"
       @batch_size = batch_size
       @sequence_length = sequence_length
       @step_index = 0
@@ -57,7 +57,7 @@ module BenchmarkExamples
       @train_data = dataset.fetch("train")
       vocab_size = dataset.fetch("vocab_size")
 
-      @model = KarpathyGpt2Model.new(
+      @model = Gpt2MiniModel.new(
         vocab_size: vocab_size,
         dims: dims,
         num_heads: num_heads,
@@ -135,14 +135,14 @@ module BenchmarkExamples
     end
 
     def prepare_dataset(repo_root)
-      data_path = File.join(repo_root, "benchmark", "fixtures", "karpathy.txt")
+      data_path = File.join(repo_root, "test", "fixtures", "karpathy.txt")
       unless File.exist?(data_path)
-        raise "Karpathy GPT-2 fixture missing at #{data_path}. " \
-              "Add benchmark/fixtures/karpathy.txt before running this benchmark."
+        raise "GPT-2 fixture missing at #{data_path}. " \
+              "Add test/fixtures/karpathy.txt before running this benchmark."
       end
 
       bytes = File.binread(data_path).bytes
-      raise "Karpathy GPT-2 dataset at #{data_path} is empty." if bytes.empty?
+      raise "GPT-2 dataset at #{data_path} is empty." if bytes.empty?
 
       vocab = bytes.uniq.sort
       encode = {}

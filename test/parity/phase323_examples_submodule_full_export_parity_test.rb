@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] ||= "480"
+ENV["MLX_TEST_TIMEOUT"] = "480"
 
 require "json"
 require "open3"
@@ -46,4 +46,3 @@ class Phase323ExamplesSubmoduleFullExportParityTest < Minitest::Test
     ids
   end
 end
-

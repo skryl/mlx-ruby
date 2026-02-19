@@ -13,7 +13,7 @@ Phase progress update (local):
 5. Direct examples ONNX export flow now captures non-empty GraphIR payloads via local eval-time hook and drives the local WebGPU harness path.
 6. Capture candidate selection now prefers non-trivial eval graph captures (validated with cvae/segment_anything/encodec regression tests).
 7. Examples WebGPU benchmark lane now skips unsupported-op models in non-strict mode (`REQUIRE_WEBGPU=1` remains strict).
-8. Coverage task now uses direct examples ONNX capture (`tasks/examples_models_onnx_capture_hook.rb`) instead of dot-graph reconstruction for submodule mode.
+8. Coverage task now uses direct examples ONNX capture (`examples/benchmark/benchmark_mlx_examples/onnx_capture_hook.rb`) instead of dot-graph reconstruction for submodule mode.
 9. `GatherAxis` lowering now supports broadcast on non-axis dims via `Expand` + `GatherElements` and unblocks `clip`.
 10. Phase 4 full-model export parity is green: 23/23 examples models report `unsupported_nodes == 0` with empty `errors_by_model`.
 11. Added full examples-submodule ONNX Runtime parity gate (`phase324`) that captures each model, exports ONNX, runs in Python ORT, and checks output parity.

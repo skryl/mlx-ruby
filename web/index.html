@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MLX Ruby Web Demos</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top left, #fef7e7 0%, #f4f8ff 50%, #edf3ff 100%);
+        color: #17202a;
+      }
+
+      main {
+        box-sizing: border-box;
+        max-width: 880px;
+        margin: 0 auto;
+        min-height: 100vh;
+        padding: 48px 24px 72px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: 34px;
+        letter-spacing: 0.01em;
+      }
+
+      p {
+        margin: 0;
+        color: #304256;
+      }
+
+      .grid {
+        margin-top: 28px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        text-decoration: none;
+        color: inherit;
+        border: 1px solid #d4deea;
+        border-radius: 14px;
+        padding: 18px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 4px 18px rgba(10, 34, 72, 0.08);
+        transition: transform 130ms ease, box-shadow 130ms ease, border-color 130ms ease;
+      }
+
+      .card:hover {
+        transform: translateY(-2px);
+        border-color: #9fb4d4;
+        box-shadow: 0 8px 24px rgba(10, 34, 72, 0.13);
+      }
+
+      .tag {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #2457a6;
+        background: #e7f0ff;
+      }
+
+      .title {
+        margin-top: 10px;
+        font-size: 21px;
+        font-weight: 650;
+      }
+
+      .desc {
+        margin-top: 8px;
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>MLX Ruby Web Demos</h1>
+      <p>Interactive demos powered by ONNX Runtime Web and GraphIR-exported models.</p>
+      <section class="grid">
+        <a class="card" href="./demo/cvae/">
+          <span class="tag">Demo</span>
+          <div class="title">CVAE Latent Painter</div>
+          <div class="desc">
+            Tune a 4D latent vector with sliders and render the generated output image in real time.
+          </div>
+        </a>
+        </a>
+        <a class="card" href="./demo/gpt2/">
+          <span class="tag">Demo</span>
+          <div class="title">GPT-2 Classic</div>
+          <div class="desc">
+            Dedicated GPT-2 demo page using pretrained GPT-2 weights from Hugging Face.
+          </div>
+        </a>
+        <a class="card" href="./demo/nanogpt/">
+          <span class="tag">Demo</span>
+          <div class="title">nanoGPT Shakespeare</div>
+          <div class="desc">
+            Character-level Tiny Shakespeare text generation using dedicated nanoGPT ONNX assets.
+          </div>
+        </a>
+      </section>
+    </main>
+  </body>
+</html>

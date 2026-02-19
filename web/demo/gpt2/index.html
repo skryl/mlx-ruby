@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GPT-2 Sparks: Web Demo</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+      :root {
+        --bg: #f7efe4;
+        --ink: #1a1510;
+        --card: #fffaf3;
+        --line: #2f251a;
+        --accent: #8d2f22;
+        --accent-soft: #ffd9cf;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 12% 8%, #fff5c8 0%, transparent 40%),
+          radial-gradient(circle at 85% 16%, #ffe0d5 0%, transparent 40%),
+          radial-gradient(circle at 77% 88%, #d7e6ff 0%, transparent 35%),
+          var(--bg);
+      }
+
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 28px 20px 44px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5.3vw, 3.8rem);
+        line-height: 0.94;
+        letter-spacing: -0.04em;
+      }
+
+      .subtitle {
+        margin: 11px 0 18px;
+        max-width: 78ch;
+        opacity: 0.86;
+      }
+
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .badge {
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.82rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        padding: 6px 10px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 420px 1fr;
+        gap: 18px;
+      }
+
+      .card {
+        border: 1.8px solid var(--line);
+        border-radius: 16px;
+        background: var(--card);
+        box-shadow: 4px 4px 0 #00000016;
+      }
+
+      .controls {
+        padding: 16px;
+      }
+
+      .row {
+        margin-bottom: 12px;
+      }
+
+      .row label {
+        display: flex;
+        justify-content: space-between;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.84rem;
+        margin-bottom: 4px;
+      }
+
+      textarea,
+      select,
+      input[type="number"] {
+        width: 100%;
+        border: 1.8px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        color: var(--ink);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.94rem;
+        padding: 9px 11px;
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+
+      button {
+        border: 1.8px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        color: var(--ink);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.92rem;
+        padding: 9px 12px;
+      }
+
+      button.primary {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+      }
+
+      button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+
+      .output {
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .panel {
+        border: 1.5px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 11px;
+      }
+
+      .panel h2 {
+        margin: 0 0 8px;
+        font-size: 0.95rem;
+        letter-spacing: 0.01em;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.82rem;
+      }
+
+      .status {
+        display: grid;
+        gap: 4px;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.82rem;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.79rem;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid #d9ccbc;
+        text-align: left;
+        padding: 6px 4px;
+      }
+
+      .error {
+        margin-top: 12px;
+        border: 2px solid #9b2f2f;
+        border-radius: 10px;
+        background: #ffdede;
+        padding: 10px;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.82rem;
+        white-space: pre-wrap;
+        display: none;
+      }
+
+      @media (max-width: 940px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>GPT-2 Sparks</h1>
+      <p class="subtitle">
+        GPT-2-family checkpoint exported from MLX Ruby GraphIR to ONNX, running fully in-browser through ONNX Runtime Web.
+      </p>
+
+      <div class="badges">
+        <span class="badge">Model: GPT-2 family</span>
+        <span class="badge" id="badge-weights">Weights: loading...</span>
+        <span class="badge" id="badge-provider">Provider: loading...</span>
+        <span class="badge" id="badge-timing">Inference: -- ms</span>
+      </div>
+
+      <section class="grid">
+        <article class="card controls">
+          <div class="row">
+            <label for="preset">
+              <span>Prompt preset</span>
+              <span id="preset-name">--</span>
+            </label>
+            <select id="preset"></select>
+          </div>
+
+          <div class="row">
+            <label for="prompt"><span>Prompt</span><span>GPT-2 BPE tokenizer</span></label>
+            <textarea id="prompt" placeholder="Enter a prompt for GPT-2"></textarea>
+          </div>
+
+          <div class="row">
+            <label for="temperature"><span>Temperature</span><span id="temperature-value">0.80</span></label>
+            <input id="temperature" type="range" min="0" max="1.6" step="0.05" value="0.8">
+          </div>
+
+          <div class="row">
+            <label for="max-tokens"><span>Max generated tokens</span><span id="max-tokens-value">80</span></label>
+            <input id="max-tokens" type="number" min="1" max="256" value="80">
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="generate" type="button" disabled>Generate</button>
+            <button id="clear" type="button">Clear Output</button>
+          </div>
+
+          <pre class="error" id="error-box"></pre>
+        </article>
+
+        <article class="card output">
+          <div class="status">
+            <div id="status-model">Model: loading...</div>
+            <div id="status-shape">Output shape: --</div>
+            <div id="status-tokenizer">Tokenizer: --</div>
+            <div id="status-context">Context tokens: --</div>
+          </div>
+
+          <section class="panel">
+            <h2>Generated text</h2>
+            <pre id="output-text"></pre>
+          </section>
+
+          <section class="panel">
+            <h2>Generated token IDs</h2>
+            <pre id="output-ids"></pre>
+          </section>
+
+          <section class="panel">
+            <h2>First-step top tokens</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Token</th>
+                  <th>Prob</th>
+                  <th>Logit</th>
+                </tr>
+              </thead>
+              <tbody id="topk-body"></tbody>
+            </table>
+          </section>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
