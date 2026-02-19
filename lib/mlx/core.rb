@@ -2,6 +2,8 @@
 
 require "open3"
 require "tmpdir"
+require "fileutils"
+require_relative "graph_ir"
 
 module MLX
   module Core
@@ -307,6 +309,168 @@ module MLX
               zf.write(os.path.join(in_dir, name), arcname=name)
     PY
 
+    PY_BUILD_ONNX_FROM_STUB = <<~PY.freeze
+      import json
+      import sys
+
+      import onnx
+      from onnx import TensorProto, helper, numpy_helper
+
+      stub_path = sys.argv[1]
+      output_path = sys.argv[2]
+      use_external_data = len(sys.argv) >= 4 and sys.argv[3] == "1"
+      external_data_location = sys.argv[4] if len(sys.argv) >= 5 else "weights.bin"
+      external_data_threshold = int(sys.argv[5]) if len(sys.argv) >= 6 else 1024
+      with open(stub_path, "r", encoding="utf-8") as f:
+          stub = json.load(f)
+
+      dtype_map = {
+          "bool": TensorProto.BOOL,
+          "bool_": TensorProto.BOOL,
+          "uint8": TensorProto.UINT8,
+          "uint16": TensorProto.UINT16,
+          "uint32": TensorProto.UINT32,
+          "uint64": TensorProto.UINT64,
+          "int8": TensorProto.INT8,
+          "int16": TensorProto.INT16,
+          "int32": TensorProto.INT32,
+          "int64": TensorProto.INT64,
+          "float16": TensorProto.FLOAT16,
+          "float32": TensorProto.FLOAT,
+          "float64": TensorProto.DOUBLE,
+          "bfloat16": TensorProto.BFLOAT16,
+          "complex64": TensorProto.COMPLEX64,
+      }
+
+      graph_spec = stub["graph"]
+      bool_dtypes = {"bool", "bool_"}
+      int_dtypes = {"uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64"}
+      float_dtypes = {"float16", "float32", "float64", "bfloat16"}
+
+      def flatten_values(value):
+          if isinstance(value, list):
+              out = []
+              for item in value:
+                  out.extend(flatten_values(item))
+              return out
+          return [value]
+
+      def expected_value_count(dims):
+          if not dims:
+              return 1
+          total = 1
+          for dim in dims:
+              total *= int(dim)
+          return total
+
+      def cast_initializer_values(values, dtype_name, bool_dtypes, int_dtypes, float_dtypes):
+          if dtype_name in bool_dtypes:
+              return [bool(v) for v in values]
+          if dtype_name in int_dtypes:
+              return [int(v) for v in values]
+          if dtype_name in float_dtypes:
+              return [float(v) for v in values]
+          if dtype_name == "complex64":
+              complex_values = []
+              for value in values:
+                  if isinstance(value, dict) and "__mlx_complex__" in value:
+                      pair = value["__mlx_complex__"]
+                      if not isinstance(pair, list) or len(pair) != 2:
+                          raise RuntimeError(
+                              f"invalid complex marker value: {value!r}; expected {{'__mlx_complex__': [real, imag]}}"
+                          )
+                      complex_values.append(complex(float(pair[0]), float(pair[1])))
+                  elif isinstance(value, bool):
+                      complex_values.append(complex(float(value), 0.0))
+                  elif isinstance(value, (int, float)):
+                      complex_values.append(complex(float(value), 0.0))
+                  elif isinstance(value, str):
+                      text = value.strip()
+                      if text.endswith(("i", "I")):
+                          text = f"{text[:-1]}j"
+                      try:
+                          complex_values.append(complex(text))
+                      except ValueError as exc:
+                          raise RuntimeError(
+                              f"invalid complex64 initializer string: {value!r}; expected Python complex format or Ruby trailing-i format"
+                          ) from exc
+                  else:
+                      raise RuntimeError(f"unsupported complex64 initializer value: {value!r}")
+              return complex_values
+          raise RuntimeError(f"initializer dtype not yet supported: {dtype_name!r}")
+
+      def tensor_value_info(spec):
+          elem_type = dtype_map[spec["dtype"]]
+          shape = [int(dim) for dim in spec["shape"]]
+          return helper.make_tensor_value_info(spec["name"], elem_type, shape)
+
+      def initializer_tensor(spec, dtype_map, bool_dtypes, int_dtypes, float_dtypes):
+          dtype_name = spec["dtype"]
+          elem_type = dtype_map[dtype_name]
+          dims = [int(dim) for dim in spec["shape"]]
+          values = flatten_values(spec["values"])
+          expected = expected_value_count(dims)
+          if len(values) != expected:
+              raise RuntimeError(
+                  f"initializer {spec['name']!r} has {len(values)} values but shape expects {expected}"
+              )
+          cast_values = cast_initializer_values(values, dtype_name, bool_dtypes, int_dtypes, float_dtypes)
+          return helper.make_tensor(spec["name"], elem_type, dims, cast_values)
+
+      nodes = []
+      for node in graph_spec["nodes"]:
+          attrs = dict(node.get("attributes", {}))
+          if node["op_type"] == "Cast" and isinstance(attrs.get("to"), str):
+              attrs["to"] = getattr(TensorProto, attrs["to"])
+          nodes.append(
+              helper.make_node(
+                  node["op_type"],
+                  list(node["inputs"]),
+                  list(node["outputs"]),
+                  name=node.get("name", ""),
+                  **attrs,
+              )
+          )
+
+      initializers = [
+          initializer_tensor(spec, dtype_map, bool_dtypes, int_dtypes, float_dtypes)
+          for spec in graph_spec.get("initializers", [])
+      ]
+
+      graph = helper.make_graph(
+          nodes=nodes,
+          name=graph_spec["name"],
+          inputs=[tensor_value_info(spec) for spec in graph_spec["inputs"]],
+          outputs=[tensor_value_info(spec) for spec in graph_spec["outputs"]],
+          initializer=initializers,
+      )
+
+      model = helper.make_model(
+          graph,
+          producer_name=stub.get("producer_name", "mlx-ruby"),
+          opset_imports=[helper.make_operatorsetid("", int(stub["opset"]))],
+      )
+      if use_external_data:
+          # External data conversion relies on raw_data encoding.
+          for index, initializer in enumerate(model.graph.initializer):
+              array = numpy_helper.to_array(initializer)
+              model.graph.initializer[index].CopyFrom(
+                  numpy_helper.from_array(array, initializer.name)
+              )
+      onnx.checker.check_model(model)
+      if use_external_data:
+          onnx.save_model(
+              model,
+              output_path,
+              save_as_external_data=True,
+              all_tensors_to_one_file=True,
+              location=external_data_location,
+              size_threshold=external_data_threshold,
+          )
+      else:
+          onnx.save(model, output_path)
+    PY
+
     module_function
 
     def ensure_native!
@@ -334,6 +498,8 @@ module MLX
       alias_method :native_vmap, :vmap if method_defined?(:vmap) && !method_defined?(:native_vmap)
       alias_method :native_export_to_dot,
                    :export_to_dot if method_defined?(:export_to_dot) && !method_defined?(:native_export_to_dot)
+      alias_method :native_export_graph_ir,
+                   :export_graph_ir if method_defined?(:export_graph_ir) && !method_defined?(:native_export_graph_ir)
 
       %i[savez savez_compressed].each do |method_name|
         if method_defined?(method_name) && instance_method(method_name).owner == self
@@ -381,6 +547,252 @@ module MLX
         else
           native_export_to_dot(target, *outputs)
         end
+      end
+
+      def export_graph_ir(target, fun, *extras)
+        ensure_native!
+
+        if target.respond_to?(:write)
+          Dir.mktmpdir do |dir|
+            path = File.join(dir, "graph_ir.json")
+            native_export_graph_ir(path, fun, *extras)
+            content = File.binread(path)
+            target.write(content)
+            target.rewind if target.respond_to?(:rewind)
+            content
+          end
+        else
+          native_export_graph_ir(target, fun, *extras)
+        end
+      end
+
+      def validate_graph_ir(payload_or_source)
+        MLX::GraphIR.validate!(payload_or_source)
+      end
+
+      def graph_ir_to_onnx_stub(payload_or_source, opset: 18, model_name: "mlx_graph")
+        MLX::GraphIR.to_onnx_stub(payload_or_source, opset: opset, model_name: model_name)
+      end
+
+      def graph_ir_webgpu_compatibility_report(payload_or_source)
+        MLX::GraphIR.webgpu_compatibility_report(payload_or_source)
+      end
+
+      def export_onnx_stub(target, payload_or_source, opset: 18, model_name: "mlx_graph", pretty: true)
+        stub = graph_ir_to_onnx_stub(payload_or_source, opset: opset, model_name: model_name)
+        content = MLX::GraphIR.dump_json(onnx_json_compatible_value(stub), pretty: pretty)
+
+        if target.respond_to?(:write)
+          target.write(content)
+          target.rewind if target.respond_to?(:rewind)
+          content
+        else
+          File.binwrite(file_path(target), content)
+          nil
+        end
+      end
+
+      def export_onnx(
+        target,
+        payload_or_source,
+        opset: 18,
+        model_name: "mlx_graph",
+        external_data: false,
+        external_data_size_threshold: 1024,
+        external_data_file: nil
+      )
+        stub = graph_ir_to_onnx_stub(payload_or_source, opset: opset, model_name: model_name)
+        json_safe_stub = onnx_json_compatible_value(stub)
+        external_options = normalize_onnx_external_data_options(
+          target: target,
+          external_data: external_data,
+          external_data_size_threshold: external_data_size_threshold,
+          external_data_file: external_data_file
+        )
+
+        Dir.mktmpdir("mlx-ruby-onnx") do |dir|
+          stub_path = File.join(dir, "graph_stub.json")
+          onnx_path = File.join(dir, "graph.onnx")
+          File.binwrite(stub_path, JSON.generate(json_safe_stub))
+          run_python!(
+            python_bin,
+            "-c",
+            PY_BUILD_ONNX_FROM_STUB,
+            stub_path,
+            onnx_path,
+            external_options.fetch("enabled") ? "1" : "0",
+            external_options.fetch("file"),
+            external_options.fetch("size_threshold").to_s
+          )
+
+          if target.respond_to?(:write)
+            content = File.binread(onnx_path)
+            target.write(content)
+            target.rewind if target.respond_to?(:rewind)
+            content
+          else
+            target_path = file_path(target)
+            target_dir = File.dirname(target_path)
+            FileUtils.mkdir_p(target_dir) unless Dir.exist?(target_dir)
+            FileUtils.cp(onnx_path, target_path)
+
+            if external_options.fetch("enabled")
+              source = File.join(dir, external_options.fetch("file"))
+              if File.file?(source)
+                destination = File.join(target_dir, external_options.fetch("file"))
+                FileUtils.cp(source, destination)
+              end
+            end
+            nil
+          end
+        end
+      end
+
+      def export_onnx_webgpu_harness(
+        target_dir,
+        payload_or_source,
+        opset: 18,
+        model_name: "mlx_graph",
+        execution_providers: %w[webgpu wasm],
+        benchmark_warmup_runs: 2,
+        benchmark_measure_runs: 10,
+        external_data: false,
+        external_data_size_threshold: 1024,
+        external_data_file: nil
+      )
+        output_dir = file_path(target_dir)
+        raise ArgumentError, "target_dir must not be empty" if output_dir.empty?
+
+        providers = normalize_web_execution_providers(execution_providers)
+        warmup_runs = normalize_non_negative_integer(
+          benchmark_warmup_runs,
+          "benchmark_warmup_runs"
+        )
+        measure_runs = normalize_positive_integer(
+          benchmark_measure_runs,
+          "benchmark_measure_runs"
+        )
+
+        FileUtils.mkdir_p(output_dir)
+        model_filename = "model.onnx"
+        model_path = File.join(output_dir, model_filename)
+        export_onnx(
+          model_path,
+          payload_or_source,
+          opset: opset,
+          model_name: model_name,
+          external_data: external_data,
+          external_data_size_threshold: external_data_size_threshold,
+          external_data_file: external_data_file
+        )
+
+        stub = graph_ir_to_onnx_stub(payload_or_source, opset: opset, model_name: model_name)
+        input_specs = stub.fetch("graph").fetch("inputs")
+        input_examples = build_webgpu_input_examples(input_specs)
+
+        manifest = {
+          "format" => "onnx_webgpu_harness_v1",
+          "model" => model_filename,
+          "execution_providers" => providers,
+          "benchmark" => {
+            "warmup_runs" => warmup_runs,
+            "measure_runs" => measure_runs
+          },
+          "inputs" => input_specs.map do |spec|
+            {
+              "name" => spec.fetch("name"),
+              "shape" => spec.fetch("shape"),
+              "dtype" => spec.fetch("dtype")
+            }
+          end
+        }
+        if external_data
+          manifest["external_data"] = [
+            external_data_file.nil? ? "model.data" : external_data_file.to_s
+          ]
+        end
+
+        File.binwrite(
+          File.join(output_dir, "harness.manifest.json"),
+          JSON.pretty_generate(manifest)
+        )
+        File.binwrite(
+          File.join(output_dir, "inputs.example.json"),
+          JSON.pretty_generate(input_examples)
+        )
+        copy_webgpu_harness_assets!(output_dir)
+
+        manifest
+      end
+
+      def smoke_test_onnx_webgpu_harness(
+        harness_dir,
+        timeout_seconds: 30,
+        mock_ort: false,
+        local_ort: true,
+        node_bin: ENV.fetch("NODE", "node")
+      )
+        directory = file_path(harness_dir)
+        raise ArgumentError, "harness_dir must not be empty" if directory.empty?
+
+        directory = File.expand_path(directory)
+        unless Dir.exist?(directory)
+          raise ArgumentError, "harness_dir does not exist: #{directory}"
+        end
+
+        timeout = normalize_positive_integer(timeout_seconds, "timeout_seconds")
+        mock = normalize_boolean(mock_ort, "mock_ort")
+        local = normalize_boolean(local_ort, "local_ort")
+        node = node_bin.to_s
+        raise ArgumentError, "node_bin must not be empty" if node.empty?
+
+        smoke_script = web_harness_smoke_script_path
+        unless File.file?(smoke_script)
+          raise RuntimeError, "missing web harness smoke script: #{smoke_script}"
+        end
+
+        argv = [
+          node,
+          smoke_script,
+          "--harness-dir",
+          directory,
+          "--timeout-seconds",
+          timeout.to_s
+        ]
+        argv << "--mock-ort" if mock
+        argv << (local ? "--local-ort" : "--no-local-ort")
+
+        stdout, stderr, status = Open3.capture3(*argv, chdir: web_root_dir)
+        unless status.success?
+          raise RuntimeError, <<~MSG
+            web harness smoke test failed: #{argv.join(" ")}
+            stdout:
+            #{stdout}
+            stderr:
+            #{stderr}
+          MSG
+        end
+
+        telemetry = begin
+          JSON.parse(stdout)
+        rescue JSON::ParserError => e
+          raise RuntimeError, <<~MSG
+            web harness smoke test produced invalid JSON: #{e.message}
+            stdout:
+            #{stdout}
+            stderr:
+            #{stderr}
+          MSG
+        end
+
+        unless telemetry.is_a?(Hash)
+          raise RuntimeError, "web harness smoke test produced non-object telemetry"
+        end
+        unless telemetry.fetch("format", nil) == "onnx_webgpu_telemetry_v1"
+          raise RuntimeError, "unexpected web harness telemetry format: #{telemetry.fetch('format', nil).inspect}"
+        end
+
+        telemetry
       end
 
       def full_like(array, fill_value, dtype = nil)
@@ -574,6 +986,166 @@ module MLX
         else
           file.to_s
         end
+      end
+
+      def normalize_onnx_external_data_options(
+        target:,
+        external_data:,
+        external_data_size_threshold:,
+        external_data_file:
+      )
+        unless external_data == true || external_data == false
+          raise TypeError, "external_data must be true or false"
+        end
+
+        unless external_data
+          return {
+            "enabled" => false,
+            "file" => "weights.bin",
+            "size_threshold" => 1024
+          }
+        end
+
+        if target.respond_to?(:write)
+          raise ArgumentError, "external_data export requires a path-like target, not an IO-like target"
+        end
+
+        threshold = begin
+          Integer(external_data_size_threshold)
+        rescue ArgumentError, TypeError
+          raise ArgumentError, "external_data_size_threshold must be a non-negative Integer"
+        end
+        if threshold.negative?
+          raise ArgumentError, "external_data_size_threshold must be a non-negative Integer"
+        end
+
+        target_path = file_path(target)
+        default_file = begin
+          base = File.basename(target_path, File.extname(target_path))
+          base = "weights" if base.empty?
+          "#{base}.data"
+        end
+        location = external_data_file.nil? ? default_file : external_data_file.to_s
+        if location.empty?
+          raise ArgumentError, "external_data_file must be a non-empty filename"
+        end
+        unless location == File.basename(location)
+          raise ArgumentError, "external_data_file must be a filename without path separators"
+        end
+
+        {
+          "enabled" => true,
+          "file" => location,
+          "size_threshold" => threshold
+        }
+      end
+
+      def onnx_json_compatible_value(value)
+        MLX::GraphIR.onnx_json_compatible_value(value)
+      end
+
+      def normalize_web_execution_providers(value)
+        providers = if value.is_a?(::Array)
+          value
+        else
+          [value]
+        end
+        providers = providers.map(&:to_s)
+        raise ArgumentError, "execution_providers must contain at least one provider" if providers.empty?
+
+        allowed = %w[webgpu wasm]
+        providers.each do |provider|
+          unless allowed.include?(provider)
+            raise ArgumentError, "execution_providers contains unsupported provider #{provider.inspect}"
+          end
+        end
+        providers.uniq
+      end
+
+      def normalize_non_negative_integer(value, label)
+        integer = begin
+          Integer(value)
+        rescue ArgumentError, TypeError
+          raise ArgumentError, "#{label} must be a non-negative Integer"
+        end
+        raise ArgumentError, "#{label} must be a non-negative Integer" if integer.negative?
+
+        integer
+      end
+
+      def normalize_positive_integer(value, label)
+        integer = begin
+          Integer(value)
+        rescue ArgumentError, TypeError
+          raise ArgumentError, "#{label} must be a positive Integer"
+        end
+        raise ArgumentError, "#{label} must be a positive Integer" unless integer.positive?
+
+        integer
+      end
+
+      def normalize_boolean(value, label)
+        unless value == true || value == false
+          raise ArgumentError, "#{label} must be true or false"
+        end
+
+        value
+      end
+
+      def build_webgpu_input_examples(input_specs)
+        input_specs.each_with_object({}) do |spec, out|
+          out[spec.fetch("name")] = build_zero_tensor_values(
+            spec.fetch("shape"),
+            spec.fetch("dtype")
+          )
+        end
+      end
+
+      def build_zero_tensor_values(shape, dtype)
+        if shape.empty?
+          zero_leaf_value_for_dtype(dtype)
+        else
+          ::Array.new(shape.first) { build_zero_tensor_values(shape[1..], dtype) }
+        end
+      end
+
+      def zero_leaf_value_for_dtype(dtype)
+        if dtype == "bool" || dtype == "bool_"
+          false
+        elsif dtype == "complex64"
+          { "__mlx_complex__" => [0.0, 0.0] }
+        elsif dtype.start_with?("float") || dtype == "bfloat16"
+          0.0
+        else
+          0
+        end
+      end
+
+      def copy_webgpu_harness_assets!(output_dir)
+        template_dir = web_harness_template_dir
+        unless Dir.exist?(template_dir)
+          raise RuntimeError, "missing web harness template directory: #{template_dir}"
+        end
+
+        %w[index.html harness.js].each do |file_name|
+          source = File.join(template_dir, file_name)
+          unless File.file?(source)
+            raise RuntimeError, "missing web harness template file: #{source}"
+          end
+          FileUtils.cp(source, File.join(output_dir, file_name))
+        end
+      end
+
+      def web_harness_template_dir
+        File.expand_path("../../web/onnx_webgpu_harness", __dir__)
+      end
+
+      def web_harness_smoke_script_path
+        File.join(web_harness_template_dir, "browser_smoke.mjs")
+      end
+
+      def web_root_dir
+        File.expand_path("../../web", __dir__)
       end
 
       def python_bin

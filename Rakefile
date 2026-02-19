@@ -561,6 +561,28 @@ namespace :benchmark do
     end.map(&:to_sym).uniq
   end
 
+  def self.webgpu_options
+    benchmark_class = task_class
+    {
+      timeout_seconds: ENV.fetch("WEBGPU_TIMEOUT", benchmark_class::WEBGPU_DEFAULT_TIMEOUT_SECONDS).to_i,
+      benchmark_warmup_runs: ENV.fetch("WEBGPU_WARMUP", benchmark_class::WEBGPU_DEFAULT_BENCHMARK_WARMUP).to_i,
+      benchmark_measure_runs: ENV.fetch("WEBGPU_MEASURE", benchmark_class::WEBGPU_DEFAULT_BENCHMARK_MEASURE).to_i,
+      require_webgpu: ENV["REQUIRE_WEBGPU"] == "1"
+    }
+  end
+
+  def self.webgpu_compute_device
+    raw_device = ENV.fetch("WEBGPU_DEVICE", ENV.fetch("DEVICE", "cpu"))
+    normalize_device(raw_device).to_sym
+  end
+
+  def self.webgpu_model
+    model = ENV.fetch("MODEL", "transformer").to_sym
+    raise "Unknown benchmark model: #{model}" unless MODELS.include?(model)
+
+    model
+  end
+
   desc "Install Python benchmark dependencies into the active Python from requirements.txt."
   task :deps do
     requirements = requirements_path
@@ -597,6 +619,33 @@ namespace :benchmark do
   task :karpathy_gpt2 do
     task = task_class.new(**single_device_options)
     task.run(model: :karpathy_gpt2)
+  end
+
+  desc "Run ONNX Runtime WebGPU benchmark for MODEL (default: transformer)."
+  task :webgpu do
+    task = task_class.new(**base_options.merge(compute_device: webgpu_compute_device))
+    task.run_webgpu(model: webgpu_model, **webgpu_options)
+  end
+
+  desc "Run ONNX Runtime WebGPU benchmarks for all models."
+  task :webgpu_all do
+    task = task_class.new(**base_options.merge(compute_device: webgpu_compute_device))
+    failures = []
+
+    MODELS.each do |model_name|
+      result = task.run_webgpu(model: model_name, **webgpu_options)
+      failures << model_name unless result.fetch("ok")
+    end
+
+    raise "WebGPU benchmark matrix had failures for: #{failures.join(', ')}" unless failures.empty?
+  end
+
+  MODELS.each do |model_name|
+    desc "Run ONNX Runtime WebGPU benchmark for #{model_name}."
+    task :"webgpu_#{model_name}" do
+      task = task_class.new(**base_options.merge(compute_device: webgpu_compute_device))
+      task.run_webgpu(model: model_name, **webgpu_options)
+    end
   end
 
   desc "Run all configured benchmarks on cpu and gpu, then print a final comparison table."

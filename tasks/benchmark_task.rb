@@ -3,6 +3,8 @@
 require "json"
 require "open3"
 require "fileutils"
+require "tmpdir"
+require "stringio"
 LIB_ROOT = File.expand_path("../lib", __dir__)
 $LOAD_PATH.unshift(LIB_ROOT) unless $LOAD_PATH.include?(LIB_ROOT)
 require "mlx"
@@ -26,6 +28,11 @@ class BenchmarkTask
   DEFAULT_HEADS = 8
   DEFAULT_LAYERS = 4
   DEFAULT_DTYPE = MLX::Core.float32
+  WEBGPU_DEFAULT_TIMEOUT_SECONDS = 180
+  WEBGPU_DEFAULT_BENCHMARK_WARMUP = 1
+  WEBGPU_DEFAULT_BENCHMARK_MEASURE = 3
+  WEBGPU_OUTPUT_ABS_TOLERANCE = 1.0
+  WEBGPU_OUTPUT_REL_TOLERANCE = 1e-5
 
   def initialize(
     iterations: DEFAULT_ITERATIONS,
@@ -102,12 +109,218 @@ class BenchmarkTask
     raise parity_failure_message(model_name, ruby_status, python_status, ruby_error, python_error, parity_failures)
   end
 
+  def run_webgpu(
+    model: :transformer,
+    timeout_seconds: WEBGPU_DEFAULT_TIMEOUT_SECONDS,
+    benchmark_warmup_runs: WEBGPU_DEFAULT_BENCHMARK_WARMUP,
+    benchmark_measure_runs: WEBGPU_DEFAULT_BENCHMARK_MEASURE,
+    require_webgpu: false,
+    print_summary: true
+  )
+    model_name = model.to_sym
+    raise "Unknown benchmark model: #{model_name}" unless available_models.include?(model_name)
+
+    fixture = build_webgpu_fixture(model_name)
+    compatibility = MLX::Core.graph_ir_webgpu_compatibility_report(fixture.fetch(:payload))
+    unless compatibility.fetch("unsupported_nodes").zero?
+      unsupported = compatibility.fetch("unsupported_ops")
+      raise "WebGPU export does not support #{model_name}: unsupported ops #{unsupported.inspect}"
+    end
+
+    result = nil
+    Dir.mktmpdir("mlx-ruby-webgpu-benchmark-") do |dir|
+      harness_dir = File.join(dir, "#{model_name}_webgpu")
+      MLX::Core.export_onnx_webgpu_harness(
+        harness_dir,
+        fixture.fetch(:payload),
+        model_name: "benchmark_#{model_name}",
+        execution_providers: ["webgpu"],
+        benchmark_warmup_runs: benchmark_warmup_runs,
+        benchmark_measure_runs: benchmark_measure_runs
+      )
+      File.binwrite(
+        File.join(harness_dir, "inputs.example.json"),
+        JSON.pretty_generate(fixture.fetch(:feeds))
+      )
+
+      telemetry = begin
+        MLX::Core.smoke_test_onnx_webgpu_harness(
+          harness_dir,
+          timeout_seconds: timeout_seconds,
+          mock_ort: false,
+          local_ort: true
+        )
+      rescue RuntimeError => e
+        if webgpu_unavailable_error?(e.message) && !require_webgpu
+          result = {
+            "model" => model_name.to_s,
+            "provider" => "webgpu",
+            "skipped" => true,
+            "skip_reason" => e.message.lines.first&.strip || e.message,
+            "ok" => true
+          }
+          print_webgpu_run_summary(result) if print_summary
+          return result
+        end
+        raise
+      end
+
+      outputs = telemetry.fetch("sample_outputs")
+      actual = outputs.values.first
+      expected = fixture.fetch(:expected)
+      max_diff = max_abs_diff(expected, actual)
+      max_ref = max_abs_value(expected)
+      tolerance = [WEBGPU_OUTPUT_ABS_TOLERANCE, max_ref * WEBGPU_OUTPUT_REL_TOLERANCE].max
+      output_parity_ok = max_diff <= tolerance
+
+      result = {
+        "model" => model_name.to_s,
+        "provider" => telemetry.fetch("selected_provider"),
+        "requested_providers" => telemetry.fetch("requested_providers"),
+        "fallback_used" => telemetry.fetch("fallback_used"),
+        "model_load_latency_ms" => telemetry.fetch("model_load_latency_ms"),
+        "first_inference_latency_ms" => telemetry.fetch("first_inference_latency_ms"),
+        "steady_state_inference_latency_ms" => telemetry.fetch("steady_state_inference_latency_ms"),
+        "run_timings_ms" => telemetry.fetch("run_timings_ms"),
+        "output_parity_ok" => output_parity_ok,
+        "output_max_abs_diff" => max_diff,
+        "output_tolerance" => tolerance,
+        "skipped" => false,
+        "ok" => output_parity_ok && telemetry.fetch("selected_provider") == "webgpu" && telemetry.fetch("fallback_used") == false
+      }
+      print_webgpu_run_summary(result) if print_summary
+    end
+
+    raise "WebGPU benchmark parity failed for #{model_name}" if require_webgpu && result && result.fetch("ok") != true
+
+    result
+  end
+
   private
 
   PARITY_KEYS = %w[input_shape output_shape input_digest reference_output_digest path_signature].freeze
 
   def available_models
     [:transformer, :cnn, :mlp, :rnn, :karpathy_gpt2]
+  end
+
+  def build_webgpu_fixture(model_name)
+    seed = MLX::Core.array([0.0], MLX::Core.float32)
+    trace = nil
+    expected = nil
+
+    case model_name
+    when :transformer
+      example = BenchmarkExamples::TransformerExample.new(
+        batch_size: @batch_size,
+        sequence_length: @sequence_length,
+        target_sequence_length: @target_sequence_length,
+        dims: @dims,
+        num_heads: @num_heads,
+        num_layers: @num_layers,
+        dtype: DEFAULT_DTYPE
+      )
+      trace = ->(_seed) { example.run_step }
+      expected = example.run_step.to_a
+    when :cnn
+      example = BenchmarkExamples::CnnExample.new(
+        batch_size: @batch_size,
+        dtype: DEFAULT_DTYPE
+      )
+      trace = ->(_seed) { example.run_step }
+      expected = example.run_step.to_a
+    when :mlp
+      example = BenchmarkExamples::MlpExample.new(
+        batch_size: @batch_size,
+        dims: @dims,
+        dtype: DEFAULT_DTYPE
+      )
+      trace = ->(_seed) { example.run_step }
+      expected = example.run_step.to_a
+    when :rnn
+      example = BenchmarkExamples::RnnExample.new(
+        batch_size: @batch_size,
+        sequence_length: @sequence_length,
+        dims: @dims,
+        dtype: DEFAULT_DTYPE
+      )
+      trace = ->(_seed) { example.run_step }
+      expected = example.run_step.to_a
+    when :karpathy_gpt2
+      example = BenchmarkExamples::KarpathyGpt2Example.new(
+        batch_size: @batch_size,
+        sequence_length: @sequence_length,
+        dims: @dims,
+        num_heads: @num_heads,
+        num_layers: @num_layers,
+        repo_root: @repo_root
+      )
+      model = example.instance_variable_get(:@model)
+      sample_input, = example.send(:batch_for_step, 0)
+      trace = ->(_seed) { model.call(sample_input) }
+      expected = model.call(sample_input).to_a
+    else
+      raise "Unknown benchmark model: #{model_name}"
+    end
+
+    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, trace, seed))
+    input_name = payload.fetch("inputs").first.fetch("name")
+
+    {
+      payload: payload,
+      feeds: { input_name => seed.to_a },
+      expected: expected
+    }
+  end
+
+  def webgpu_unavailable_error?(message)
+    text = message.to_s
+    [
+      /navigator\.gpu/i,
+      /webgpu[^\n]*not[^\n]*(available|supported|enabled)/i,
+      /gpu adapter/i,
+      /failed to create gpu/i,
+      /no available backend found/i
+    ].any? { |pattern| pattern.match?(text) }
+  end
+
+  def max_abs_diff(expected, actual)
+    if expected.is_a?(Array)
+      return 0.0 if expected.empty? && actual.empty?
+
+      expected.zip(actual).map { |exp_item, act_item| max_abs_diff(exp_item, act_item) }.max
+    else
+      (expected.to_f - actual.to_f).abs
+    end
+  end
+
+  def max_abs_value(value)
+    if value.is_a?(Array)
+      return 0.0 if value.empty?
+
+      value.map { |item| max_abs_value(item) }.max
+    else
+      value.to_f.abs
+    end
+  end
+
+  def print_webgpu_run_summary(result)
+    puts "Benchmark (webgpu): #{result.fetch('model')}"
+    if result.fetch("skipped")
+      puts "  skipped: #{result.fetch('skip_reason')}"
+      puts
+      return
+    end
+
+    puts "  provider: #{result.fetch('provider')}"
+    puts "  fallback_used: #{result.fetch('fallback_used')}"
+    puts "  model_load_ms: #{format('%.3f', result.fetch('model_load_latency_ms'))}"
+    puts "  first_inference_ms: #{format('%.3f', result.fetch('first_inference_latency_ms'))}"
+    puts "  steady_state_ms: #{format('%.3f', result.fetch('steady_state_inference_latency_ms'))}"
+    puts "  output_max_abs_diff: #{result.fetch('output_max_abs_diff')}"
+    puts "  output_tolerance: #{result.fetch('output_tolerance')}"
+    puts "  output_parity_ok: #{result.fetch('output_parity_ok')}"
+    puts
   end
 
   def configuration_summary(model_name)

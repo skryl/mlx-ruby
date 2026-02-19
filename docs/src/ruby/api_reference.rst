@@ -115,6 +115,11 @@ Core entry points in ``MLX::Core``:
 - ``export_function``
 - ``import_function``
 - ``exporter``
+- ``export_graph_ir`` / ``validate_graph_ir``
+- ``graph_ir_to_onnx_stub`` / ``graph_ir_webgpu_compatibility_report``
+- ``export_onnx_stub`` / ``export_onnx``
+- ``export_onnx_webgpu_harness``
+- ``smoke_test_onnx_webgpu_harness``
 - ``save`` / ``load``
 - ``savez`` / ``savez_compressed``
 
