@@ -9,7 +9,7 @@ LIB_ROOT = File.join(REPO_ROOT, "lib")
 $LOAD_PATH.unshift(LIB_ROOT) unless $LOAD_PATH.include?(LIB_ROOT)
 
 require "mlx"
-require_relative "../../examples/nanogpt_example"
+require_relative "../../examples/web/nanogpt_example"
 
 module NanoGptWebAssets
   module_function

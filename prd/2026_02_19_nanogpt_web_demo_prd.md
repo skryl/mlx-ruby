@@ -17,7 +17,7 @@ This work should mirror the nanoGPT Shakespeare-char configuration:
 
 ## Goals
 
-1. Add `examples/nanogpt_example.rb` defining a reusable nanoGPT model and
+1. Add `examples/web/nanogpt_example.rb` defining a reusable nanoGPT model and
    dataset/tokenizer utilities for Shakespeare-char training.
 2. Add web-side training/export scripts for this model.
 3. Add a dedicated browser demo under `web/demo/nanogpt/`.
@@ -34,10 +34,10 @@ This work should mirror the nanoGPT Shakespeare-char configuration:
 ### Phase 1: Ruby nanoGPT example
 
 Red:
-1. `examples/nanogpt_example.rb` does not exist and benchmark stub is empty.
+1. `examples/web/nanogpt_example.rb` does not exist and benchmark stub is empty.
 
 Green:
-1. Add `examples/nanogpt_example.rb` with:
+1. Add `examples/web/nanogpt_example.rb` with:
    - model class (`NanoGptModel`)
    - Shakespeare-char dataset/tokenizer helpers
    - train loss and LR scheduler helpers
@@ -80,7 +80,7 @@ Exit criteria:
 
 ## Acceptance Criteria
 
-1. `examples/nanogpt_example.rb` exists and reflects nanoGPT Shakespeare-char
+1. `examples/web/nanogpt_example.rb` exists and reflects nanoGPT Shakespeare-char
    size/data defaults.
 2. `bundle exec rake web:train` produces checkpoint artifacts.
 3. `bundle exec rake web:assets` produces nanoGPT ONNX assets.

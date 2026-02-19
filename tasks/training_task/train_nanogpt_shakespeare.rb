@@ -9,7 +9,7 @@ NANOGPT_TRAIN_LIB_ROOT = File.join(NANOGPT_TRAIN_REPO_ROOT, "lib")
 $LOAD_PATH.unshift(NANOGPT_TRAIN_LIB_ROOT) unless $LOAD_PATH.include?(NANOGPT_TRAIN_LIB_ROOT)
 
 require "mlx"
-require_relative "../../examples/nanogpt_example"
+require_relative "../../examples/web/nanogpt_example"
 
 module NanoGptShakespeareTrainer
   module_function

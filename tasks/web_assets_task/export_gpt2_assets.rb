@@ -9,7 +9,7 @@ LIB_ROOT = File.join(REPO_ROOT, "lib")
 $LOAD_PATH.unshift(LIB_ROOT) unless $LOAD_PATH.include?(LIB_ROOT)
 
 require "mlx"
-require_relative "../../examples/gpt2_example"
+require_relative "../../examples/web/gpt2_example"
 
 module Gpt2WebAssets
   module_function

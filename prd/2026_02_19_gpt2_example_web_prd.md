@@ -8,7 +8,7 @@ We need a first-class MLX-Ruby GPT-2 example that can load Hugging Face GPT-2
 weights, and we need to expose GPT-2 as an additional web demo entry.
 
 ## Goals
-1. Add `examples/gpt2_example.rb` with a GPT-2 model architecture in Ruby.
+1. Add `examples/web/gpt2_example.rb` with a GPT-2 model architecture in Ruby.
 2. Support loading Hugging Face GPT-2 state dict tensors (`model.safetensors`)
    into the Ruby model.
 3. Add GPT-2 as an additional web demo route.
@@ -38,7 +38,7 @@ weights, and we need to expose GPT-2 as an additional web demo entry.
   - `web:start` serves `/demo/gpt2/` successfully.
 
 ## Acceptance Criteria
-1. `examples/gpt2_example.rb` defines a GPT-2 model with HF loader.
+1. `examples/web/gpt2_example.rb` defines a GPT-2 model with HF loader.
 2. HF Conv1D-style weights are mapped correctly to MLX `Linear` parameters.
 3. `test/parity/phase328_gpt2_example_weight_mapping_test.rb` is green.
 4. Web index links include `/demo/gpt2/` as an additional example.
@@ -51,7 +51,7 @@ weights, and we need to expose GPT-2 as an additional web demo entry.
 
 ## Implementation Checklist
 - [x] Add parity test for GPT-2 HF mapping.
-- [x] Implement `examples/gpt2_example.rb`.
+- [x] Implement `examples/web/gpt2_example.rb`.
 - [x] Add HF loader + mapping helpers.
 - [x] Add `web/demo/gpt2/` route.
 - [x] Update index/docs links.

@@ -5,8 +5,8 @@ require "rbconfig"
 class WebAssetsTask
   SCRIPTS_DIR = File.join(__dir__, "web_assets_task").freeze
   SCRIPT_NAMES = %w[
-    export_cvae_decoder_assets.rb
     export_gpt2_assets.rb
+    export_stable_diffusion_assets.rb
     export_nanogpt_assets.rb
   ].freeze
 

@@ -8,9 +8,13 @@ class WebDemoWeightsGuardrailTest < Minitest::Test
     "nanogpt" => File.join(RUBY_ROOT, "web", "demo", "nanogpt", "main.js")
   }.freeze
 
-  CVAE_INDEX_HTML = File.join(RUBY_ROOT, "web", "demo", "cvae", "index.html")
-  CVAE_MAIN_JS = File.join(RUBY_ROOT, "web", "demo", "cvae", "main.js")
   GPT2_EXPORTER = File.join(RUBY_ROOT, "tasks", "web_assets_task", "export_gpt2_assets.rb")
+  STABLE_DIFFUSION_EXPORTER = File.join(
+    RUBY_ROOT,
+    "tasks",
+    "web_assets_task",
+    "export_stable_diffusion_assets.rb"
+  )
   NANOGPT_EXPORTER = File.join(RUBY_ROOT, "tasks", "web_assets_task", "export_nanogpt_assets.rb")
 
   def test_language_demos_disable_generate_until_weights_are_ready
@@ -31,15 +35,6 @@ class WebDemoWeightsGuardrailTest < Minitest::Test
     end
   end
 
-  def test_cvae_demo_has_weights_badge_and_missing_weights_path
-    index = File.read(CVAE_INDEX_HTML)
-    main = File.read(CVAE_MAIN_JS)
-
-    assert_includes index, 'id="badge-weights"'
-    assert_includes main, "const weightsBadge = document.getElementById(\"badge-weights\")"
-    assert_includes main, "Weights: missing"
-  end
-
   def test_nanogpt_exporter_no_longer_emits_random_init_mode
     source = File.read(NANOGPT_EXPORTER)
     refute_includes source, "random init"
@@ -50,5 +45,18 @@ class WebDemoWeightsGuardrailTest < Minitest::Test
     source = File.read(GPT2_EXPORTER)
     assert_includes source, 'DEFAULT_HF_REPO_ID = "openai-community/gpt2"'
     refute_includes source, "hf-internal-testing/tiny-random-gpt2"
+  end
+
+  def test_stable_diffusion_exporter_uses_pretrained_weights_and_local_onnx_export
+    exporter_source = File.read(STABLE_DIFFUSION_EXPORTER)
+    assert_includes exporter_source, 'DEFAULT_HF_REPO_ID = "stabilityai/sd-turbo"'
+    assert_includes exporter_source, "StableDiffusionPipeline.from_pretrained"
+    assert_includes exporter_source, "torch.onnx.export"
+    assert_includes exporter_source, "external_data=False"
+    assert_includes exporter_source, "text_encoder.onnx"
+    assert_includes exporter_source, "unet.onnx"
+    assert_includes exporter_source, "vae_decoder.onnx"
+    refute_includes exporter_source, "mlx-ruby-examples"
+    refute_match(%r{resolve/main/.*\.onnx}, exporter_source)
   end
 end

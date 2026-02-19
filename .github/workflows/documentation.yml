@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "docs/**"
+      - "web/**"
+      - "README.md"
       - ".github/actions/build-docs/**"
       - ".github/workflows/documentation.yml"
   workflow_dispatch:

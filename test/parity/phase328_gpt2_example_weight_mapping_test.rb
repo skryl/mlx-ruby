@@ -10,7 +10,7 @@ class Phase328Gpt2ExampleWeightMappingTest < Minitest::Test
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
-    require_relative "../../examples/gpt2_example"
+    require_relative "../../examples/web/gpt2_example"
   end
 
   def teardown
