@@ -4,11 +4,31 @@ module MLX
   module NN
     class << self
       def sigmoid(x)
-        MLX::Core.sigmoid(x)
+        compiled = compiled_sigmoid
+        return MLX::Core.sigmoid(x) unless compiled.respond_to?(:call)
+
+        compiled.call(x)
+      rescue RuntimeError => e
+        if invalid_compiled_activation_call?(e)
+          @compiled_sigmoid = false
+          MLX::Core.sigmoid(x)
+        else
+          raise
+        end
       end
 
       def relu(x)
-        MLX::Core.maximum(x, 0.0)
+        compiled = compiled_relu
+        return MLX::Core.maximum(x, 0.0) unless compiled.respond_to?(:call)
+
+        compiled.call(x)
+      rescue RuntimeError => e
+        if invalid_compiled_activation_call?(e)
+          @compiled_relu = false
+          MLX::Core.maximum(x, 0.0)
+        else
+          raise
+        end
       end
 
       def relu2(x)
@@ -129,6 +149,30 @@ module MLX
 
       def tanh(x)
         MLX::Core.tanh(x)
+      end
+
+      private
+
+      def compiled_sigmoid
+        return nil if @compiled_sigmoid == false
+
+        @compiled_sigmoid ||= compile_activation_unary(->(v) { MLX::Core.sigmoid(v) })
+      end
+
+      def compiled_relu
+        return nil if @compiled_relu == false
+
+        @compiled_relu ||= compile_activation_unary(->(v) { MLX::Core.maximum(v, 0.0) })
+      end
+
+      def compile_activation_unary(fun)
+        MLX::Core.compile(fun, nil, nil, true)
+      rescue StandardError
+        nil
+      end
+
+      def invalid_compiled_activation_call?(error)
+        error.message.match?(/undefined method [`']call['"]/)
       end
     end
 

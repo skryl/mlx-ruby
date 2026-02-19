@@ -29,6 +29,10 @@ module MLX
         value_output_dims ||= dims
 
         @num_heads = num_heads
+        @head_dims = dims / num_heads
+        @scale = Math.sqrt(1.0 / @head_dims)
+        @heads_layout = [0, 2, 1, 3].freeze
+        @split_shape = [@num_heads, @head_dims].freeze
         self.query_proj = Linear.new(query_input_dims, dims, bias: bias)
         self.key_proj = Linear.new(key_input_dims, dims, bias: bias)
         self.value_proj = Linear.new(value_input_dims, value_dims, bias: bias)
@@ -36,9 +40,17 @@ module MLX
       end
 
       def call(queries, keys, values, mask = nil)
-        queries, q_was_2d = maybe_batch(queries)
-        keys, = maybe_batch(keys)
-        values, = maybe_batch(values)
+        q_was_2d = queries.ndim == 2
+        if q_was_2d
+          queries, = maybe_batch(queries)
+          keys, = maybe_batch(keys)
+          values, = maybe_batch(values)
+        end
+
+        query_proj = @state["query_proj"]
+        key_proj = @state["key_proj"]
+        value_proj = @state["value_proj"]
+        out_proj = @state["out_proj"]
 
         queries = query_proj.call(queries)
         keys = key_proj.call(keys)
@@ -48,10 +60,9 @@ module MLX
         keys = split_heads(keys)
         values = split_heads(values)
 
-        scale = Math.sqrt(1.0 / queries.shape[-1])
-        output = MLX::Core.scaled_dot_product_attention(queries, keys, values, scale, mask)
-        output = MLX::Core.transpose(output, [0, 2, 1, 3])
-        output = output.flatten(-2, -1)
+        output = MLX::Core.scaled_dot_product_attention(queries, keys, values, @scale, mask)
+        output = MLX::Core.transpose(output, @heads_layout)
+        output = MLX::Core.flatten(output, -2, -1)
         output = out_proj.call(output)
         q_was_2d ? MLX::Core.squeeze(output, 0) : output
       end
@@ -67,10 +78,8 @@ module MLX
       private
 
       def split_heads(x)
-        batch, length, dims = x.shape
-        head_dim = dims / @num_heads
-        x = MLX::Core.reshape(x, [batch, length, @num_heads, head_dim])
-        MLX::Core.transpose(x, [0, 2, 1, 3])
+        x = MLX::Core.unflatten(x, -1, @split_shape)
+        MLX::Core.transpose(x, @heads_layout)
       end
 
       def maybe_batch(x)
@@ -93,7 +102,6 @@ module MLX
       )
         super()
         mlp_dims ||= dims * 4
-        activation ||= lambda { |x| MLX::NN.relu(x) }
 
         self.attention = MultiHeadAttention.new(dims, num_heads)
         self.ln1 = LayerNorm.new(dims)
@@ -103,32 +111,42 @@ module MLX
         self.dropout1 = Dropout.new(dropout)
         self.dropout2 = Dropout.new(dropout)
         @activation = activation
+        @dropout1_identity = dropout == 0.0
+        @dropout2_identity = dropout == 0.0
         @norm_first = norm_first
       end
 
       def call(x, mask)
+        attention = @state["attention"]
+        ln1 = @state["ln1"]
+        ln2 = @state["ln2"]
+        linear1 = @state["linear1"]
+        linear2 = @state["linear2"]
+        dropout1 = @dropout1_identity ? nil : @state["dropout1"]
+        dropout2 = @dropout2_identity ? nil : @state["dropout2"]
+
         if @norm_first
           y = ln1.call(x)
           y = attention.call(y, y, y, mask)
-          y = dropout1.call(y)
-          x = MLX::Core.add(x, y)
+          y = dropout1.call(y) unless dropout1.nil?
+          x = x + y
 
           y = ln2.call(x)
           y = linear1.call(y)
-          y = @activation.call(y)
-          y = dropout2.call(y)
+          y = @activation.nil? ? MLX::Core.maximum(y, 0.0) : @activation.call(y)
+          y = dropout2.call(y) unless dropout2.nil?
           y = linear2.call(y)
-          y = MLX::Core.add(x, y)
+          y = x + y
         else
           y = attention.call(x, x, x, mask)
-          y = dropout1.call(y)
-          x = ln1.call(MLX::Core.add(x, y))
+          y = dropout1.call(y) unless dropout1.nil?
+          x = ln1.call(x + y)
 
           y = linear1.call(x)
-          y = @activation.call(y)
-          y = dropout2.call(y)
+          y = @activation.nil? ? MLX::Core.maximum(y, 0.0) : @activation.call(y)
+          y = dropout2.call(y) unless dropout2.nil?
           y = linear2.call(y)
-          y = ln2.call(MLX::Core.add(x, y))
+          y = ln2.call(x + y)
         end
 
         y
@@ -147,7 +165,6 @@ module MLX
         checkpoint: false
       )
         super()
-        activation ||= lambda { |x| MLX::NN.relu(x) }
         self.layers = Array.new(num_layers) do
           TransformerEncoderLayer.new(
             dims,
@@ -168,8 +185,11 @@ module MLX
       end
 
       def call(x, mask)
-        @layer_fns.each do |layer_fn|
-          x = layer_fn.call(x, mask)
+        ln = @state["ln"]
+        idx = 0
+        while idx < @layer_fns.length
+          x = @layer_fns[idx].call(x, mask)
+          idx += 1
         end
         ln.call(x)
       end
@@ -186,7 +206,6 @@ module MLX
       )
         super()
         mlp_dims ||= dims * 4
-        activation ||= lambda { |x| MLX::NN.relu(x) }
 
         self.self_attention = MultiHeadAttention.new(dims, num_heads)
         self.cross_attention = MultiHeadAttention.new(dims, num_heads)
@@ -199,41 +218,55 @@ module MLX
         self.dropout2 = Dropout.new(dropout)
         self.dropout3 = Dropout.new(dropout)
         @activation = activation
+        @dropout1_identity = dropout == 0.0
+        @dropout2_identity = dropout == 0.0
+        @dropout3_identity = dropout == 0.0
         @norm_first = norm_first
       end
 
       def call(x, memory, x_mask, memory_mask)
+        self_attention = @state["self_attention"]
+        cross_attention = @state["cross_attention"]
+        ln1 = @state["ln1"]
+        ln2 = @state["ln2"]
+        ln3 = @state["ln3"]
+        linear1 = @state["linear1"]
+        linear2 = @state["linear2"]
+        dropout1 = @dropout1_identity ? nil : @state["dropout1"]
+        dropout2 = @dropout2_identity ? nil : @state["dropout2"]
+        dropout3 = @dropout3_identity ? nil : @state["dropout3"]
+
         if @norm_first
           y = ln1.call(x)
           y = self_attention.call(y, y, y, x_mask)
-          y = dropout1.call(y)
-          x = MLX::Core.add(x, y)
+          y = dropout1.call(y) unless dropout1.nil?
+          x = x + y
 
           y = ln2.call(x)
           y = cross_attention.call(y, memory, memory, memory_mask)
-          y = dropout2.call(y)
-          x = MLX::Core.add(x, y)
+          y = dropout2.call(y) unless dropout2.nil?
+          x = x + y
 
           y = ln3.call(x)
           y = linear1.call(y)
-          y = @activation.call(y)
-          y = dropout3.call(y)
+          y = @activation.nil? ? MLX::Core.maximum(y, 0.0) : @activation.call(y)
+          y = dropout3.call(y) unless dropout3.nil?
           y = linear2.call(y)
-          y = MLX::Core.add(x, y)
+          y = x + y
         else
           y = self_attention.call(x, x, x, x_mask)
-          y = dropout1.call(y)
-          x = ln1.call(MLX::Core.add(x, y))
+          y = dropout1.call(y) unless dropout1.nil?
+          x = ln1.call(x + y)
 
           y = cross_attention.call(y, memory, memory, memory_mask)
-          y = dropout2.call(y)
-          x = ln2.call(MLX::Core.add(x, y))
+          y = dropout2.call(y) unless dropout2.nil?
+          x = ln2.call(x + y)
 
           y = linear1.call(x)
-          y = @activation.call(y)
-          y = dropout3.call(y)
+          y = @activation.nil? ? MLX::Core.maximum(y, 0.0) : @activation.call(y)
+          y = dropout3.call(y) unless dropout3.nil?
           y = linear2.call(y)
-          y = ln3.call(MLX::Core.add(x, y))
+          y = ln3.call(x + y)
         end
 
         y
@@ -252,7 +285,6 @@ module MLX
         checkpoint: false
       )
         super()
-        activation ||= lambda { |x| MLX::NN.relu(x) }
         self.layers = Array.new(num_layers) do
           TransformerDecoderLayer.new(
             dims,
@@ -275,8 +307,11 @@ module MLX
       end
 
       def call(x, memory, x_mask, memory_mask)
-        @layer_fns.each do |layer_fn|
-          x = layer_fn.call(x, memory, x_mask, memory_mask)
+        ln = @state["ln"]
+        idx = 0
+        while idx < @layer_fns.length
+          x = @layer_fns[idx].call(x, memory, x_mask, memory_mask)
+          idx += 1
         end
         ln.call(x)
       end
@@ -298,7 +333,6 @@ module MLX
       )
         super()
 
-        activation ||= lambda { |x| MLX::NN.relu(x) }
         self.encoder = custom_encoder || TransformerEncoder.new(
           num_encoder_layers,
           dims,
@@ -322,6 +356,8 @@ module MLX
       end
 
       def call(src, tgt, src_mask, tgt_mask, memory_mask)
+        encoder = @state["encoder"]
+        decoder = @state["decoder"]
         memory = encoder.call(src, src_mask)
         decoder.call(tgt, memory, tgt_mask, memory_mask)
       end

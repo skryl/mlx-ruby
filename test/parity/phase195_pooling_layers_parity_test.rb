@@ -34,6 +34,22 @@ class Phase195PoolingLayersParityTest < Minitest::Test
     assert_nested_close [[[[2.5]]]], avg_pool.call(x).to_a
   end
 
+  def test_pool2d_non_overlapping_windows
+    x = MLX::Core.array(
+      [[[[1.0], [2.0], [3.0], [4.0]],
+        [[5.0], [6.0], [7.0], [8.0]],
+        [[9.0], [10.0], [11.0], [12.0]],
+        [[13.0], [14.0], [15.0], [16.0]]]],
+      MLX::Core.float32
+    )
+
+    max_pool = MLX::NN::MaxPool2d.new([2, 2], stride: [2, 2])
+    avg_pool = MLX::NN::AvgPool2d.new([2, 2], stride: [2, 2])
+
+    assert_nested_close [[[[6.0], [8.0]], [[14.0], [16.0]]]], max_pool.call(x).to_a
+    assert_nested_close [[[[3.5], [5.5]], [[11.5], [13.5]]]], avg_pool.call(x).to_a
+  end
+
   def test_pool3d_max_and_avg
     x = MLX::Core.array(
       [[[[[1.0], [2.0]], [[3.0], [4.0]]], [[[5.0], [6.0]], [[7.0], [8.0]]]]],

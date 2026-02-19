@@ -212,11 +212,16 @@ class BenchmarkTask
     finish = nil
     output = nil
     label = example.label
+    runner = if example.respond_to?(:run_step_proc)
+      example.run_step_proc
+    else
+      -> { example.run_step }
+    end
     warmup_every = log_interval(@warmup)
     iter_every = log_interval(@iterations)
 
     @warmup.times do |idx|
-      output = example.run_step
+      output = runner.call
       MLX::Core.eval(output)
       if (idx + 1) == @warmup || ((idx + 1) % warmup_every).zero?
         puts "[ruby/#{label}] warmup #{idx + 1}/#{@warmup}"
@@ -225,7 +230,7 @@ class BenchmarkTask
 
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     @iterations.times do |idx|
-      output = example.run_step
+      output = runner.call
       MLX::Core.eval(output)
       if (idx + 1) == @iterations || ((idx + 1) % iter_every).zero?
         puts "[ruby/#{label}] iter #{idx + 1}/#{@iterations}"

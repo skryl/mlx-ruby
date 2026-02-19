@@ -419,39 +419,53 @@ module MLX
           flat_inputs = []
           input_spec = flatten_tree_spec([args, kwargs], flat_inputs, false)
           key = structure_cache_key(input_spec)
+          rebuilt_once = false
 
-          entry = cache[key]
-          unless entry
-            output_spec = nil
-            lifted = lambda do |*flat_vars|
-              rebuilt, cursor = inflate_tree_from_arrays(input_spec, flat_vars, 0)
-              unless cursor == flat_vars.length
-                raise RuntimeError, "internal input reconstruction mismatch"
+          begin
+            entry = cache[key]
+            unless valid_transform_cache_entry?(entry)
+              cache.delete(key)
+              entry = nil
+            end
+            unless entry
+              output_spec = nil
+              lifted = lambda do |*flat_vars|
+                rebuilt, cursor = inflate_tree_from_arrays(input_spec, flat_vars, 0)
+                unless cursor == flat_vars.length
+                  raise RuntimeError, "internal input reconstruction mismatch"
+                end
+
+                call_args = rebuilt[0]
+                call_kwargs = rebuilt[1]
+                raw_output = fun.call(*call_args, **call_kwargs)
+
+                flat_output = []
+                output_spec = flatten_tree_spec(raw_output, flat_output, false)
+                flat_output
               end
 
-              call_args = rebuilt[0]
-              call_kwargs = rebuilt[1]
-              raw_output = fun.call(*call_args, **call_kwargs)
-
-              flat_output = []
-              output_spec = flatten_tree_spec(raw_output, flat_output, false)
-              flat_output
+              compiled = native_compile(lifted, inputs, outputs, shapeless)
+              entry = { fn: compiled, output_spec: -> { output_spec } }
+              cache[key] = entry
             end
 
-            compiled = native_compile(lifted, inputs, outputs, shapeless)
-            entry = { fn: compiled, output_spec: -> { output_spec } }
-            cache[key] = entry
-          end
+            flat_output = normalize_array_sequence(entry[:fn].call(*flat_inputs), "compiled output")
+            spec = entry[:output_spec].call
+            raise RuntimeError, "missing output structure from compiled function" if spec.nil?
 
-          flat_output = normalize_array_sequence(entry[:fn].call(*flat_inputs), "compiled output")
-          spec = entry[:output_spec].call
-          raise RuntimeError, "missing output structure from compiled function" if spec.nil?
-
-          rebuilt, cursor = inflate_tree_from_arrays(spec, flat_output, 0)
-          unless cursor == flat_output.length
-            raise RuntimeError, "internal output reconstruction mismatch"
+            rebuilt, cursor = inflate_tree_from_arrays(spec, flat_output, 0)
+            unless cursor == flat_output.length
+              raise RuntimeError, "internal output reconstruction mismatch"
+            end
+            rebuilt
+          rescue RuntimeError => e
+            if !rebuilt_once && invalid_transform_callable_error?(e)
+              rebuilt_once = true
+              cache.delete(key)
+              retry
+            end
+            raise
           end
-          rebuilt
         end
       end
 
@@ -463,39 +477,53 @@ module MLX
           flat_inputs = []
           input_spec = flatten_tree_spec([args, kwargs], flat_inputs, false)
           key = structure_cache_key(input_spec)
+          rebuilt_once = false
 
-          entry = cache[key]
-          unless entry
-            output_spec = nil
-            lifted = lambda do |*flat_vars|
-              rebuilt, cursor = inflate_tree_from_arrays(input_spec, flat_vars, 0)
-              unless cursor == flat_vars.length
-                raise RuntimeError, "internal input reconstruction mismatch"
+          begin
+            entry = cache[key]
+            unless valid_transform_cache_entry?(entry)
+              cache.delete(key)
+              entry = nil
+            end
+            unless entry
+              output_spec = nil
+              lifted = lambda do |*flat_vars|
+                rebuilt, cursor = inflate_tree_from_arrays(input_spec, flat_vars, 0)
+                unless cursor == flat_vars.length
+                  raise RuntimeError, "internal input reconstruction mismatch"
+                end
+
+                call_args = rebuilt[0]
+                call_kwargs = rebuilt[1]
+                raw_output = fun.call(*call_args, **call_kwargs)
+
+                flat_output = []
+                output_spec = flatten_tree_spec(raw_output, flat_output, false)
+                flat_output
               end
 
-              call_args = rebuilt[0]
-              call_kwargs = rebuilt[1]
-              raw_output = fun.call(*call_args, **call_kwargs)
-
-              flat_output = []
-              output_spec = flatten_tree_spec(raw_output, flat_output, false)
-              flat_output
+              checkpointed = native_checkpoint(lifted)
+              entry = { fn: checkpointed, output_spec: -> { output_spec } }
+              cache[key] = entry
             end
 
-            checkpointed = native_checkpoint(lifted)
-            entry = { fn: checkpointed, output_spec: -> { output_spec } }
-            cache[key] = entry
-          end
+            flat_output = normalize_array_sequence(entry[:fn].call(*flat_inputs), "checkpoint output")
+            spec = entry[:output_spec].call
+            raise RuntimeError, "missing output structure from checkpoint function" if spec.nil?
 
-          flat_output = normalize_array_sequence(entry[:fn].call(*flat_inputs), "checkpoint output")
-          spec = entry[:output_spec].call
-          raise RuntimeError, "missing output structure from checkpoint function" if spec.nil?
-
-          rebuilt, cursor = inflate_tree_from_arrays(spec, flat_output, 0)
-          unless cursor == flat_output.length
-            raise RuntimeError, "internal output reconstruction mismatch"
+            rebuilt, cursor = inflate_tree_from_arrays(spec, flat_output, 0)
+            unless cursor == flat_output.length
+              raise RuntimeError, "internal output reconstruction mismatch"
+            end
+            rebuilt
+          rescue RuntimeError => e
+            if !rebuilt_once && invalid_transform_callable_error?(e)
+              rebuilt_once = true
+              cache.delete(key)
+              retry
+            end
+            raise
           end
-          rebuilt
         end
       end
 
@@ -875,6 +903,16 @@ module MLX
 
       def normalize_raw_grads(raw)
         normalize_array_sequence(raw, "gradient")
+      end
+
+      def valid_transform_cache_entry?(entry)
+        entry.is_a?(::Hash) &&
+          entry[:fn].respond_to?(:call) &&
+          entry[:output_spec].respond_to?(:call)
+      end
+
+      def invalid_transform_callable_error?(error)
+        error.message.match?(/undefined method [`']call['"]/)
       end
 
       def normalize_array_sequence(raw, context)

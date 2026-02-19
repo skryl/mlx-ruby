@@ -21,10 +21,27 @@ module BenchmarkExamples
 
       @conv1 = MLX::NN::Conv2d.new(CNN_CHANNELS, 16, 3, stride: 1, padding: 1, bias: true)
       @conv2 = MLX::NN::Conv2d.new(16, 32, 3, stride: 1, padding: 1, bias: true)
-      @relu = MLX::NN::ReLU.new
       @pool = MLX::NN::MaxPool2d.new(2, stride: 2, padding: 0)
       @linear = MLX::NN::Linear.new(@flattened_features, CNN_CLASSES)
       BenchmarkDigest.assign_deterministic_parameters!([@conv1, @conv2, @linear])
+
+      conv1 = @conv1
+      conv2 = @conv2
+      pool = @pool
+      linear = @linear
+      input = @input
+      batch_size = @batch_size
+      flattened_features = @flattened_features
+      @run_step = lambda do
+        y = conv1.call(input)
+        y = MLX::NN.relu(y)
+        y = pool.call(y)
+        y = conv2.call(y)
+        y = MLX::NN.relu(y)
+        y = pool.call(y)
+        y = MLX::Core.reshape(y, [batch_size, flattened_features])
+        linear.call(y)
+      end
 
       @input_shape = @input.shape
       @input_digest = BenchmarkDigest.digest_array(@input)
@@ -33,14 +50,11 @@ module BenchmarkExamples
     end
 
     def run_step
-      y = @conv1.call(@input)
-      y = @relu.call(y)
-      y = @pool.call(y)
-      y = @conv2.call(y)
-      y = @relu.call(y)
-      y = @pool.call(y)
-      y = MLX::Core.reshape(y, [@batch_size, @flattened_features])
-      @linear.call(y)
+      @run_step.call
+    end
+
+    def run_step_proc
+      @run_step
     end
 
     def verification_input_digest

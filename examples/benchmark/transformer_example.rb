@@ -36,12 +36,23 @@ module BenchmarkExamples
       )
       BenchmarkDigest.assign_deterministic_parameters!(@model)
 
+      model = @model
+      src = @src
+      tgt = @tgt
+      src_mask = @src_mask
+      tgt_mask = @tgt_mask
+      @run_step = lambda { model.call(src, tgt, src_mask, tgt_mask, nil) }
+
       @reference_output_digest = BenchmarkDigest.digest_array(run_step)
       @path_signature = "forward_only_eval_output"
     end
 
     def run_step
-      @model.call(@src, @tgt, @src_mask, @tgt_mask, nil)
+      @run_step.call
+    end
+
+    def run_step_proc
+      @run_step
     end
 
     def verification_input_digest

@@ -31,8 +31,10 @@ module MLX
       end
 
       def call(x)
-        y = MLX::Core.conv1d(x, weight, @stride, @padding, @dilation, @groups)
-        state.key?("bias") ? MLX::Core.add(y, bias) : y
+        weight_param = @state["weight"]
+        bias_param = @state["bias"]
+        y = MLX::Core.conv1d(x, weight_param, @stride, @padding, @dilation, @groups)
+        bias_param.nil? ? y : (y + bias_param)
       end
     end
 
@@ -65,18 +67,30 @@ module MLX
         @stride = stride
         @padding = padding
         @dilation = dilation
+        @stride_arg = collapse_uniform(@stride)
+        @padding_arg = collapse_uniform(@padding)
+        @dilation_arg = collapse_uniform(@dilation)
         @groups = groups
       end
 
       def call(x)
-        y = MLX::Core.conv2d(x, weight, @stride, @padding, @dilation, @groups)
-        state.key?("bias") ? MLX::Core.add(y, bias) : y
+        weight_param = @state["weight"]
+        bias_param = @state["bias"]
+        y = MLX::Core.conv2d(x, weight_param, @stride_arg, @padding_arg, @dilation_arg, @groups)
+        bias_param.nil? ? y : (y + bias_param)
       end
 
       private
 
       def pair(value)
         value.is_a?(Integer) ? [value, value] : value
+      end
+
+      def collapse_uniform(value)
+        return value unless value.is_a?(Array)
+        return value if value.empty?
+
+        value.all? { |entry| entry == value[0] } ? value[0] : value
       end
     end
 
@@ -103,17 +117,29 @@ module MLX
         @stride = stride
         @padding = padding
         @dilation = dilation
+        @stride_arg = collapse_uniform(@stride)
+        @padding_arg = collapse_uniform(@padding)
+        @dilation_arg = collapse_uniform(@dilation)
       end
 
       def call(x)
-        y = MLX::Core.conv3d(x, weight, @stride, @padding, @dilation)
-        state.key?("bias") ? MLX::Core.add(y, bias) : y
+        weight_param = @state["weight"]
+        bias_param = @state["bias"]
+        y = MLX::Core.conv3d(x, weight_param, @stride_arg, @padding_arg, @dilation_arg)
+        bias_param.nil? ? y : (y + bias_param)
       end
 
       private
 
       def triple(value)
         value.is_a?(Integer) ? [value, value, value] : value
+      end
+
+      def collapse_uniform(value)
+        return value unless value.is_a?(Array)
+        return value if value.empty?
+
+        value.all? { |entry| entry == value[0] } ? value[0] : value
       end
     end
   end

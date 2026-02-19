@@ -18,6 +18,10 @@ module BenchmarkExamples
       @rnn = MLX::NN::RNN.new(dims, hidden_size)
       BenchmarkDigest.assign_deterministic_parameters!(@rnn)
 
+      rnn = @rnn
+      input = @input
+      @run_step = lambda { rnn.call(input) }
+
       @input_shape = @input.shape
       @input_digest = BenchmarkDigest.digest_array(@input)
       @reference_output_digest = BenchmarkDigest.digest_array(run_step)
@@ -25,7 +29,11 @@ module BenchmarkExamples
     end
 
     def run_step
-      @rnn.call(@input)
+      @run_step.call
+    end
+
+    def run_step_proc
+      @run_step
     end
 
     def verification_input_digest

@@ -58,8 +58,8 @@ module MLX
       end
 
       def call(x)
-        w = state.key?("weight") ? weight : nil
-        b = state.key?("bias") ? bias : nil
+        w = @state["weight"]
+        b = @state["bias"]
         MLX::Core.layer_norm(x, w, b, @eps)
       end
     end
