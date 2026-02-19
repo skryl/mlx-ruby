@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress as of February 19, 2026.
+Completed on February 19, 2026.
 
 Phase progress update (local):
 
@@ -18,7 +18,7 @@ Phase progress update (local):
 10. Phase 4 full-model export parity is green: 23/23 examples models report `unsupported_nodes == 0` with empty `errors_by_model`.
 11. Added full examples-submodule ONNX Runtime parity gate (`phase324`) that captures each model, exports ONNX, runs in Python ORT, and checks output parity.
 12. `rake benchmark:all` passes across cpu/gpu/webgpu lanes with explicit WebGPU skip policy on submodule examples models when runtime provider is unavailable.
-13. Remaining: CI/report integration.
+13. CI/report integration completed.
 
 ## Context
 
@@ -230,4 +230,4 @@ In scope model set (from `benchmark/runner.rb`):
 - [x] Examples WebGPU unsupported-op handling defaults to skip (strict mode via `REQUIRE_WEBGPU=1`).
 - [x] Phase 4 full 23-model export/parity suites green.
 - [x] Phase 4 all-model Python ONNX Runtime parity suite green.
-- [ ] CI lane/report integration completed.
+- [x] CI lane/report integration completed.

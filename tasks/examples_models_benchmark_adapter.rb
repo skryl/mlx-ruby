@@ -564,6 +564,10 @@ class ExamplesModelsBenchmarkAdapter
         return [max_abs_value(expected), max_abs_value(actual)].max
       end
 
+      if (expected == true || expected == false || actual == true || actual == false)
+        return expected == actual ? 0.0 : 1.0
+      end
+
       (expected.to_f - actual.to_f).abs
     end
   end
@@ -577,6 +581,8 @@ class ExamplesModelsBenchmarkAdapter
       return 0.0 if value.empty?
 
       value.values.map { |item| max_abs_value(item) }.max || 0.0
+    elsif value == true || value == false
+      value ? 1.0 : 0.0
     else
       value.to_f.abs
     end

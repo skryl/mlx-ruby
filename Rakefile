@@ -702,7 +702,21 @@ namespace :benchmark do
 
   def self.resolve_model_selection(raw_models)
     requested = parse_models_argument(raw_models)
-    selected = requested.empty? ? available_models : requested
+    selected =
+      if requested.empty?
+        available_models
+      else
+        requested.flat_map do |entry|
+          case entry
+          when "local"
+            LOCAL_MODELS
+          when "examples"
+            examples_model_names
+          else
+            entry
+          end
+        end.uniq
+      end
     available = available_models
     unknown = selected.reject { |name| available.include?(name) }
     unless unknown.empty?
@@ -831,21 +845,21 @@ namespace :benchmark do
     sh python_bin, "-m", "pip", "install", "-r", requirements
   end
 
-  desc "Run selected models on cpu. Usage: rake 'benchmark:cpu[model_a,model_b]'."
+  desc "Run selected models on cpu. Usage: rake 'benchmark:cpu[local,examples]' or rake 'benchmark:cpu[model_a,model_b]'."
   task :cpu, [:models] do |_task, args|
     selection = resolve_model_selection(models_argument_from_task_args(args))
     run_local_device_benchmarks!(local_models: selection.fetch(:local), device: :cpu)
     run_examples_benchmarks!(example_models: selection.fetch(:examples), devices: %w[cpu])
   end
 
-  desc "Run selected models on gpu. Usage: rake 'benchmark:gpu[model_a,model_b]'."
+  desc "Run selected models on gpu. Usage: rake 'benchmark:gpu[local,examples]' or rake 'benchmark:gpu[model_a,model_b]'."
   task :gpu, [:models] do |_task, args|
     selection = resolve_model_selection(models_argument_from_task_args(args))
     run_local_device_benchmarks!(local_models: selection.fetch(:local), device: :gpu)
     run_examples_benchmarks!(example_models: selection.fetch(:examples), devices: %w[gpu])
   end
 
-  desc "Run selected models on WebGPU/local GPU path. Usage: rake 'benchmark:webgpu[model_a,model_b]'."
+  desc "Run selected models on WebGPU/local GPU path. Usage: rake 'benchmark:webgpu[local,examples]' or rake 'benchmark:webgpu[model_a,model_b]'."
   task :webgpu, [:models] do |_task, args|
     selection = resolve_model_selection(models_argument_from_task_args(args))
     run_local_webgpu_benchmarks!(local_models: selection.fetch(:local))
@@ -858,7 +872,7 @@ namespace :benchmark do
     sh RbConfig.ruby, script
   end
 
-  desc "Run selected models on cpu, gpu, and webgpu. Usage: rake 'benchmark:all[model_a,model_b]'."
+  desc "Run selected models on cpu, gpu, and webgpu. Usage: rake 'benchmark:all[local,examples]' or rake 'benchmark:all[model_a,model_b]'."
   task :all, [:models] do |_task, args|
     selection = resolve_model_selection(models_argument_from_task_args(args))
     run_local_device_benchmarks!(local_models: selection.fetch(:local), device: :cpu)
@@ -868,15 +882,9 @@ namespace :benchmark do
     run_local_webgpu_benchmarks!(local_models: selection.fetch(:local))
     run_examples_webgpu_benchmarks!(example_models: selection.fetch(:examples))
   end
-
-  desc "Run only examples-submodule models (all by default) on cpu+gpu."
-  task :examples, [:models] do |_task, args|
-    selection = resolve_model_selection(models_argument_from_task_args(args))
-    run_examples_benchmarks!(example_models: selection.fetch(:examples), devices: %w[cpu gpu])
-  end
 end
 
-desc "Run selected benchmarks on cpu, gpu, and webgpu. Usage: rake 'benchmark[model_a,model_b]'."
+desc "Run selected benchmarks on cpu, gpu, and webgpu. Usage: rake 'benchmark[local,examples]' or rake 'benchmark[model_a,model_b]'."
 task :benchmark, [:models] do |_task, args|
   values = []
   primary = args[:models]
