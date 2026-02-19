@@ -81,7 +81,6 @@ class BenchmarkTask
       model_name,
       ruby_result: ruby_result,
       python_result: python_result,
-      speedup: speedup,
       ruby_status: ruby_status,
       python_status: python_status,
       ruby_error: ruby_error,
@@ -306,22 +305,24 @@ class BenchmarkTask
   end
 
   def print_webgpu_run_summary(result)
-    puts "Benchmark (webgpu): #{result.fetch('model')}"
-    if result.fetch("skipped")
-      puts "  skipped: #{result.fetch('skip_reason')}"
-      puts
-      return
-    end
+    status =
+      if result.fetch("skipped")
+        "SKIPPED"
+      elsif result.fetch("ok")
+        "OK"
+      else
+        "FAILED"
+      end
 
-    puts "  provider: #{result.fetch('provider')}"
-    puts "  fallback_used: #{result.fetch('fallback_used')}"
-    puts "  model_load_ms: #{format('%.3f', result.fetch('model_load_latency_ms'))}"
-    puts "  first_inference_ms: #{format('%.3f', result.fetch('first_inference_latency_ms'))}"
-    puts "  steady_state_ms: #{format('%.3f', result.fetch('steady_state_inference_latency_ms'))}"
-    puts "  output_max_abs_diff: #{result.fetch('output_max_abs_diff')}"
-    puts "  output_tolerance: #{result.fetch('output_tolerance')}"
-    puts "  output_parity_ok: #{result.fetch('output_parity_ok')}"
-    puts
+    puts format(
+      "LO  %-4s %-28s provider=%-8s steady_ms=%-10s diff=%-10s %s",
+      compute_device_name.upcase,
+      result.fetch("model"),
+      (result["provider"] || "-"),
+      format_ms_for_summary(result["steady_state_inference_latency_ms"]),
+      format_diff_for_summary(result["output_max_abs_diff"]),
+      status
+    )
   end
 
   def configuration_summary(model_name)
@@ -425,25 +426,16 @@ class BenchmarkTask
     start = nil
     finish = nil
     output = nil
-    label = example.label
-    warmup_every = log_interval(@warmup)
-    iter_every = log_interval(@iterations)
 
-    @warmup.times do |idx|
+    @warmup.times do
       output = example.run_step
       MLX::Core.eval(output)
-      if (idx + 1) == @warmup || ((idx + 1) % warmup_every).zero?
-        puts "[ruby/#{label}] warmup #{idx + 1}/#{@warmup}"
-      end
     end
 
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    @iterations.times do |idx|
+    @iterations.times do
       output = example.run_step
       MLX::Core.eval(output)
-      if (idx + 1) == @iterations || ((idx + 1) % iter_every).zero?
-        puts "[ruby/#{label}] iter #{idx + 1}/#{@iterations}"
-      end
     end
     finish = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
@@ -484,7 +476,6 @@ class BenchmarkTask
     status = nil
     Open3.popen2e(*command, chdir: @repo_root) do |_stdin, stream, wait_thr|
       while (line = stream.gets)
-        puts line
         output_lines << line
       end
       status = wait_thr.value
@@ -529,35 +520,62 @@ class BenchmarkTask
     model_name,
     ruby_result:,
     python_result:,
-    speedup:,
     ruby_status:,
     python_status:,
     ruby_error:,
     python_error:,
     parity_failures:
   )
-    puts "Benchmark (ruby vs python): #{model_name}"
-    puts "  configuration: #{configuration_summary(model_name)}"
-    puts "  compute device: #{compute_device_name}"
-    puts "  iterations: #{@iterations}, warmup: #{@warmup}"
-
-    if ruby_result && python_result
-      puts "  ruby_avg_ms:   #{format('%.3f', ruby_result.fetch('average_ms'))}"
-      puts "  python_avg_ms: #{format('%.3f', python_result.fetch('average_ms'))}"
-      puts "  python/ruby:   #{format('%.2f', speedup)}x"
-      puts "  output shape:  #{ruby_result.fetch('output_shape').join('x')} (ruby), " \
-        "#{python_result.fetch('output_shape').join('x')} (python)"
-    else
-      puts "  ruby_status:   #{ruby_status}"
-      puts "  python_status: #{python_status}"
-      puts "  ruby_error:    #{ruby_error}" if ruby_error
-      puts "  python_error:  #{python_error}" if python_error
+    rb_seconds = ruby_result && ruby_result["average_ms"] ? ruby_result.fetch("average_ms") / 1000.0 : nil
+    py_seconds = python_result && python_result["average_ms"] ? python_result.fetch("average_ms") / 1000.0 : nil
+    rb_per_py = if rb_seconds && py_seconds && !py_seconds.zero?
+      rb_seconds / py_seconds
     end
 
-    unless parity_failures.empty?
-      puts "  parity mismatches: #{parity_failures.join(', ')}"
-    end
+    ok = ruby_status.zero? && python_status.zero? && parity_failures.empty?
+    status = ok ? "OK" : "FAILED"
+    puts format(
+      "LO  %-4s %-28s py=%-10s rb=%-10s rb/py=%-8s %s",
+      compute_device_name.upcase,
+      model_name.to_s,
+      format_seconds_for_summary(py_seconds),
+      format_seconds_for_summary(rb_seconds),
+      format_ratio_for_summary(rb_per_py),
+      status
+    )
+
+    return if ok
+
+    puts "  ruby_status: #{ruby_status}"
+    puts "  python_status: #{python_status}"
+    puts "  ruby_error: #{ruby_error}" if ruby_error
+    puts "  python_error: #{python_error}" if python_error
+    puts "  parity mismatches: #{parity_failures.join(', ')}" unless parity_failures.empty?
     puts
+  end
+
+  def format_seconds_for_summary(value)
+    return "n/a" if value.nil?
+
+    format("%.6f", value)
+  end
+
+  def format_ratio_for_summary(value)
+    return "n/a" if value.nil?
+
+    format("%.2fx", value)
+  end
+
+  def format_ms_for_summary(value)
+    return "n/a" if value.nil?
+
+    format("%.3f", value)
+  end
+
+  def format_diff_for_summary(value)
+    return "n/a" if value.nil?
+
+    format("%.6f", value)
   end
 
   def parity_failure_message(model_name, ruby_status, python_status, ruby_error, python_error, parity_failures)

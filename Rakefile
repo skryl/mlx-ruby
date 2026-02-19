@@ -541,8 +541,8 @@ namespace :benchmark do
   def self.base_options
     benchmark_class = task_class
     {
-      iterations: ENV.fetch("ITERATIONS", benchmark_class::DEFAULT_ITERATIONS).to_i,
-      warmup: ENV.fetch("WARMUP", benchmark_class::DEFAULT_WARMUP).to_i,
+      iterations: benchmark_runs,
+      warmup: benchmark_warmup,
       batch_size: ENV.fetch("BATCH", benchmark_class::DEFAULT_BATCH_SIZE).to_i,
       sequence_length: ENV.fetch("SEQUENCE_LENGTH", benchmark_class::DEFAULT_SEQUENCE_LENGTH).to_i,
       target_sequence_length: ENV.fetch("TARGET_SEQUENCE_LENGTH", benchmark_class::DEFAULT_TARGET_SEQUENCE_LENGTH).to_i,
@@ -551,6 +551,26 @@ namespace :benchmark do
       num_layers: ENV.fetch("LAYERS", benchmark_class::DEFAULT_LAYERS).to_i,
       python_bin: python_bin
     }
+  end
+
+  def self.benchmark_runs
+    benchmark_class = task_class
+    if ENV.key?("RUNS")
+      ENV.fetch("RUNS").to_i
+    elsif ENV.key?("ITERATIONS")
+      ENV.fetch("ITERATIONS").to_i
+    else
+      benchmark_class::DEFAULT_ITERATIONS
+    end
+  end
+
+  def self.benchmark_warmup
+    benchmark_class = task_class
+    if ENV.key?("WARMUP")
+      ENV.fetch("WARMUP").to_i
+    else
+      benchmark_class::DEFAULT_WARMUP
+    end
   end
 
   def self.single_device_options
@@ -568,8 +588,8 @@ namespace :benchmark do
     benchmark_class = task_class
     {
       timeout_seconds: ENV.fetch("WEBGPU_TIMEOUT", benchmark_class::WEBGPU_DEFAULT_TIMEOUT_SECONDS).to_i,
-      benchmark_warmup_runs: ENV.fetch("WEBGPU_WARMUP", benchmark_class::WEBGPU_DEFAULT_BENCHMARK_WARMUP).to_i,
-      benchmark_measure_runs: ENV.fetch("WEBGPU_MEASURE", benchmark_class::WEBGPU_DEFAULT_BENCHMARK_MEASURE).to_i,
+      benchmark_warmup_runs: ENV.fetch("WEBGPU_WARMUP", benchmark_warmup).to_i,
+      benchmark_measure_runs: ENV.fetch("WEBGPU_MEASURE", benchmark_runs).to_i,
       require_webgpu: ENV["REQUIRE_WEBGPU"] == "1"
     }
   end
@@ -749,7 +769,9 @@ namespace :benchmark do
   def self.run_local_device_benchmarks!(local_models:, device:)
     return if local_models.empty?
 
-    benchmark = task_class.new(**base_options.merge(compute_device: device))
+    options = base_options.merge(compute_device: device)
+    puts "Local adapter: device=#{device} runs=#{options.fetch(:iterations)} warmup=#{options.fetch(:warmup)}"
+    benchmark = task_class.new(**options)
     failures = []
     local_models.each do |model_name|
       result = benchmark.run(model: model_name, enforce_parity: false, print_summary: true)
@@ -761,21 +783,23 @@ namespace :benchmark do
   def self.run_local_webgpu_benchmarks!(local_models:)
     return if local_models.empty?
 
+    options = webgpu_options
+    puts "Local adapter: device=#{webgpu_compute_device} runs=#{options.fetch(:benchmark_measure_runs)} warmup=#{options.fetch(:benchmark_warmup_runs)}"
     benchmark = task_class.new(**base_options.merge(compute_device: webgpu_compute_device))
     failures = []
     local_models.each do |model_name|
-      result = benchmark.run_webgpu(model: model_name, **webgpu_options)
+      result = benchmark.run_webgpu(model: model_name, **options)
       failures << model_name unless result.fetch("ok")
     end
     raise "Local WebGPU benchmark failures: #{failures.join(', ')}" unless failures.empty?
   end
 
   def self.examples_runs
-    ENV.fetch("RUNS", "1").to_i
+    benchmark_runs
   end
 
   def self.examples_warmup
-    ENV.fetch("WARMUP", "0").to_i
+    benchmark_warmup
   end
 
   def self.examples_timeout
