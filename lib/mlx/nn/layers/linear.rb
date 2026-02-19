@@ -20,15 +20,34 @@ module MLX
         scale = Math.sqrt(1.0 / input_dims)
         self.weight = MLX::Core.uniform([output_dims, input_dims], -scale, scale)
         self.bias = MLX::Core.uniform([output_dims], -scale, scale) if bias
+        @has_bias = bias
+        @cached_weight_t = nil
+        @cached_weight_id = nil
       end
 
       def call(x)
-        if state.key?("bias")
-          MLX::Core.addmm(bias, x, weight.T)
+        weight_param = @state["weight"]
+        weight_t = cached_weight_transpose(weight_param)
+        if @has_bias
+          bias_param = @state["bias"]
+          MLX::Core.addmm(bias_param, x, weight_t)
         else
-          MLX::Core.matmul(x, weight.T)
+          MLX::Core.matmul(x, weight_t)
         end
       end
+
+      private
+
+      def cached_weight_transpose(weight_param)
+        weight_id = weight_param.object_id
+        if @cached_weight_t.nil? || @cached_weight_id != weight_id
+          @cached_weight_t = weight_param.T
+          @cached_weight_id = weight_id
+        end
+        @cached_weight_t
+      end
+
+      public
 
       def to_quantized(group_size: nil, bits: nil, mode: "affine", quantize_input: false)
         if quantize_input
@@ -53,14 +72,16 @@ module MLX
       end
 
       def call(x1, x2)
-        out_dims, in2_dims, in1_dims = weight.shape
+        weight_param = @state["weight"]
+        bias_param = @state["bias"]
+        out_dims, in2_dims, in1_dims = weight_param.shape
 
         x_shape = x1.shape[0...-1]
         batch = x1.size / in1_dims
         x1_2d = MLX::Core.reshape(x1, [batch, in1_dims])
         x2_3d = MLX::Core.reshape(x2, [batch, 1, in2_dims])
 
-        w = MLX::Core.reshape(weight, [out_dims * in2_dims, in1_dims])
+        w = MLX::Core.reshape(weight_param, [out_dims * in2_dims, in1_dims])
         y = MLX::Core.matmul(x1_2d, w.T)
         y = MLX::Core.reshape(y, [batch, out_dims, in2_dims])
         y = MLX::Core.swapaxes(y, -2, -1)
@@ -69,7 +90,7 @@ module MLX
 
         out_shape = x_shape.empty? ? [out_dims] : x_shape + [out_dims]
         y = MLX::Core.reshape(y, out_shape)
-        y = MLX::Core.add(y, bias) if state.key?("bias")
+        y = y + bias_param unless bias_param.nil?
         y
       end
     end

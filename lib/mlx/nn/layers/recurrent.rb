@@ -7,6 +7,8 @@ module MLX
         super()
 
         @nonlinearity = nonlinearity || lambda { |z| MLX::NN.tanh(z) }
+        @fast_tanh = nonlinearity.nil?
+        @compiled_hidden_step = build_compiled_hidden_step if @fast_tanh
         unless @nonlinearity.respond_to?(:call)
           raise ArgumentError, "Nonlinearity must be callable. Current value: #{nonlinearity}."
         end
@@ -19,19 +21,60 @@ module MLX
       end
 
       def call(x, hidden = nil)
-        x = MLX::Core.matmul(x, self.Wxh.T)
-        x = MLX::Core.add(x, self.bias) unless self.bias.nil?
+        wxh = @state["Wxh"]
+        whh = @state["Whh"]
+        bias = @state["bias"]
+        wxh_t = wxh.T
+        whh_t = whh.T
 
-        all_hidden = []
+        x = if bias.nil?
+          MLX::Core.matmul(x, wxh_t)
+        else
+          MLX::Core.addmm(bias, x, wxh_t)
+        end
+
         sequence_axis = x.ndim - 2
-        x.shape[sequence_axis].times do |idx|
+        sequence_length = x.shape[sequence_axis]
+        all_hidden = Array.new(sequence_length)
+        idx = 0
+
+        while idx < sequence_length
           step = MLX::Core.take(x, idx, sequence_axis)
-          step = MLX::Core.add(step, MLX::Core.matmul(hidden, self.Whh.T)) unless hidden.nil?
-          hidden = @nonlinearity.call(step)
-          all_hidden << hidden
+          hidden = if hidden.nil?
+            if @fast_tanh
+              MLX::Core.tanh(step)
+            else
+              @nonlinearity.call(step)
+            end
+          elsif @fast_tanh
+            compiled_hidden_step(step, hidden, whh_t)
+          else
+            @nonlinearity.call(MLX::Core.addmm(step, hidden, whh_t))
+          end
+          all_hidden[idx] = hidden
+          idx += 1
         end
 
         MLX::Core.stack(all_hidden, -2)
+      end
+
+      private
+
+      def build_compiled_hidden_step
+        MLX::Core.compile(lambda do |step, hidden, whh_t|
+          MLX::Core.tanh(MLX::Core.addmm(step, hidden, whh_t))
+        end)
+      rescue StandardError
+        nil
+      end
+
+      def compiled_hidden_step(step, hidden, whh_t)
+        return MLX::Core.tanh(MLX::Core.addmm(step, hidden, whh_t)) if @compiled_hidden_step.nil?
+
+        @compiled_hidden_step.call(step, hidden, whh_t)
+      rescue StandardError
+        @compiled_hidden_step = nil
+        MLX::Core.tanh(MLX::Core.addmm(step, hidden, whh_t))
       end
     end
 
@@ -48,21 +91,33 @@ module MLX
       end
 
       def call(x, hidden = nil)
-        x = MLX::Core.matmul(x, self.Wx.T)
-        x = MLX::Core.add(x, self.b) unless self.b.nil?
+        wx = @state["Wx"]
+        wh = @state["Wh"]
+        b = @state["b"]
+        bhn = @state["bhn"]
+        wx_t = wx.T
+        wh_t = wh.T
+
+        x = if b.nil?
+          MLX::Core.matmul(x, wx_t)
+        else
+          MLX::Core.addmm(b, x, wx_t)
+        end
 
         x_rz, x_n = MLX::Core.split(x, [2 * @hidden_size], x.ndim - 1)
-        all_hidden = []
         sequence_axis = x.ndim - 2
+        sequence_length = x.shape[sequence_axis]
+        all_hidden = Array.new(sequence_length)
+        idx = 0
 
-        x.shape[sequence_axis].times do |idx|
+        while idx < sequence_length
           rz = MLX::Core.take(x_rz, idx, sequence_axis)
           h_proj_n = nil
 
           unless hidden.nil?
-            h_proj = MLX::Core.matmul(hidden, self.Wh.T)
+            h_proj = MLX::Core.matmul(hidden, wh_t)
             h_proj_rz, h_proj_n = MLX::Core.split(h_proj, [2 * @hidden_size], h_proj.ndim - 1)
-            h_proj_n = MLX::Core.add(h_proj_n, self.bhn) unless self.bhn.nil?
+            h_proj_n = MLX::Core.add(h_proj_n, bhn) unless bhn.nil?
             rz = MLX::Core.add(rz, h_proj_rz)
           end
 
@@ -81,7 +136,8 @@ module MLX
             )
           end
 
-          all_hidden << hidden
+          all_hidden[idx] = hidden
+          idx += 1
         end
 
         MLX::Core.stack(all_hidden, -2)
@@ -100,16 +156,27 @@ module MLX
       end
 
       def call(x, hidden = nil, cell = nil)
-        x = MLX::Core.matmul(x, self.Wx.T)
-        x = MLX::Core.add(x, self.bias) unless self.bias.nil?
+        wx = @state["Wx"]
+        wh = @state["Wh"]
+        bias = @state["bias"]
+        wx_t = wx.T
+        wh_t = wh.T
 
-        all_hidden = []
-        all_cell = []
+        x = if bias.nil?
+          MLX::Core.matmul(x, wx_t)
+        else
+          MLX::Core.addmm(bias, x, wx_t)
+        end
+
         sequence_axis = x.ndim - 2
+        sequence_length = x.shape[sequence_axis]
+        all_hidden = Array.new(sequence_length)
+        all_cell = Array.new(sequence_length)
+        idx = 0
 
-        x.shape[sequence_axis].times do |idx|
+        while idx < sequence_length
           ifgo = MLX::Core.take(x, idx, sequence_axis)
-          ifgo = MLX::Core.add(ifgo, MLX::Core.matmul(hidden, self.Wh.T)) unless hidden.nil?
+          ifgo = MLX::Core.addmm(ifgo, hidden, wh_t) unless hidden.nil?
 
           i, f, g, o = MLX::Core.split(ifgo, 4, ifgo.ndim - 1)
           i = MLX::Core.sigmoid(i)
@@ -124,8 +191,9 @@ module MLX
           end
           hidden = MLX::Core.multiply(o, MLX::Core.tanh(cell))
 
-          all_cell << cell
-          all_hidden << hidden
+          all_cell[idx] = cell
+          all_hidden[idx] = hidden
+          idx += 1
         end
 
         [MLX::Core.stack(all_hidden, -2), MLX::Core.stack(all_cell, -2)]

@@ -13,7 +13,7 @@ module MLX
       end
 
       def call(x)
-        return x if @p_keep == 1.0 || !training
+        return x if @p_keep == 1.0 || !@training
 
         mask = MLX::Core.bernoulli(@p_keep, x.shape)
         MLX::Core.multiply(MLX::Core.multiply(mask, x), 1.0 / @p_keep)
@@ -35,7 +35,7 @@ module MLX
           raise ArgumentError, "Received input with #{x.ndim} dimensions. Expected 3 or 4 dimensions."
         end
 
-        return x if @p_keep == 1.0 || !training
+        return x if @p_keep == 1.0 || !@training
 
         mask_shape = x.shape.dup
         mask_shape[-2] = 1
@@ -60,7 +60,7 @@ module MLX
           raise ArgumentError, "Received input with #{x.ndim} dimensions. Expected 4 or 5 dimensions."
         end
 
-        return x if @p_keep == 1.0 || !training
+        return x if @p_keep == 1.0 || !@training
 
         mask_shape = x.shape.dup
         mask_shape[-2] = 1

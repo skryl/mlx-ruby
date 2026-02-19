@@ -58,6 +58,33 @@ class Phase190ActivationsParityTest < Minitest::Test
     assert_nested_close mish_expected.to_a, MLX::NN.mish(x).to_a
   end
 
+  def test_relu_and_sigmoid_fallback_when_compiled_activation_cache_is_invalid
+    x = MLX::Core.array([-1.0, 0.0, 1.0], MLX::Core.float32)
+    sentinel = Object.new
+    ivars = %i[@compiled_relu @compiled_sigmoid]
+    backups = {}
+
+    ivars.each do |ivar|
+      backups[ivar] = if MLX::NN.instance_variable_defined?(ivar)
+        MLX::NN.instance_variable_get(ivar)
+      else
+        sentinel
+      end
+      MLX::NN.instance_variable_set(ivar, MLX::Core)
+    end
+
+    assert_nested_close [0.0, 0.0, 1.0], MLX::NN.relu(x).to_a
+    assert_nested_close [0.26894143, 0.5, 0.7310586], MLX::NN.sigmoid(x).to_a
+  ensure
+    ivars.each do |ivar|
+      if backups[ivar].equal?(sentinel)
+        MLX::NN.remove_instance_variable(ivar) if MLX::NN.instance_variable_defined?(ivar)
+      else
+        MLX::NN.instance_variable_set(ivar, backups[ivar])
+      end
+    end
+  end
+
   def test_glu_prelu_and_gelu_module_behavior
     x_glu = MLX::Core.array([[1.0, 2.0, -1.0, -2.0]], MLX::Core.float32)
     glu = MLX::NN::GLU.new

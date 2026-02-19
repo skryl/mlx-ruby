@@ -10,6 +10,7 @@ module MLX
         @stride = stride
         @padding = padding
         @padding_value = padding_value
+        @axes = (-@kernel_size.length - 1...-1).to_a
       end
 
       def call(x)
@@ -37,15 +38,14 @@ module MLX
       end
 
       def reduce_windows(windows)
+        if @pooling_symbol == :max
+          return MLX::Core.max(windows, @axes)
+        end
+
         result = windows
-        window_dims = @kernel_size.length
-        window_dims.times do
+        @kernel_size.length.times do
           axis = result.ndim - 2
-          result = if @pooling_symbol == :max
-            MLX::Core.max(result, axis)
-          else
-            MLX::Core.mean(result, axis)
-          end
+          result = MLX::Core.mean(result, axis)
         end
         result
       end
@@ -63,6 +63,10 @@ module MLX
         end
 
         shape = x.shape
+        if spatial_dims.zip(window_shape, window_strides).all? { |size, window, stride| window == stride && (size % window).zero? }
+          return non_overlapping_sliding_windows(x, shape, window_shape)
+        end
+
         strides = Array.new(shape.length)
         running = 1
         (shape.length - 1).downto(0) do |i|
@@ -87,6 +91,24 @@ module MLX
         final_strides << strides[-1]
 
         MLX::Core.as_strided(x, final_shape, final_strides)
+      end
+
+      def non_overlapping_sliding_windows(x, shape, window_shape)
+        new_shape = [shape[0]]
+        shape[1...-1].zip(window_shape).each do |size, window|
+          new_shape << (size / window)
+          new_shape << window
+        end
+        new_shape << shape[-1]
+
+        last_axis = new_shape.length - 1
+        axis_order = [0]
+        axis_order.concat((1...last_axis).step(2).to_a)
+        axis_order.concat((2...last_axis).step(2).to_a)
+        axis_order << last_axis
+
+        reshaped = MLX::Core.reshape(x, new_shape)
+        MLX::Core.transpose(reshaped, axis_order)
       end
     end
 

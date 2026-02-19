@@ -6,7 +6,7 @@ import mlx.core as mx
 from benchmark_digest import assign_deterministic_parameters
 from benchmark_digest import deterministic_tensor
 from benchmark_digest import digest_array
-from mlx.nn.layers.activations import ReLU
+from mlx.nn.layers.activations import relu
 from mlx.nn.layers.convolution import Conv2d
 from mlx.nn.layers.linear import Linear
 from mlx.nn.layers.pooling import MaxPool2d
@@ -48,7 +48,6 @@ def main():
 
     conv1 = Conv2d(CNN_CHANNELS, 16, 3, stride=1, padding=1)
     conv2 = Conv2d(16, 32, 3, stride=1, padding=1)
-    relu = ReLU()
     pool = MaxPool2d(2, stride=2)
     linear = Linear(flattened, CNN_CLASSES)
     assign_deterministic_parameters([conv1, conv2, linear])
