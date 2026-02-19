@@ -44,16 +44,23 @@ module MLX
       "Multiply" => "Mul",
       "Square" => "Mul",
       "Divide" => "Div",
+      "AsType" => "Cast",
       "Exp" => "Exp",
       "Log" => "Log",
+      "Sin" => "Sin",
+      "Cos" => "Cos",
+      "Erf" => "Erf",
       "Sqrt" => "Sqrt",
       "Abs" => "Abs",
+      "Floor" => "Floor",
       "Negative" => "Neg",
       "Relu" => "Relu",
       "Sigmoid" => "Sigmoid",
       "Tanh" => "Tanh",
       "Softmax" => "Softmax",
       "Greater" => "Greater",
+      "Less" => "Less",
+      "Equal" => "Equal",
       "Select" => "Where",
       "Full" => "Identity",
       "Matmul" => "MatMul",
@@ -70,8 +77,12 @@ module MLX
       "Convolution" => "Conv",
       "ConvolutionTranspose" => "ConvTranspose",
       "Gather" => "Gather",
+      "GatherAxis" => "GatherElements",
       "Slice" => "Slice",
       "Split" => "Split",
+      "LogSumExp" => "ReduceLogSumExp",
+      "Pad" => "Pad",
+      "Scan" => "CumSum",
       "ScatterAxis" => "ScatterElements",
       "Maximum" => "Max",
       "Minimum" => "Min",
@@ -110,6 +121,25 @@ module MLX
       "complex64" => "COMPLEX64"
     }.freeze
 
+    DTYPE_PROMOTION_ORDER = %w[
+      bool
+      uint8
+      int8
+      uint16
+      int16
+      uint32
+      int32
+      uint64
+      int64
+      bfloat16
+      float16
+      float32
+      float64
+    ].freeze
+    DTYPE_PROMOTION_RANK = DTYPE_PROMOTION_ORDER.each_with_index.each_with_object({}) do |(dtype, rank), out|
+      out[dtype] = rank
+    end.freeze
+
     def load_payload(payload_or_source)
       payload = case payload_or_source
       when Hash
@@ -146,8 +176,9 @@ module MLX
       initializers = payload.fetch("constants").map { |tensor| onnx_initializer_info(tensor) }
       used_tensor_names = collect_payload_tensor_names(payload)
       known_shapes = collect_known_tensor_shapes(payload)
+      known_dtypes = collect_known_tensor_dtypes(payload)
       nodes = payload.fetch("nodes").each_with_index.flat_map do |node, index|
-        lowered = lower_onnx_node(node, index, initializers, used_tensor_names, known_shapes)
+        lowered = lower_onnx_node(node, index, initializers, used_tensor_names, known_shapes, known_dtypes)
         lowered.is_a?(Array) ? lowered : [lowered]
       end
 
@@ -173,13 +204,14 @@ module MLX
       probe_initializers = []
       probe_used_tensor_names = collect_payload_tensor_names(payload)
       probe_known_shapes = collect_known_tensor_shapes(payload)
+      probe_known_dtypes = collect_known_tensor_dtypes(payload)
       node_support = payload.fetch("nodes").each_with_index.map do |node, index|
         op = node.fetch("op")
         mapped = begin
           mapped_type = onnx_op_type_for_node(node, strict: false, known_shapes: probe_known_shapes)
           raise NotImplementedError if mapped_type.nil?
 
-          lower_onnx_node(node, index, probe_initializers, probe_used_tensor_names, probe_known_shapes)
+          lower_onnx_node(node, index, probe_initializers, probe_used_tensor_names, probe_known_shapes, probe_known_dtypes)
           mapped_type
         rescue NotImplementedError, ArgumentError, TypeError
           nil
@@ -620,7 +652,7 @@ module MLX
     private_class_method :collect_unique_tensor_names
 
     def onnx_value_info(tensor)
-      dtype = tensor.fetch("dtype")
+      dtype = onnx_effective_dtype(tensor.fetch("dtype"))
       mapped = ONNX_DTYPE_MAP.fetch(dtype)
       {
         "name" => tensor.fetch("name"),
@@ -651,6 +683,8 @@ module MLX
         { "axis" => concatenate_axis_from_arguments(arguments) }
       when "Gather"
         { "axis" => gather_axis_from_arguments(arguments) }
+      when "GatherAxis"
+        { "axis" => gather_axis_from_arguments(arguments) }
       when "ScatterAxis"
         scatter_axis_attributes_from_arguments(arguments)
       else
@@ -680,7 +714,7 @@ module MLX
     end
     private_class_method :transpose_perm_from_arguments
 
-    def lower_onnx_node(node, node_index, initializers, used_tensor_names, known_shapes)
+    def lower_onnx_node(node, node_index, initializers, used_tensor_names, known_shapes, known_dtypes)
       op = node.fetch("op")
       op_type = onnx_op_type_for_node(node, known_shapes: known_shapes)
       unless op_type
@@ -692,6 +726,7 @@ module MLX
       arguments = node.fetch("arguments", [])
       outputs = node.fetch("outputs")
       inferred_output_shape = nil
+      inferred_output_dtype = nil
 
       case op
       when "Arange"
@@ -705,6 +740,7 @@ module MLX
           "values" => values
         )
         known_shapes[output_name] = [values.length]
+        known_dtypes[output_name] = "int64"
         return []
       when "Transpose"
         transpose_input = inputs.fetch(0)
@@ -715,6 +751,7 @@ module MLX
           perm = (0...input_dims.length).to_a.reverse if perm.nil? || perm.empty?
           inferred_output_shape = permute_shape(input_dims, perm, "Transpose permutation")
         end
+        inferred_output_dtype = known_dtypes[transpose_input]
       when "Convolution"
         convolution = convolution_attributes_from_arguments(arguments)
         if convolution.fetch("flip")
@@ -910,6 +947,7 @@ module MLX
         axes = reduce_axes_from_arguments(arguments)
         axes_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "axes", axes)
         inferred_output_shape = infer_reduce_keepdims_shape(known_shapes[inputs.first], axes)
+        inferred_output_dtype = known_dtypes[inputs.first]
 
         if reduce_code == 0 || reduce_code == 1
           cast_bool_out = unique_aux_tensor_name(used_tensor_names, node_index, "cast_bool")
@@ -919,6 +957,7 @@ module MLX
 
           outputs.each do |name|
             known_shapes[name] = inferred_output_shape.dup unless inferred_output_shape.nil?
+            known_dtypes[name] = "bool"
           end
 
           return [
@@ -955,20 +994,56 @@ module MLX
 
         inputs << axes_name
         attributes["keepdims"] = 1
+      when "AsType"
+        target_dtype = onnx_effective_dtype(as_type_target_dtype(arguments, outputs, known_dtypes))
+        attributes["to"] = ONNX_DTYPE_MAP.fetch(target_dtype)
+        inferred_output_shape = known_shapes[inputs[0]]
+        inferred_output_dtype = target_dtype
       when "Reshape"
         shape = integer_vector_argument(arguments, "Reshape")
         shape_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "shape", shape)
         inputs << shape_name
         inferred_output_shape = shape
+        inferred_output_dtype = known_dtypes[inputs[0]]
       when "Add", "Subtract", "Multiply", "Divide", "Maximum", "Minimum", "Power"
+        lhs_dtype = known_dtypes[inputs[0]]
+        rhs_dtype = known_dtypes[inputs[1]]
+        promoted_dtype = promote_binary_dtype(lhs_dtype, rhs_dtype)
+        if promoted_dtype
+          inputs, cast_nodes = cast_inputs_to_dtype(
+            node_index: node_index,
+            op_name: op,
+            inputs: inputs,
+            target_dtype: promoted_dtype,
+            known_shapes: known_shapes,
+            known_dtypes: known_dtypes,
+            used_tensor_names: used_tensor_names
+          )
+          unless cast_nodes.empty?
+            inferred_output_shape = infer_elementwise_output_shape(known_shapes[inputs[0]], known_shapes[inputs[1]])
+            inferred_output_dtype = promoted_dtype
+            unless inferred_output_shape.nil?
+              outputs.each do |name|
+                known_shapes[name] = inferred_output_shape.dup
+              end
+            end
+            outputs.each { |name| known_dtypes[name] = inferred_output_dtype } unless inferred_output_dtype.nil?
+            cast_nodes << build_onnx_node_spec("node_#{node_index}_#{op_type}", op_type, inputs, outputs, attributes)
+            return cast_nodes
+          end
+        end
         inferred_output_shape = infer_elementwise_output_shape(known_shapes[inputs[0]], known_shapes[inputs[1]])
-      when "Exp", "Log", "Abs", "Negative", "Relu", "Sigmoid", "Tanh", "Softmax"
+        inferred_output_dtype = promoted_dtype || lhs_dtype || rhs_dtype
+      when "Exp", "Log", "Abs", "Negative", "Relu", "Sigmoid", "Tanh", "Softmax", "Sin", "Cos", "Erf", "Floor"
         inferred_output_shape = known_shapes[inputs[0]]
+        inferred_output_dtype = known_dtypes[inputs[0]]
       when "Sqrt"
         inferred_output_shape = known_shapes[inputs[0]]
+        inferred_output_dtype = known_dtypes[inputs[0]]
         if sqrt_is_reciprocal?(arguments)
           sqrt_output = unique_aux_tensor_name(used_tensor_names, node_index, "sqrt")
           known_shapes[sqrt_output] = inferred_output_shape.dup unless inferred_output_shape.nil?
+          known_dtypes[sqrt_output] = inferred_output_dtype unless inferred_output_dtype.nil?
           return [
             build_onnx_node_spec(
               "node_#{node_index}_Sqrt",
@@ -988,6 +1063,7 @@ module MLX
         end
       when "Matmul"
         inferred_output_shape = infer_matmul_output_shape(known_shapes[inputs[0]], known_shapes[inputs[1]])
+        inferred_output_dtype = known_dtypes[inputs[0]]
       when "AddMM"
         alpha, beta = addmm_alpha_beta(arguments)
         attributes["alpha"] = alpha unless alpha == 1.0
@@ -995,12 +1071,31 @@ module MLX
         attributes["transA"] = 0
         attributes["transB"] = 0
         inferred_output_shape = infer_matmul_output_shape(known_shapes[inputs[0]], known_shapes[inputs[1]])
+        inferred_output_dtype = known_dtypes[inputs[0]]
       when "Square"
         square_input = inputs.fetch(0)
         inputs = [square_input, square_input]
         inferred_output_shape = known_shapes[square_input]
+        inferred_output_dtype = known_dtypes[square_input]
       when "Gather"
         axis = gather_axis_from_arguments(arguments)
+        pre_nodes = []
+        indices_input = inputs[1]
+        indices_dtype = canonical_dtype(known_dtypes[indices_input])
+        if !indices_dtype.nil? && !%w[int32 int64].include?(indices_dtype)
+          cast_indices = unique_aux_tensor_name(used_tensor_names, node_index, "gather_indices_cast")
+          pre_nodes << build_onnx_node_spec(
+            "node_#{node_index}_GatherCastIndices",
+            "Cast",
+            [indices_input],
+            [cast_indices],
+            { "to" => ONNX_DTYPE_MAP.fetch("int64") }
+          )
+          index_shape = known_shapes[indices_input]
+          known_shapes[cast_indices] = index_shape.dup unless index_shape.nil?
+          known_dtypes[cast_indices] = "int64"
+          inputs[1] = cast_indices
+        end
         data_shape = known_shapes[inputs[0]]
         indices_shape = known_shapes[inputs[1]]
         unless data_shape
@@ -1026,9 +1121,14 @@ module MLX
         unless gather_shape.nil?
           known_shapes[gather_output] = gather_shape
           known_shapes[gather_reordered] = reordered_shape if needs_reorder
+          known_dtypes[gather_output] = known_dtypes[inputs[0]] unless known_dtypes[inputs[0]].nil?
+          known_dtypes[gather_reordered] = known_dtypes[inputs[0]] if needs_reorder && !known_dtypes[inputs[0]].nil?
           final_shape = reordered_shape.dup
           final_shape.insert(unsqueeze_axis, 1)
-          outputs.each { |name| known_shapes[name] = final_shape.dup }
+          outputs.each do |name|
+            known_shapes[name] = final_shape.dup
+            known_dtypes[name] = known_dtypes[inputs[0]] unless known_dtypes[inputs[0]].nil?
+          end
         end
 
         lowered = [
@@ -1052,7 +1152,187 @@ module MLX
           outputs,
           {}
         )
-        return lowered
+        return pre_nodes + lowered
+      when "GatherAxis"
+        axis = gather_axis_from_arguments(arguments)
+        pre_nodes = []
+        indices_input = inputs[1]
+        indices_dtype = canonical_dtype(known_dtypes[indices_input])
+        if !indices_dtype.nil? && !%w[int32 int64].include?(indices_dtype)
+          cast_indices = unique_aux_tensor_name(used_tensor_names, node_index, "gatheraxis_indices_cast")
+          pre_nodes << build_onnx_node_spec(
+            "node_#{node_index}_GatherAxisCastIndices",
+            "Cast",
+            [indices_input],
+            [cast_indices],
+            { "to" => ONNX_DTYPE_MAP.fetch("int64") }
+          )
+          index_shape = known_shapes[indices_input]
+          known_shapes[cast_indices] = index_shape.dup unless index_shape.nil?
+          known_dtypes[cast_indices] = "int64"
+          inputs[1] = cast_indices
+        end
+        data_shape = known_shapes[inputs[0]]
+        indices_shape = known_shapes[inputs[1]]
+        unless data_shape
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported GatherAxis for tensor #{inputs[0].inspect} without known static shape"
+        end
+        unless indices_shape
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported GatherAxis for indices #{inputs[1].inspect} without known static shape"
+        end
+        data_rank = normalize_integer_vector(data_shape, "GatherAxis data shape").length
+        indices_rank = normalize_integer_vector(indices_shape, "GatherAxis indices shape").length
+        axis_index = normalize_axis(axis, data_rank, "GatherAxis axis")
+        unless data_rank == indices_rank
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported GatherAxis rank mismatch: data rank #{data_rank}, indices rank #{indices_rank}"
+        end
+
+        data_dims = normalize_integer_vector(data_shape, "GatherAxis data shape")
+        indices_dims = normalize_integer_vector(indices_shape, "GatherAxis indices shape")
+        expanded_data_shape = data_dims.dup
+        needs_data_expand = false
+        data_dims.each_with_index do |dim, dim_index|
+          next if dim_index == axis_index
+          index_dim = indices_dims[dim_index]
+          next if dim == index_dim
+          if dim == 1
+            expanded_data_shape[dim_index] = index_dim
+            needs_data_expand = true
+            next
+          end
+          next if index_dim <= dim
+
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported GatherAxis shape mismatch at dim #{dim_index}: " \
+                "data=#{dim}, indices=#{index_dim}"
+        end
+
+        if needs_data_expand
+          expand_shape_name = append_aux_int64_initializer!(
+            initializers,
+            used_tensor_names,
+            node_index,
+            "gatheraxis_expand_shape",
+            expanded_data_shape
+          )
+          expanded_data = unique_aux_tensor_name(used_tensor_names, node_index, "gatheraxis_expanded_data")
+          known_shapes[expanded_data] = expanded_data_shape.dup
+          known_dtypes[expanded_data] = known_dtypes[inputs[0]] unless known_dtypes[inputs[0]].nil?
+
+          inferred_output_shape = indices_dims
+          inferred_output_dtype = known_dtypes[inputs[0]]
+          unless inferred_output_shape.nil?
+            outputs.each do |name|
+              known_shapes[name] = inferred_output_shape.dup
+            end
+          end
+          unless inferred_output_dtype.nil?
+            outputs.each do |name|
+              known_dtypes[name] = inferred_output_dtype
+            end
+          end
+
+          return pre_nodes + [
+            build_onnx_node_spec(
+              "node_#{node_index}_GatherAxisExpand",
+              "Expand",
+              [inputs[0], expand_shape_name],
+              [expanded_data],
+              {}
+            ),
+            build_onnx_node_spec(
+              "node_#{node_index}_#{op_type}",
+              op_type,
+              [expanded_data, inputs[1]],
+              outputs,
+              attributes
+            )
+          ]
+        end
+
+        inferred_output_shape = indices_dims
+        inferred_output_dtype = known_dtypes[inputs[0]]
+        unless pre_nodes.empty?
+          unless inferred_output_shape.nil?
+            outputs.each do |name|
+              known_shapes[name] = inferred_output_shape.dup
+            end
+          end
+          unless inferred_output_dtype.nil?
+            outputs.each do |name|
+              known_dtypes[name] = inferred_output_dtype
+            end
+          end
+          pre_nodes << build_onnx_node_spec("node_#{node_index}_#{op_type}", op_type, inputs, outputs, attributes)
+          return pre_nodes
+        end
+      when "LogSumExp"
+        input_shape = known_shapes[inputs[0]]
+        unless input_shape
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported LogSumExp for tensor #{inputs[0].inspect} without known static shape"
+        end
+        output_shape = known_shapes[outputs.first]
+        axes = infer_logsumexp_axes(input_shape, output_shape)
+        axes_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "axes", axes)
+        inputs << axes_name
+        attributes["keepdims"] = 1
+        inferred_output_shape = infer_reduce_keepdims_shape(input_shape, axes)
+        inferred_output_dtype = known_dtypes[inputs[0]]
+      when "Pad"
+        input_shape = known_shapes[inputs[0]]
+        unless input_shape
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported Pad for tensor #{inputs[0].inspect} without known static shape"
+        end
+
+        axes, pad_low, pad_high = pad_axes_and_sizes_from_arguments(arguments, input_shape)
+        rank = normalize_integer_vector(input_shape, "Pad input shape").length
+        pads_begin = Array.new(rank, 0)
+        pads_end = Array.new(rank, 0)
+        axes.each_with_index do |axis, index|
+          axis_index = normalize_axis(axis, rank, "Pad axis")
+          pads_begin[axis_index] = pad_low[index]
+          pads_end[axis_index] = pad_high[index]
+        end
+
+        pads_name = append_aux_int64_initializer!(
+          initializers,
+          used_tensor_names,
+          node_index,
+          "pads",
+          [*pads_begin, *pads_end]
+        )
+
+        unless inputs.length.between?(1, 2)
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported Pad input arity #{inputs.length}; expected 1 or 2 inputs"
+        end
+        inputs = [inputs.first, pads_name, *inputs.drop(1)]
+        attributes["mode"] = "constant"
+
+        inferred_output_shape = infer_pad_output_shape(input_shape, pads_begin, pads_end)
+        inferred_output_dtype = known_dtypes[inputs.first]
+      when "Scan"
+        reduce_type, axis, reverse, inclusive = scan_arguments(arguments)
+        unless reduce_type == 2
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported Scan reduce_type #{reduce_type.inspect}; only CumSum (2) is supported"
+        end
+        axis_value = axis
+        unless known_shapes[inputs[0]].nil?
+          input_rank = normalize_integer_vector(known_shapes[inputs[0]], "Scan input shape").length
+          axis_value = normalize_axis(axis, input_rank, "Scan axis")
+        end
+        axis_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "axis", [axis_value])
+        inputs << axis_name
+        attributes["exclusive"] = 1 unless inclusive
+        attributes["reverse"] = 1 if reverse
+        inferred_output_shape = known_shapes[inputs[0]]
+        inferred_output_dtype = known_dtypes[outputs.first] || known_dtypes[inputs[0]]
       when "Slice"
         starts, ends, axes, steps = slice_vectors_from_arguments(arguments)
         starts_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "starts", starts)
@@ -1061,6 +1341,7 @@ module MLX
         steps_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "steps", steps)
         inputs.concat([starts_name, ends_name, axes_name, steps_name])
         inferred_output_shape = infer_slice_output_shape(known_shapes[inputs[0]], starts, ends, axes, steps)
+        inferred_output_dtype = known_dtypes[inputs[0]]
       when "Split"
         axis, lengths = split_axis_and_lengths(arguments, known_shapes[inputs[0]], outputs.length)
         split_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "split", lengths)
@@ -1073,6 +1354,7 @@ module MLX
             known_shapes[name] = split_shapes[index]
           end
         end
+        inferred_output_dtype = known_dtypes[inputs[0]]
       when "ArgReduce"
         arg_mode, arg_axis = argreduce_mode_axis(arguments)
         arg_op = ARG_REDUCE_CODE_TO_ONNX_OP.fetch(arg_mode)
@@ -1144,19 +1426,114 @@ module MLX
           outputs,
           { "axis" => 0 }
         )
-        outputs.each { |name| known_shapes[name] = output_shape.dup }
+        outputs.each do |name|
+          known_shapes[name] = output_shape.dup
+          known_dtypes[name] = known_dtypes[input_name] unless known_dtypes[input_name].nil?
+        end
         return lowered
       when "ScatterAxis"
         inferred_output_shape = known_shapes[inputs[0]]
-      when "Greater"
+        inferred_output_dtype = known_dtypes[inputs[0]]
+      when "Greater", "Less"
+        lhs_dtype = known_dtypes[inputs[0]]
+        rhs_dtype = known_dtypes[inputs[1]]
+        promoted_dtype = promote_binary_dtype(lhs_dtype, rhs_dtype)
+        if promoted_dtype
+          inputs, cast_nodes = cast_inputs_to_dtype(
+            node_index: node_index,
+            op_name: op,
+            inputs: inputs,
+            target_dtype: promoted_dtype,
+            known_shapes: known_shapes,
+            known_dtypes: known_dtypes,
+            used_tensor_names: used_tensor_names
+          )
+          unless cast_nodes.empty?
+            inferred_output_shape = infer_elementwise_output_shape(known_shapes[inputs[0]], known_shapes[inputs[1]])
+            inferred_output_dtype = "bool"
+            unless inferred_output_shape.nil?
+              outputs.each do |name|
+                known_shapes[name] = inferred_output_shape.dup
+              end
+            end
+            outputs.each { |name| known_dtypes[name] = inferred_output_dtype }
+            cast_nodes << build_onnx_node_spec("node_#{node_index}_#{op_type}", op_type, inputs, outputs, attributes)
+            return cast_nodes
+          end
+        end
         inferred_output_shape = infer_elementwise_output_shape(known_shapes[inputs[0]], known_shapes[inputs[1]])
+        inferred_output_dtype = "bool"
+      when "Equal"
+        equal_nan = equal_nan_from_arguments(arguments)
+        if equal_nan
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported Equal equal_nan=true; only equal_nan=false is supported"
+        end
+        lhs_dtype = known_dtypes[inputs[0]]
+        rhs_dtype = known_dtypes[inputs[1]]
+        promoted_dtype = promote_binary_dtype(lhs_dtype, rhs_dtype)
+        if promoted_dtype
+          inputs, cast_nodes = cast_inputs_to_dtype(
+            node_index: node_index,
+            op_name: op,
+            inputs: inputs,
+            target_dtype: promoted_dtype,
+            known_shapes: known_shapes,
+            known_dtypes: known_dtypes,
+            used_tensor_names: used_tensor_names
+          )
+          unless cast_nodes.empty?
+            inferred_output_shape = infer_elementwise_output_shape(known_shapes[inputs[0]], known_shapes[inputs[1]])
+            inferred_output_dtype = "bool"
+            unless inferred_output_shape.nil?
+              outputs.each do |name|
+                known_shapes[name] = inferred_output_shape.dup
+              end
+            end
+            outputs.each { |name| known_dtypes[name] = inferred_output_dtype }
+            cast_nodes << build_onnx_node_spec("node_#{node_index}_#{op_type}", op_type, inputs, outputs, attributes)
+            return cast_nodes
+          end
+        end
+        inferred_output_shape = infer_elementwise_output_shape(known_shapes[inputs[0]], known_shapes[inputs[1]])
+        inferred_output_dtype = "bool"
       when "Select"
+        lhs_dtype = known_dtypes[inputs[1]]
+        rhs_dtype = known_dtypes[inputs[2]]
+        promoted_dtype = promote_binary_dtype(lhs_dtype, rhs_dtype)
+        if promoted_dtype
+          inputs, cast_nodes = cast_inputs_to_dtype(
+            node_index: node_index,
+            op_name: op,
+            inputs: inputs,
+            target_dtype: promoted_dtype,
+            known_shapes: known_shapes,
+            known_dtypes: known_dtypes,
+            used_tensor_names: used_tensor_names,
+            indices: [1, 2]
+          )
+          unless cast_nodes.empty?
+            inferred_output_shape = infer_elementwise_output_shape(known_shapes[inputs[1]], known_shapes[inputs[2]])
+            inferred_output_dtype = promoted_dtype
+            unless inferred_output_shape.nil?
+              outputs.each do |name|
+                known_shapes[name] = inferred_output_shape.dup
+              end
+            end
+            outputs.each { |name| known_dtypes[name] = inferred_output_dtype } unless inferred_output_dtype.nil?
+            cast_nodes << build_onnx_node_spec("node_#{node_index}_#{op_type}", op_type, inputs, outputs, attributes)
+            return cast_nodes
+          end
+        end
         inferred_output_shape = infer_elementwise_output_shape(known_shapes[inputs[1]], known_shapes[inputs[2]])
+        inferred_output_dtype = promoted_dtype || lhs_dtype || rhs_dtype
       when "Full"
         inferred_output_shape = known_shapes[inputs[0]]
+        inferred_output_dtype = known_dtypes[inputs[0]]
       when "Concatenate"
         axis = concatenate_axis_from_arguments(arguments)
         inferred_output_shape = infer_concatenate_output_shape(inputs.map { |name| known_shapes[name] }, axis)
+        inferred_output_dtype = known_dtypes[inputs.first]
       when "Flatten"
         flatten_input = inputs.first
         input_shape = known_shapes[flatten_input]
@@ -1168,6 +1545,7 @@ module MLX
         shape_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "shape", shape)
         inputs << shape_name
         inferred_output_shape = shape
+        inferred_output_dtype = known_dtypes[flatten_input]
       when "Unflatten"
         unflatten_input = inputs.first
         input_shape = known_shapes[unflatten_input]
@@ -1180,26 +1558,74 @@ module MLX
         shape_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "shape", shape)
         inputs << shape_name
         inferred_output_shape = shape
+        inferred_output_dtype = known_dtypes[unflatten_input]
       when "Squeeze"
         axes = integer_vector_argument(arguments, "Squeeze")
         axes_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "axes", axes)
         inputs << axes_name
         inferred_output_shape = infer_squeeze_output_shape(known_shapes[inputs[0]], axes)
+        inferred_output_dtype = known_dtypes[inputs[0]]
       when "ExpandDims"
         axes = integer_vector_argument(arguments, "ExpandDims")
         axes_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "axes", axes)
         inputs << axes_name
         inferred_output_shape = infer_unsqueeze_output_shape(known_shapes[inputs[0]], axes)
+        inferred_output_dtype = known_dtypes[inputs[0]]
       when "Broadcast"
         shape = integer_vector_argument(arguments, "Broadcast")
         shape_name = append_aux_int64_initializer!(initializers, used_tensor_names, node_index, "shape", shape)
+        input_name = inputs.fetch(0)
+        input_dtype = known_dtypes[input_name]
+        if input_dtype == "bfloat16"
+          cast_input = unique_aux_tensor_name(used_tensor_names, node_index, "broadcast_cast_input")
+          expand_output = unique_aux_tensor_name(used_tensor_names, node_index, "broadcast_expand_output")
+          known_shapes[cast_input] = known_shapes[input_name].dup unless known_shapes[input_name].nil?
+          known_shapes[expand_output] = shape.dup
+          known_dtypes[cast_input] = "float32"
+          known_dtypes[expand_output] = "float32"
+          outputs.each do |name|
+            known_shapes[name] = shape.dup
+            known_dtypes[name] = "bfloat16"
+          end
+
+          return [
+            build_onnx_node_spec(
+              "node_#{node_index}_BroadcastCastInput",
+              "Cast",
+              [input_name],
+              [cast_input],
+              { "to" => ONNX_DTYPE_MAP.fetch("float32") }
+            ),
+            build_onnx_node_spec(
+              "node_#{node_index}_Expand",
+              "Expand",
+              [cast_input, shape_name],
+              [expand_output],
+              {}
+            ),
+            build_onnx_node_spec(
+              "node_#{node_index}_BroadcastCastOutput",
+              "Cast",
+              [expand_output],
+              outputs,
+              { "to" => ONNX_DTYPE_MAP.fetch("bfloat16") }
+            )
+          ]
+        end
+
         inputs << shape_name
         inferred_output_shape = shape
+        inferred_output_dtype = known_dtypes[inputs[0]]
       end
 
       unless inferred_output_shape.nil?
         outputs.each do |name|
           known_shapes[name] = inferred_output_shape.dup
+        end
+      end
+      unless inferred_output_dtype.nil?
+        outputs.each do |name|
+          known_dtypes[name] = inferred_output_dtype
         end
       end
 
@@ -1428,6 +1854,134 @@ module MLX
       shape
     end
     private_class_method :infer_reduce_keepdims_shape
+
+    def as_type_target_dtype(arguments, outputs, known_dtypes)
+      if arguments.is_a?(Array) && !arguments.empty?
+        target = arguments.first
+        unless target.is_a?(String) && ONNX_DTYPE_MAP.key?(target)
+          raise NotImplementedError,
+                "[graph_ir_to_onnx_stub] unsupported AsType arguments #{arguments.inspect}; expected first argument to be dtype String"
+        end
+        return target
+      end
+
+      candidates = outputs.map { |name| known_dtypes[name] }.compact.uniq
+      return candidates.first if candidates.length == 1
+      if candidates.length > 1
+        raise NotImplementedError,
+              "[graph_ir_to_onnx_stub] unsupported AsType with inconsistent output dtypes #{candidates.inspect}"
+      end
+
+      raise NotImplementedError,
+            "[graph_ir_to_onnx_stub] unsupported AsType without target dtype argument"
+    end
+    private_class_method :as_type_target_dtype
+
+    def equal_nan_from_arguments(arguments)
+      return false if arguments.nil? || arguments.empty?
+      unless arguments.is_a?(Array) && arguments.length == 1 && (arguments[0] == true || arguments[0] == false)
+        raise NotImplementedError,
+              "[graph_ir_to_onnx_stub] unsupported Equal arguments #{arguments.inspect}; expected [equal_nan]"
+      end
+
+      arguments[0]
+    end
+    private_class_method :equal_nan_from_arguments
+
+    def infer_logsumexp_axes(input_shape, output_shape)
+      input = normalize_integer_vector(input_shape, "LogSumExp input shape")
+      if output_shape
+        output = normalize_integer_vector(output_shape, "LogSumExp output shape")
+        if output.length == input.length
+          axes = []
+          input.each_with_index do |dim, index|
+            out_dim = output[index]
+            if out_dim == 1 && dim != 1
+              axes << index
+            elsif out_dim != dim
+              raise NotImplementedError,
+                    "[graph_ir_to_onnx_stub] unsupported LogSumExp output shape #{output.inspect} for input #{input.inspect}"
+            end
+          end
+          return [input.length - 1] if axes.empty?
+
+          return axes
+        end
+
+        if output.length == input.length - 1
+          return [input.length - 1]
+        end
+      end
+
+      [input.length - 1]
+    end
+    private_class_method :infer_logsumexp_axes
+
+    def pad_axes_and_sizes_from_arguments(arguments, input_shape)
+      unless arguments.is_a?(Array) && arguments.length >= 3
+        raise NotImplementedError,
+              "[graph_ir_to_onnx_stub] unsupported Pad arguments #{arguments.inspect}; expected [axes, low, high]"
+      end
+
+      axes = normalize_integer_vector(arguments[0], "Pad axes")
+      low = normalize_integer_vector(arguments[1], "Pad low")
+      high = normalize_integer_vector(arguments[2], "Pad high")
+      unless axes.length == low.length && low.length == high.length
+        raise ArgumentError,
+              "[graph_ir_to_onnx_stub] Pad axes/low/high lengths must match: " \
+              "#{axes.length}/#{low.length}/#{high.length}"
+      end
+      if low.any?(&:negative?) || high.any?(&:negative?)
+        raise NotImplementedError, "[graph_ir_to_onnx_stub] unsupported Pad with negative padding"
+      end
+
+      rank = normalize_integer_vector(input_shape, "Pad input shape").length
+      normalized_axes = axes.map { |axis| normalize_axis(axis, rank, "Pad axis") }
+      if normalized_axes.uniq.length != normalized_axes.length
+        raise ArgumentError, "[graph_ir_to_onnx_stub] Pad axes must not contain duplicates"
+      end
+
+      [normalized_axes, low, high]
+    end
+    private_class_method :pad_axes_and_sizes_from_arguments
+
+    def infer_pad_output_shape(input_shape, pads_begin, pads_end)
+      return nil if input_shape.nil?
+
+      shape = normalize_integer_vector(input_shape, "Pad input shape")
+      low = normalize_integer_vector(pads_begin, "Pad low")
+      high = normalize_integer_vector(pads_end, "Pad high")
+      unless low.length == shape.length && high.length == shape.length
+        raise ArgumentError,
+              "[graph_ir_to_onnx_stub] Pad low/high ranks must match input rank #{shape.length}"
+      end
+      shape.each_with_index.map { |dim, index| dim + low[index] + high[index] }
+    end
+    private_class_method :infer_pad_output_shape
+
+    def scan_arguments(arguments)
+      unless arguments.is_a?(Array) && arguments.length >= 4
+        raise NotImplementedError,
+              "[graph_ir_to_onnx_stub] unsupported Scan arguments #{arguments.inspect}; expected [reduce_type, axis, reverse, inclusive]"
+      end
+
+      reduce_type = arguments[0]
+      axis = arguments[1]
+      reverse = arguments[2]
+      inclusive = arguments[3]
+      unless reduce_type.is_a?(Integer) && axis.is_a?(Integer)
+        raise TypeError, "[graph_ir_to_onnx_stub] Scan reduce_type/axis must be Integer"
+      end
+      unless reverse == true || reverse == false
+        raise TypeError, "[graph_ir_to_onnx_stub] Scan reverse must be boolean"
+      end
+      unless inclusive == true || inclusive == false
+        raise TypeError, "[graph_ir_to_onnx_stub] Scan inclusive must be boolean"
+      end
+
+      [reduce_type, axis, reverse, inclusive]
+    end
+    private_class_method :scan_arguments
 
     def argreduce_mode_axis(arguments)
       unless arguments.is_a?(Array) && arguments.length >= 2
@@ -2137,6 +2691,79 @@ module MLX
     end
     private_class_method :append_aux_int64_initializer!
 
+    def cast_inputs_to_dtype(
+      node_index:,
+      op_name:,
+      inputs:,
+      target_dtype:,
+      known_shapes:,
+      known_dtypes:,
+      used_tensor_names:,
+      indices: nil
+    )
+      cast_nodes = []
+      casted_inputs = inputs.dup
+      cast_to = ONNX_DTYPE_MAP.fetch(target_dtype)
+      index_filter = if indices.nil?
+        nil
+      else
+        indices.each_with_object({}) { |value, out| out[value] = true }
+      end
+
+      inputs.each_with_index do |input_name, index|
+        next if !index_filter.nil? && !index_filter.key?(index)
+
+        input_dtype = canonical_dtype(known_dtypes[input_name])
+        next if input_dtype.nil? || input_dtype == target_dtype
+
+        cast_output = unique_aux_tensor_name(used_tensor_names, node_index, "#{op_name.downcase}_input#{index}_cast")
+        cast_nodes << build_onnx_node_spec(
+          "node_#{node_index}_#{op_name}CastInput#{index}",
+          "Cast",
+          [input_name],
+          [cast_output],
+          { "to" => cast_to }
+        )
+        input_shape = known_shapes[input_name]
+        known_shapes[cast_output] = input_shape.dup unless input_shape.nil?
+        known_dtypes[cast_output] = target_dtype
+        casted_inputs[index] = cast_output
+      end
+
+      [casted_inputs, cast_nodes]
+    end
+    private_class_method :cast_inputs_to_dtype
+
+    def promote_binary_dtype(lhs_dtype, rhs_dtype)
+      lhs = canonical_dtype(lhs_dtype)
+      rhs = canonical_dtype(rhs_dtype)
+      return rhs if lhs.nil?
+      return lhs if rhs.nil?
+      return lhs if lhs == rhs
+
+      lhs_rank = DTYPE_PROMOTION_RANK[lhs]
+      rhs_rank = DTYPE_PROMOTION_RANK[rhs]
+      return lhs if lhs_rank.nil? || rhs_rank.nil?
+
+      lhs_rank >= rhs_rank ? lhs : rhs
+    end
+    private_class_method :promote_binary_dtype
+
+    def canonical_dtype(dtype)
+      return nil if dtype.nil?
+
+      dtype == "bool_" ? "bool" : dtype
+    end
+    private_class_method :canonical_dtype
+
+    def onnx_effective_dtype(dtype)
+      canonical = canonical_dtype(dtype)
+      return nil if canonical.nil?
+
+      canonical == "bfloat16" ? "float32" : canonical
+    end
+    private_class_method :onnx_effective_dtype
+
     def unique_aux_tensor_name(used_tensor_names, node_index, label)
       base = "__mlxir_aux_node#{node_index}_#{label}"
       candidate = base
@@ -2177,6 +2804,21 @@ module MLX
       shapes
     end
     private_class_method :collect_known_tensor_shapes
+
+    def collect_known_tensor_dtypes(payload)
+      dtypes = {}
+      payload.fetch("inputs").each do |tensor|
+        dtypes[tensor.fetch("name")] = onnx_effective_dtype(tensor.fetch("dtype"))
+      end
+      payload.fetch("constants").each do |tensor|
+        dtypes[tensor.fetch("name")] = onnx_effective_dtype(tensor.fetch("dtype"))
+      end
+      payload.fetch("outputs").each do |tensor|
+        dtypes[tensor.fetch("name")] = onnx_effective_dtype(tensor.fetch("dtype"))
+      end
+      dtypes
+    end
+    private_class_method :collect_known_tensor_dtypes
 
     def concatenate_axis_from_arguments(arguments, strict: true)
       if arguments.is_a?(Array) && arguments.length == 1 && arguments.first.is_a?(Integer)

@@ -511,7 +511,10 @@ namespace :gem do
 end
 
 namespace :benchmark do
-  MODELS = %i[transformer cnn mlp rnn karpathy_gpt2].freeze
+  LOCAL_MODELS = %w[transformer cnn mlp rnn karpathy_gpt2].freeze
+  LOCAL_MODEL_SET = LOCAL_MODELS.each_with_object({}) { |name, out| out[name] = true }.freeze
+  LOCAL_MODEL_SYMBOLS = LOCAL_MODELS.map(&:to_sym).freeze
+  EXAMPLES_SUBMODULE = File.join(__dir__, "mlx-ruby-examples").freeze
 
   def self.requirements_path
     File.join(__dir__, "requirements.txt")
@@ -576,11 +579,248 @@ namespace :benchmark do
     normalize_device(raw_device).to_sym
   end
 
-  def self.webgpu_model
-    model = ENV.fetch("MODEL", "transformer").to_sym
-    raise "Unknown benchmark model: #{model}" unless MODELS.include?(model)
+  def self.examples_runner_path
+    File.join(EXAMPLES_SUBMODULE, "benchmark", "runner.rb")
+  end
 
-    model
+  def self.examples_mode
+    mode = ENV.fetch("EXAMPLES_MODE", "dsl").to_s.strip
+    raise "Invalid EXAMPLES_MODE='#{mode}'. Use dsl or no_dsl." unless %w[dsl no_dsl].include?(mode)
+
+    mode
+  end
+
+  def self.examples_env
+    local_rubylib = File.join(__dir__, "lib")
+    existing_rubylib = ENV["RUBYLIB"].to_s
+    rubylib_paths = [local_rubylib]
+    rubylib_paths << existing_rubylib unless existing_rubylib.empty?
+    unbundled_env("RUBYLIB" => rubylib_paths.join(File::PATH_SEPARATOR))
+  end
+
+  def self.ensure_examples_submodule!
+    runner = examples_runner_path
+    return if File.exist?(runner)
+
+    raise <<~MSG
+      Missing examples benchmark runner at #{runner}.
+      Run: git submodule update --init --recursive mlx-ruby-examples
+    MSG
+  end
+
+  def self.verify_local_mlx_resolution!(env:)
+    check_script = <<~'RUBY'
+      require "mlx"
+      mlx_rb = $LOADED_FEATURES.find { |path| path.end_with?("/lib/mlx.rb") || path.end_with?("\\lib\\mlx.rb") }
+      native = $LOADED_FEATURES.find do |path|
+        path.match?(%r{(?:/|\\)ext(?:/|\\)mlx(?:/|\\)native\.(?:bundle|so)\z}) ||
+          path.match?(%r{(?:/|\\)mlx(?:/|\\)native\.(?:bundle|so)\z})
+      end
+      puts "MLX_RB=#{mlx_rb}"
+      puts "MLX_NATIVE=#{native}"
+    RUBY
+
+    output = capture_command_output!(
+      [RbConfig.ruby, "-I#{File.join(__dir__, 'lib')}", "-e", check_script],
+      env: env,
+      chdir: EXAMPLES_SUBMODULE
+    )
+
+    mlx_rb = output[/^MLX_RB=(.+)$/, 1]
+    native = output[/^MLX_NATIVE=(.+)$/, 1]
+    expected_mlx_rb = File.expand_path(File.join(__dir__, "lib", "mlx.rb"))
+    expected_native_prefix = File.expand_path(File.join(__dir__, "ext", "mlx", "native"))
+
+    if mlx_rb.nil? || File.expand_path(mlx_rb) != expected_mlx_rb
+      raise "Expected local mlx.rb at #{expected_mlx_rb}, got #{mlx_rb.inspect}"
+    end
+    if native.nil? || !File.expand_path(native).start_with?(expected_native_prefix)
+      raise "Expected local native extension under #{expected_native_prefix}, got #{native.inspect}"
+    end
+  end
+
+  def self.parse_examples_model_specs
+    return [] unless File.exist?(examples_runner_path)
+
+    specs = []
+    current = {}
+    File.foreach(examples_runner_path) do |line|
+      stripped = line.strip
+      if stripped == "{"
+        current = {}
+        next
+      end
+
+      id_match = line.match(/^\s*id:\s*"([^"]+)",\s*$/)
+      if id_match
+        current["id"] = id_match[1]
+        next
+      end
+
+      script_match = line.match(/^\s*ruby_script:\s*"([^"]+)",\s*$/)
+      if script_match
+        current["ruby_script"] = script_match[1]
+        next
+      end
+
+      if (stripped == "}," || stripped == "}") && current.key?("id") && current.key?("ruby_script")
+        specs << current
+        current = {}
+      end
+    end
+    specs
+  end
+
+  def self.examples_model_specs
+    @examples_model_specs ||= parse_examples_model_specs
+  end
+
+  def self.examples_model_names
+    examples_model_specs.map { |spec| spec.fetch("id") }
+  end
+
+  def self.examples_model_set
+    @examples_model_set ||= examples_model_names.each_with_object({}) { |name, out| out[name] = true }
+  end
+
+  def self.available_models
+    return LOCAL_MODELS.dup if examples_model_names.empty?
+
+    LOCAL_MODELS + examples_model_names
+  end
+
+  def self.parse_models_argument(raw_models)
+    return [] if raw_models.nil?
+
+    raw_models
+      .to_s
+      .split(",")
+      .map(&:strip)
+      .reject(&:empty?)
+      .uniq
+  end
+
+  def self.resolve_model_selection(raw_models)
+    requested = parse_models_argument(raw_models)
+    selected = requested.empty? ? available_models : requested
+    available = available_models
+    unknown = selected.reject { |name| available.include?(name) }
+    unless unknown.empty?
+      raise "Unknown benchmark model(s): #{unknown.join(', ')}. Available: #{available.join(', ')}"
+    end
+
+    local = selected.select { |name| LOCAL_MODEL_SET.key?(name) }.map(&:to_sym)
+    examples = selected.select { |name| examples_model_set.key?(name) }
+    {
+      all: selected,
+      local: local,
+      examples: examples
+    }
+  end
+
+  def self.models_argument_from_task_args(args)
+    values = []
+    primary = args[:models]
+    values << primary unless primary.nil? || primary.to_s.strip.empty?
+    if args.respond_to?(:extras)
+      args.extras.each do |entry|
+        values << entry unless entry.nil? || entry.to_s.strip.empty?
+      end
+    end
+    return nil if values.empty?
+
+    values.join(",")
+  end
+
+  def self.run_local_device_benchmarks!(local_models:, device:)
+    return if local_models.empty?
+
+    benchmark = task_class.new(**base_options.merge(compute_device: device))
+    failures = []
+    local_models.each do |model_name|
+      result = benchmark.run(model: model_name, enforce_parity: false, print_summary: true)
+      failures << model_name unless result.fetch("ok")
+    end
+    raise "Local #{device} benchmark failures: #{failures.join(', ')}" unless failures.empty?
+  end
+
+  def self.run_local_webgpu_benchmarks!(local_models:)
+    return if local_models.empty?
+
+    benchmark = task_class.new(**base_options.merge(compute_device: webgpu_compute_device))
+    failures = []
+    local_models.each do |model_name|
+      result = benchmark.run_webgpu(model: model_name, **webgpu_options)
+      failures << model_name unless result.fetch("ok")
+    end
+    raise "Local WebGPU benchmark failures: #{failures.join(', ')}" unless failures.empty?
+  end
+
+  def self.examples_runs
+    ENV.fetch("RUNS", "1").to_i
+  end
+
+  def self.examples_warmup
+    ENV.fetch("WARMUP", "0").to_i
+  end
+
+  def self.examples_timeout
+    ENV.fetch("BENCH_TIMEOUT", "900").to_i
+  end
+
+  def self.run_examples_benchmarks!(example_models:, devices:)
+    return if example_models.empty?
+
+    ensure_examples_submodule!
+    env = examples_env
+    verify_local_mlx_resolution!(env: env)
+    require_relative "tasks/examples_models_benchmark_adapter"
+
+    devices.each do |device|
+      adapter = ExamplesModelsBenchmarkAdapter.new(
+        repo_root: __dir__,
+        submodule_root: EXAMPLES_SUBMODULE,
+        device: device,
+        runs: examples_runs,
+        warmup: examples_warmup,
+        timeout: examples_timeout,
+        mode: examples_mode,
+        env: env,
+        python_bin: ENV["PYTHON_BIN"] || ENV["PYTHON"],
+        ruby_bin: RbConfig.ruby
+      )
+      adapter.run(models: example_models, print_summary: true)
+    end
+  end
+
+  def self.run_examples_webgpu_benchmarks!(example_models:)
+    return if example_models.empty?
+
+    ensure_examples_submodule!
+    env = examples_env
+    verify_local_mlx_resolution!(env: env)
+    require_relative "tasks/examples_models_benchmark_adapter"
+
+    adapter = ExamplesModelsBenchmarkAdapter.new(
+      repo_root: __dir__,
+      submodule_root: EXAMPLES_SUBMODULE,
+      device: webgpu_compute_device,
+      runs: examples_runs,
+      warmup: examples_warmup,
+      timeout: examples_timeout,
+      mode: examples_mode,
+      env: env,
+      python_bin: ENV["PYTHON_BIN"] || ENV["PYTHON"],
+      ruby_bin: RbConfig.ruby
+    )
+    adapter.run_webgpu(
+      models: example_models,
+      timeout_seconds: webgpu_options.fetch(:timeout_seconds),
+      benchmark_warmup_runs: webgpu_options.fetch(:benchmark_warmup_runs),
+      benchmark_measure_runs: webgpu_options.fetch(:benchmark_measure_runs),
+      require_webgpu: webgpu_options.fetch(:require_webgpu),
+      print_summary: true
+    )
   end
 
   desc "Install Python benchmark dependencies into the active Python from requirements.txt."
@@ -591,94 +831,65 @@ namespace :benchmark do
     sh python_bin, "-m", "pip", "install", "-r", requirements
   end
 
-  desc "Compare Ruby and Python transformer implementations."
-  task :transformer do
-    task = task_class.new(**single_device_options)
-    task.run(model: :transformer)
+  desc "Run selected models on cpu. Usage: rake 'benchmark:cpu[model_a,model_b]'."
+  task :cpu, [:models] do |_task, args|
+    selection = resolve_model_selection(models_argument_from_task_args(args))
+    run_local_device_benchmarks!(local_models: selection.fetch(:local), device: :cpu)
+    run_examples_benchmarks!(example_models: selection.fetch(:examples), devices: %w[cpu])
   end
 
-  desc "Compare Ruby and Python CNN implementations."
-  task :cnn do
-    task = task_class.new(**single_device_options)
-    task.run(model: :cnn)
+  desc "Run selected models on gpu. Usage: rake 'benchmark:gpu[model_a,model_b]'."
+  task :gpu, [:models] do |_task, args|
+    selection = resolve_model_selection(models_argument_from_task_args(args))
+    run_local_device_benchmarks!(local_models: selection.fetch(:local), device: :gpu)
+    run_examples_benchmarks!(example_models: selection.fetch(:examples), devices: %w[gpu])
   end
 
-  desc "Compare Ruby and Python MLP implementations."
-  task :mlp do
-    task = task_class.new(**single_device_options)
-    task.run(model: :mlp)
+  desc "Run selected models on WebGPU/local GPU path. Usage: rake 'benchmark:webgpu[model_a,model_b]'."
+  task :webgpu, [:models] do |_task, args|
+    selection = resolve_model_selection(models_argument_from_task_args(args))
+    run_local_webgpu_benchmarks!(local_models: selection.fetch(:local))
+    run_examples_webgpu_benchmarks!(example_models: selection.fetch(:examples))
   end
 
-  desc "Compare Ruby and Python RNN implementations."
-  task :rnn do
-    task = task_class.new(**single_device_options)
-    task.run(model: :rnn)
+  desc "Generate GraphIR WebGPU compatibility coverage artifact for benchmark fixtures."
+  task :graph_ir_coverage do
+    script = File.join(__dir__, "test", "parity", "scripts", "generate_graph_ir_webgpu_coverage_report.rb")
+    sh RbConfig.ruby, script
   end
 
-  desc "Compare Ruby and Python GPT-2 implementation (Karpathy tiny-shakespeare full training loop)."
-  task :karpathy_gpt2 do
-    task = task_class.new(**single_device_options)
-    task.run(model: :karpathy_gpt2)
+  desc "Run selected models on cpu, gpu, and webgpu. Usage: rake 'benchmark:all[model_a,model_b]'."
+  task :all, [:models] do |_task, args|
+    selection = resolve_model_selection(models_argument_from_task_args(args))
+    run_local_device_benchmarks!(local_models: selection.fetch(:local), device: :cpu)
+    run_examples_benchmarks!(example_models: selection.fetch(:examples), devices: %w[cpu])
+    run_local_device_benchmarks!(local_models: selection.fetch(:local), device: :gpu)
+    run_examples_benchmarks!(example_models: selection.fetch(:examples), devices: %w[gpu])
+    run_local_webgpu_benchmarks!(local_models: selection.fetch(:local))
+    run_examples_webgpu_benchmarks!(example_models: selection.fetch(:examples))
   end
 
-  desc "Run ONNX Runtime WebGPU benchmark for MODEL (default: transformer)."
-  task :webgpu do
-    task = task_class.new(**base_options.merge(compute_device: webgpu_compute_device))
-    task.run_webgpu(model: webgpu_model, **webgpu_options)
-  end
-
-  desc "Run ONNX Runtime WebGPU benchmarks for all models."
-  task :webgpu_all do
-    task = task_class.new(**base_options.merge(compute_device: webgpu_compute_device))
-    failures = []
-
-    MODELS.each do |model_name|
-      result = task.run_webgpu(model: model_name, **webgpu_options)
-      failures << model_name unless result.fetch("ok")
-    end
-
-    raise "WebGPU benchmark matrix had failures for: #{failures.join(', ')}" unless failures.empty?
-  end
-
-  MODELS.each do |model_name|
-    desc "Run ONNX Runtime WebGPU benchmark for #{model_name}."
-    task :"webgpu_#{model_name}" do
-      task = task_class.new(**base_options.merge(compute_device: webgpu_compute_device))
-      task.run_webgpu(model: model_name, **webgpu_options)
-    end
-  end
-
-  desc "Run all configured benchmarks on cpu and gpu, then print a final comparison table."
-  task :all do
-    benchmark_class = task_class
-    devices = matrix_devices
-    results_by_model = MODELS.each_with_object({}) { |model, out| out[model] = {} }
-
-    devices.each do |device|
-      puts "== Running benchmark suite on #{device} =="
-      task = benchmark_class.new(**base_options.merge(compute_device: device))
-      MODELS.each do |model|
-        results_by_model[model][device] = task.run(
-          model: model,
-          enforce_parity: false,
-          print_summary: true
-        )
-      end
-    end
-
-    benchmark_class.print_dual_device_table(results_by_model)
-
-    failed_rows = MODELS.select do |model|
-      devices.any? { |device| !results_by_model[model][device]["ok"] }
-    end
-
-    unless failed_rows.empty?
-      raise "Benchmark matrix had failures for: #{failed_rows.join(', ')}"
-    end
+  desc "Run only examples-submodule models (all by default) on cpu+gpu."
+  task :examples, [:models] do |_task, args|
+    selection = resolve_model_selection(models_argument_from_task_args(args))
+    run_examples_benchmarks!(example_models: selection.fetch(:examples), devices: %w[cpu gpu])
   end
 end
 
-desc "Alias for benchmark:all."
-task benchmark: "benchmark:all"
+desc "Run selected benchmarks on cpu, gpu, and webgpu. Usage: rake 'benchmark[model_a,model_b]'."
+task :benchmark, [:models] do |_task, args|
+  values = []
+  primary = args[:models]
+  values << primary unless primary.nil? || primary.to_s.strip.empty?
+  if args.respond_to?(:extras)
+    args.extras.each do |entry|
+      values << entry unless entry.nil? || entry.to_s.strip.empty?
+    end
+  end
+  models_argument = values.empty? ? nil : values.join(",")
+
+  Rake::Task["benchmark:all"].reenable
+  Rake::Task["benchmark:all"].invoke(models_argument)
+end
 
 task default: :test

@@ -280,7 +280,8 @@ class BenchmarkTask
       /webgpu[^\n]*not[^\n]*(available|supported|enabled)/i,
       /gpu adapter/i,
       /failed to create gpu/i,
-      /no available backend found/i
+      /no available backend found/i,
+      /failed to initialize onnx runtime session for providers webgpu/i
     ].any? { |pattern| pattern.match?(text) }
   end
 
