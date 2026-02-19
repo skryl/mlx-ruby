@@ -3495,7 +3495,7 @@ static VALUE core_dequantize(int argc, VALUE* argv, VALUE) {
       dtype = optional_dtype_from_value(argv[6]);
     }
 
-    return array_wrap(mx::dequantize(w, scales, biases, group_size, bits, mode, dtype));
+    return array_wrap(mx::dequantize(w, scales, biases, group_size, bits, mode, std::nullopt, dtype));
   } catch (const std::exception& error) {
     raise_std_exception(error);
     return Qnil;
