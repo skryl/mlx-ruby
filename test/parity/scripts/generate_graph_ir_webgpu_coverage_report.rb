@@ -225,10 +225,8 @@ def run_submodule_coverage(spec)
   end
 end
 
-CAPTURE_ERROR_IGNORABLE_MODELS = %w[whisper flux].freeze
-
-def capture_error_ignorable?(model_id, error)
-  CAPTURE_ERROR_IGNORABLE_MODELS.include?(model_id) &&
+def whisper_capture_error_ignorable?(model_id, error)
+  model_id == "whisper" &&
     error.to_s.include?("Failed to capture GraphIR payload from benchmark eval outputs")
 end
 
@@ -269,7 +267,7 @@ begin
     unsupported_nodes_by_model[key] = report.fetch("unsupported_nodes")
     total_nodes_by_model[key] = report.fetch("total_nodes")
     ready_for_stub_conversion_by_model[key] = report.fetch("ready_for_stub_conversion")
-    if error && !capture_error_ignorable?(key, error)
+    if error && !whisper_capture_error_ignorable?(key, error)
       errors_by_model[key] = error
     end
   end
