@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
 module MLX
-  VERSION = "0.30.7.3"
+  VERSION = "0.30.7.4"
 end

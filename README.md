@@ -439,21 +439,30 @@ bundle exec rake "benchmark:cpu[local]" RUNS=5 WARMUP=1
 
 ### Build docs
 
-Install docs dependencies:
+From the repo root:
 
 ```bash
+# One-time setup
+brew install doxygen                    # macOS (or install doxygen via apt on Linux)
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
+bundle install
 
-Build docs:
-
-```bash
+# Generate docs
 bundle exec rake docs:build
 ```
 
-Built docs are placed under `docs/build/html`.
+Docs are written to `docs/build/html`.
+
+```bash
+# Quick local preview
+ruby -run -e httpd docs/build/html -p 8000
+```
+
+Then open `http://localhost:8000/`.
+
+The repo’s Pages workflow builds docs together with the web demo for deployment.
 
 ## Repository layout
 
