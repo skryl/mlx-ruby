@@ -43,7 +43,7 @@ class Phase292ReduceBooleanLoweringParityTest < Minitest::Test
 
   def test_any_axis1_stub_uses_bool_reduce_decomposition
     payload = reduce_payload(1) { |x| MLX::Core.any(x, 1, false) }
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     nodes = stub.fetch("graph").fetch("nodes")
 
     assert_equal %w[Cast Cast ReduceMax Cast Squeeze], nodes.map { |node| node.fetch("op_type") }
@@ -85,13 +85,13 @@ class Phase292ReduceBooleanLoweringParityTest < Minitest::Test
   def reduce_payload(_code)
     fun = ->(x) { yield(x) }
     x = MLX::Core.array([[true, false, true], [true, true, true]], MLX::Core.bool_)
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x))
   end
 
   def run_exported_onnx_bool(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "reduce_bool_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "reduce_bool_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX_BOOL, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

@@ -25,7 +25,7 @@ class Phase309ExportOnnxWebgpuHarnessParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       out_dir = File.join(dir, "web_harness")
-      manifest = MLX::Core.export_onnx_webgpu_harness(
+      manifest = MLX::GraphIR.export_onnx_webgpu_harness(
         out_dir,
         payload,
         model_name: "webgpu_case",

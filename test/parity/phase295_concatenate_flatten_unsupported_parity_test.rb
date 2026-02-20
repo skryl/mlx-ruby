@@ -23,12 +23,12 @@ class Phase295ConcatenateFlattenUnsupportedParityTest < Minitest::Test
     assert_equal %w[Add Flatten], payload.fetch("nodes").map { |node| node.fetch("op") }
     assert_equal [0, 1], payload.fetch("nodes")[1].fetch("arguments")
 
-    report = MLX::Core.graph_ir_webgpu_compatibility_report(payload)
+    report = MLX::GraphIR.webgpu_compatibility_report(payload)
     assert_equal true, report.fetch("ready_for_stub_conversion")
     assert_equal 0, report.fetch("unsupported_nodes")
     assert_equal [], report.fetch("unsupported_ops")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal %w[Add Reshape], onnx_nodes.map { |node| node.fetch("op_type") }
   end
@@ -42,6 +42,6 @@ class Phase295ConcatenateFlattenUnsupportedParityTest < Minitest::Test
     end
     x = MLX::Core.array([[1.0, 2.0], [3.0, 4.0]], MLX::Core.float32)
     y = MLX::Core.array([[5.0, 6.0], [7.0, 8.0]], MLX::Core.float32)
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, y))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y))
   end
 end

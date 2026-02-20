@@ -64,7 +64,7 @@ class Phase299GatherLoweringParityTest < Minitest::Test
     gather_node = payload.fetch("nodes").find { |node| node.fetch("op") == "Gather" }
     assert_equal [[1], [2, 1]], gather_node.fetch("arguments")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_gather = stub.fetch("graph").fetch("nodes").find { |node| node.fetch("op_type") == "Gather" }
     assert_equal({ "axis" => 1 }, onnx_gather.fetch("attributes"))
   end
@@ -106,14 +106,14 @@ class Phase299GatherLoweringParityTest < Minitest::Test
     x_array = MLX::Core.array(x, MLX::Core.float32)
     idx_array = MLX::Core.array(idx, MLX::Core.int32)
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, idx_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, idx_array))
     [payload, x, idx]
   end
 
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "gather_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "gather_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX_TYPED, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

@@ -24,6 +24,32 @@ module MLX
       normalize_hash_keys(payload)
     end
 
+    def assemble_export_payload(capture_sections)
+      sections = normalize_hash_keys(capture_sections)
+      unless sections.is_a?(Hash)
+        raise TypeError, "graph ir capture sections must be a Hash"
+      end
+
+      shapeless = sections.fetch("shapeless") do
+        raise ArgumentError, "graph ir capture sections missing required key: shapeless"
+      end
+      unless shapeless == true || shapeless == false
+        raise TypeError, "graph ir capture sections shapeless must be true or false"
+      end
+
+      payload = {
+        "ir_version" => IR_VERSION,
+        "shapeless" => shapeless,
+        "inputs" => deep_copy_hash(fetch_capture_section!(sections, "inputs")),
+        "keyword_inputs" => deep_copy_hash(fetch_capture_section!(sections, "keyword_inputs")),
+        "outputs" => deep_copy_hash(fetch_capture_section!(sections, "outputs")),
+        "constants" => deep_copy_hash(fetch_capture_section!(sections, "constants")),
+        "nodes" => deep_copy_hash(fetch_capture_section!(sections, "nodes"))
+      }
+
+      validate!(payload)
+    end
+
     def read_file_with_fallback(path)
       File.binread(path)
     rescue Errno::EINVAL
@@ -37,6 +63,12 @@ module MLX
     end
     private_class_method :read_file_with_fallback
 
+    def fetch_capture_section!(sections, key)
+      sections.fetch(key) do
+        raise ArgumentError, "graph ir capture sections missing required key: #{key}"
+      end
+    end
+    private_class_method :fetch_capture_section!
 
     def dump_json(hash, pretty: true)
       pretty ? JSON.pretty_generate(hash) : JSON.generate(hash)

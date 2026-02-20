@@ -63,7 +63,7 @@ class Phase302ScatterAxisLoweringParityTest < Minitest::Test
     payload = put_axis1_payload
     assert_equal ["ScatterAxis"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "ScatterElements", onnx_node.fetch("op_type")
     assert_equal({ "axis" => 1 }, onnx_node.fetch("attributes"))
@@ -111,14 +111,14 @@ class Phase302ScatterAxisLoweringParityTest < Minitest::Test
     idx_array = MLX::Core.array(idx, MLX::Core.int32)
     vals_array = MLX::Core.array(vals, MLX::Core.float32)
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, idx_array, vals_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, idx_array, vals_array))
     [payload, x, idx, vals]
   end
 
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "scatter_axis_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "scatter_axis_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX_TYPED, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

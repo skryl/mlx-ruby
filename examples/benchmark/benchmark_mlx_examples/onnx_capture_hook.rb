@@ -172,7 +172,7 @@ module ExamplesModelsOnnxCaptureHook
 
     trace_output = tensor_outputs.length == 1 ? tensor_outputs.first : tensor_outputs
     seed = MLX::Core.array([0.0], MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, ->(_seed) { trace_output }, seed))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(->(_seed) { trace_output }, seed))
     {
       payload: payload,
       tensors: tensor_outputs

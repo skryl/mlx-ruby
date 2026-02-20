@@ -27,7 +27,7 @@ class Phase278GraphIrExportParityTest < Minitest::Test
     y = MLX::Core.array([3.0, 4.0], MLX::Core.float32)
 
     io = StringIO.new
-    written = MLX::Core.export_graph_ir(io, fun, x, y: y)
+    written = TestSupport.export_graph_ir_to_target(io, fun, x, y: y)
     payload = JSON.parse(written)
 
     assert_equal 1, payload.fetch("ir_version")
@@ -44,7 +44,7 @@ class Phase278GraphIrExportParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       ir_path = File.join(dir, "graph_ir.json")
-      assert_nil MLX::Core.export_graph_ir(ir_path, fun, x)
+      assert_nil TestSupport.export_graph_ir_to_target(ir_path, fun, x)
 
       assert File.exist?(ir_path)
       payload = JSON.parse(File.read(ir_path))

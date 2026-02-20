@@ -1,18 +1,24 @@
 MLX To Graph IR
 ===============
 
-Use ``MLX::Core.export_graph_ir`` to trace a function/module call and emit
-Graph IR JSON.
+Use ``MLX::GraphIR.export_graph_ir_json`` to trace a function/module call and
+emit Graph IR JSON.
+
+Ownership boundary
+------------------
+
+- Public API: ``MLX::GraphIR.export_graph_ir_json``.
+- Implementation module: ``MLX::GraphIR::Exporter``.
+- ``MLX::GraphIR`` owns payload normalization/schema semantics.
 
 Basic capture
 -------------
 
-Use an IO target when you want the JSON string in memory:
+``export_graph_ir_json`` returns a normalized JSON string.
 
 .. code-block:: ruby
 
    require "json"
-   require "stringio"
    require "mlx"
 
    mx = MLX::Core
@@ -20,20 +26,20 @@ Use an IO target when you want the JSON string in memory:
    y = mx.array([[0.5, 0.25]], mx.float32)
 
    trace = ->(lhs, rhs) { MLX::Core.add(lhs, rhs) }
-   payload_json = MLX::Core.export_graph_ir(StringIO.new, trace, x, y)
+   payload_json = MLX::GraphIR.export_graph_ir_json(trace, x, y)
    payload = JSON.parse(payload_json)
 
-   puts payload.fetch("format", "mlxir_v1")
+   puts payload.fetch("ir_version")
 
 Write to disk
 -------------
 
-Use a file path target when you want reusable artifacts:
+Write the JSON artifact explicitly when needed:
 
 .. code-block:: ruby
 
    graph_ir_path = "artifacts/graph_ir.json"
-   MLX::Core.export_graph_ir(graph_ir_path, trace, x, y)
+   File.binwrite(graph_ir_path, payload_json)
 
 The emitted payload includes:
 

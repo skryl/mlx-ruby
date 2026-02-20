@@ -12,14 +12,6 @@ Export Functions
    import_function
    exporter
    export_to_dot
-   export_graph_ir
-   validate_graph_ir
-   graph_ir_to_onnx_stub
-   graph_ir_webgpu_compatibility_report
-   export_onnx_stub
-   export_onnx
-   export_onnx_webgpu_harness
-   smoke_test_onnx_webgpu_harness
 
 Graph IR schema reference:
 
@@ -30,27 +22,42 @@ For a step-by-step workflow guide, see :doc:`../onnx_webgpu/index`.
 Onnx/WebGPU Support
 -------------------
 
+Use ``MLX::GraphIR.*`` methods as the user-facing Graph IR/ONNX/WebGPU API.
+Implementation is split across:
+
+- ``MLX::GraphIR`` (payload validation/normalization, ONNX stub conversion,
+  compatibility reporting)
+- ``MLX::GraphIR::Exporter`` (Graph IR export assembly/write path)
+- ``MLX::GraphIR::ONNX::Exporter`` (ONNX stub/binary export)
+- ``MLX::GraphIR::ONNX::PythonBuilder`` (Python/ONNX model assembly bridge)
+- ``MLX::GraphIR::WebGPUHarness`` (browser harness packaging + smoke runner)
+
 MLX Ruby supports an end-to-end browser export path:
 
-1. Trace and export Graph IR via ``export_graph_ir``.
-2. Validate payload/schema via ``validate_graph_ir``.
+1. Trace and export Graph IR via ``MLX::GraphIR.export_graph_ir_json``.
+2. Validate payload/schema via ``MLX::GraphIR.validate!``.
 3. Preflight for WebGPU/ONNX conversion via
-   ``graph_ir_webgpu_compatibility_report``.
-4. Emit ONNX via ``export_onnx`` (or JSON stub via ``export_onnx_stub``).
-5. Package browser harness assets via ``export_onnx_webgpu_harness``.
-6. Run browser smoke verification via ``smoke_test_onnx_webgpu_harness``.
+   ``MLX::GraphIR.webgpu_compatibility_report``.
+4. Emit ONNX via ``MLX::GraphIR.onnx_json_to_onnx`` (or JSON stub via
+   ``MLX::GraphIR.graph_ir_to_onnx_json``), or export ONNX directly from trace via
+   ``MLX::GraphIR.export_onnx_json``.
+5. Package browser harness assets via
+   ``MLX::GraphIR.export_onnx_webgpu_harness``.
+6. Run browser smoke verification via
+   ``MLX::GraphIR.smoke_test_onnx_webgpu_harness``.
 
-``graph_ir_webgpu_compatibility_report`` is the recommended conversion gate.
+``MLX::GraphIR.webgpu_compatibility_report`` is the recommended conversion gate.
 If ``unsupported_nodes`` is non-zero, the payload is not ready for ONNX/WebGPU
 stub conversion.
 
-Harness artifact output from ``export_onnx_webgpu_harness``:
+Harness artifact output from ``MLX::GraphIR.export_onnx_webgpu_harness``:
 
 - ``model.onnx``
 - ``harness.manifest.json``
 - ``inputs.example.json``
 - ``index.html``
 - ``harness.js``
+- optional external data file (for example ``model.data``)
 
 The default harness provider order is ``["webgpu", "wasm"]``. Smoke telemetry
 uses ``onnx_webgpu_telemetry_v1`` and includes provider selection/fallback and
@@ -58,10 +65,13 @@ uses ``onnx_webgpu_telemetry_v1`` and includes provider selection/fallback and
 
 Runtime/tooling requirements:
 
-- ``export_onnx`` requires ``python3`` with ``onnx`` importable.
+- ``MLX::GraphIR.onnx_json_to_onnx`` requires ``python3`` with ``onnx``
+  importable.
+- ``MLX::GraphIR.onnx_json_to_onnx`` external-data mode requires a path-like
+  target (not IO-like).
 - Real-runtime smoke tests require Node.js + Playwright + ``onnxruntime-web``.
-- ``export_onnx_webgpu_harness`` only accepts ``webgpu`` and ``wasm`` execution
-  providers.
+- ``MLX::GraphIR.export_onnx_webgpu_harness`` only accepts ``webgpu`` and
+  ``wasm`` execution providers.
 
 Web demo generation is wired through ``bundle exec rake web:assets`` and emits:
 
@@ -75,7 +85,7 @@ Examples coverage/parity status:
 - Current coverage/parity gates validate full examples export and ORT runtime
   parity across the benchmark model set.
 
-Current ``export_onnx`` scope:
+Current ``MLX::GraphIR.graph_ir_to_onnx_json`` / ``MLX::GraphIR.export_onnx_json`` scope:
 
 - Elementwise ops: ``Add``, ``Subtract``, ``Multiply``, ``Divide``, ``Maximum``,
   ``Minimum``, ``Power``.
@@ -115,7 +125,7 @@ Current ``export_onnx`` scope:
 - ``LogSumExp`` (to ``ReduceLogSumExp``) and ``ArgReduce`` (to
   ``ArgMin``/``ArgMax`` + cast).
 - ``Arange`` lowered as ONNX initializer-backed constants.
-- ``export_onnx`` supports optional ONNX external-data emission for initializers
+- ``onnx_json_to_onnx`` supports optional ONNX external-data emission for initializers
   via ``external_data: true`` on path-like targets, with
   ``external_data_size_threshold`` and ``external_data_file`` controls.
 - Constants/initializers are lowered for ``bool``/integer/float dtypes.

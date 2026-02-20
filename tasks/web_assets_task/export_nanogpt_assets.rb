@@ -63,13 +63,13 @@ module NanoGptWebAssets
       pad_id: pad_id
     )
 
-    payload_json = MLX::Core.export_graph_ir(
+    payload_json = MLX::GraphIR.export_graph_ir(
       StringIO.new,
       ->(tokens) { model.call(tokens) },
       input_seed
     )
     payload = JSON.parse(payload_json)
-    report = MLX::Core.graph_ir_webgpu_compatibility_report(payload)
+    report = MLX::GraphIR.webgpu_compatibility_report(payload)
     unsupported_nodes = report.fetch("unsupported_nodes").to_i
     unless unsupported_nodes.zero?
       abort(
@@ -84,7 +84,7 @@ module NanoGptWebAssets
     File.binwrite(graph_ir_path, JSON.pretty_generate(payload))
 
     onnx_path = File.join(OUTPUT_DIR, "model.onnx")
-    MLX::Core.export_onnx(onnx_path, payload, model_name: MODEL_NAME)
+    MLX::GraphIR.export_onnx(onnx_path, payload, model_name: MODEL_NAME)
 
     metadata = {
       "format" => "nanogpt_shakespeare_demo_asset_v1",

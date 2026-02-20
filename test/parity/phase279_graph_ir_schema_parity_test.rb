@@ -26,7 +26,7 @@ class Phase279GraphIrSchemaParityTest < Minitest::Test
     x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
     y = MLX::Core.array([3.0, 4.0], MLX::Core.float32)
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, y: y))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y: y))
 
     assert_equal 1, payload.fetch("ir_version")
     assert_equal false, payload.fetch("shapeless")

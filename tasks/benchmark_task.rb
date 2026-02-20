@@ -125,7 +125,7 @@ class BenchmarkTask
     raise "Unknown benchmark model: #{model_name}" unless available_models.include?(model_name)
 
     fixture = build_webgpu_fixture(model_name)
-    compatibility = MLX::Core.graph_ir_webgpu_compatibility_report(fixture.fetch(:payload))
+    compatibility = MLX::GraphIR.webgpu_compatibility_report(fixture.fetch(:payload))
     unless compatibility.fetch("unsupported_nodes").zero?
       unsupported = compatibility.fetch("unsupported_ops")
       raise "WebGPU export does not support #{model_name}: unsupported ops #{unsupported.inspect}"
@@ -134,7 +134,7 @@ class BenchmarkTask
     result = nil
     Dir.mktmpdir("mlx-ruby-webgpu-benchmark-") do |dir|
       harness_dir = File.join(dir, "#{model_name}_webgpu")
-      MLX::Core.export_onnx_webgpu_harness(
+      MLX::GraphIR.export_onnx_webgpu_harness(
         harness_dir,
         fixture.fetch(:payload),
         model_name: "benchmark_#{model_name}",
@@ -148,7 +148,7 @@ class BenchmarkTask
       )
 
       telemetry = begin
-        MLX::Core.smoke_test_onnx_webgpu_harness(
+        MLX::GraphIR.smoke_test_onnx_webgpu_harness(
           harness_dir,
           timeout_seconds: timeout_seconds,
           mock_ort: false,
@@ -267,7 +267,7 @@ class BenchmarkTask
       raise "Unknown benchmark model: #{model_name}"
     end
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, trace, seed))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir(StringIO.new, trace, seed))
     input_name = payload.fetch("inputs").first.fetch("name")
 
     {

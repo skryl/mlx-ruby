@@ -67,7 +67,7 @@ class Phase288OnnxRuntimeOpCoverageParityTest < Minitest::Test
     fun = lambda do |x_arg, y:|
       MLX::Core.matmul(x_arg, y)
     end
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, y: y))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y: y))
     expected = MLX::Core.matmul(x, y).to_a
 
     result = run_exported_onnx(payload, {
@@ -83,7 +83,7 @@ class Phase288OnnxRuntimeOpCoverageParityTest < Minitest::Test
     fun = lambda do |x_arg, y:|
       MLX::Core.add(x_arg, y)
     end
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, y: y))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y: y))
     expected = MLX::Core.add(x, y).to_a
 
     result = run_exported_onnx(payload, {
@@ -98,7 +98,7 @@ class Phase288OnnxRuntimeOpCoverageParityTest < Minitest::Test
     fun = lambda do |x_arg|
       MLX::Core.log(MLX::Core.exp(x_arg))
     end
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x))
     expected = fun.call(x).to_a
 
     result = run_exported_onnx(payload, {
@@ -121,7 +121,7 @@ class Phase288OnnxRuntimeOpCoverageParityTest < Minitest::Test
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "op_coverage_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "op_coverage_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX_TYPED, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

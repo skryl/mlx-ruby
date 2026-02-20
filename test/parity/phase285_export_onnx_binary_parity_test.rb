@@ -41,7 +41,7 @@ class Phase285ExportOnnxBinaryParityTest < Minitest::Test
   def test_export_onnx_supports_path_targets
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      assert_nil MLX::Core.export_onnx(onnx_path, exported_payload, model_name: "exp_add")
+      assert_nil TestSupport.export_onnx_from_graph_ir_source(onnx_path, exported_payload, model_name: "exp_add")
 
       assert File.exist?(onnx_path)
       metadata = inspect_onnx(onnx_path)
@@ -54,7 +54,7 @@ class Phase285ExportOnnxBinaryParityTest < Minitest::Test
 
   def test_export_onnx_accepts_file_like_targets
     io = StringIO.new
-    written = MLX::Core.export_onnx(io, exported_payload, model_name: "exp_add")
+    written = TestSupport.export_onnx_from_graph_ir_source(io, exported_payload, model_name: "exp_add")
     assert_operator written.bytesize, :>, 0
     assert_operator io.string.bytesize, :>, 0
   end
@@ -72,7 +72,7 @@ class Phase285ExportOnnxBinaryParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph_with_initializer.onnx")
-      assert_nil MLX::Core.export_onnx(onnx_path, payload, model_name: "add_const")
+      assert_nil TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "add_const")
       metadata = inspect_onnx(onnx_path)
       assert_equal 1, metadata.fetch("initializer_count")
       assert_equal ["c"], metadata.fetch("initializer_names")
@@ -104,6 +104,6 @@ class Phase285ExportOnnxBinaryParityTest < Minitest::Test
     end
     x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
     y = MLX::Core.array([3.0, 4.0], MLX::Core.float32)
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, y: y))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y: y))
   end
 end

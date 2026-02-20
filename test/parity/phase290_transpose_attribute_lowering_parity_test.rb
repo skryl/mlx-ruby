@@ -46,7 +46,7 @@ class Phase290TransposeAttributeLoweringParityTest < Minitest::Test
     assert_equal "Transpose", node.fetch("op")
     assert_equal [[1, 0]], node.fetch("arguments")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     attrs = stub.fetch("graph").fetch("nodes").first.fetch("attributes")
     assert_equal [1, 0], attrs.fetch("perm")
   end
@@ -76,13 +76,13 @@ class Phase290TransposeAttributeLoweringParityTest < Minitest::Test
       MLX::Core.transpose(x, [1, 0])
     end
     x = MLX::Core.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], MLX::Core.float32)
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x))
   end
 
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "transpose_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "transpose_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

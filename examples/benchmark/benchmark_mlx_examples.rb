@@ -128,7 +128,7 @@ class ExamplesModelsBenchmarkAdapter
       spec = @specs_by_id.fetch(model_id)
       capture = capture_onnx_fixture(spec)
       payload = capture.fetch("payload")
-      compatibility = MLX::Core.graph_ir_webgpu_compatibility_report(payload)
+      compatibility = MLX::GraphIR.webgpu_compatibility_report(payload)
 
       if compatibility.fetch("unsupported_nodes").to_i > 0
         unsupported = compatibility.fetch("unsupported_ops")
@@ -441,7 +441,7 @@ class ExamplesModelsBenchmarkAdapter
 
     Dir.mktmpdir("examples-webgpu-#{model_id.tr('/', '_')}-") do |dir|
       harness_dir = File.join(dir, "harness")
-      MLX::Core.export_onnx_webgpu_harness(
+      MLX::GraphIR.export_onnx_webgpu_harness(
         harness_dir,
         payload,
         model_name: "examples_#{model_id.tr('/', '_')}",
@@ -455,7 +455,7 @@ class ExamplesModelsBenchmarkAdapter
       )
 
       telemetry = begin
-        MLX::Core.smoke_test_onnx_webgpu_harness(
+        MLX::GraphIR.smoke_test_onnx_webgpu_harness(
           harness_dir,
           timeout_seconds: timeout_seconds,
           mock_ort: false,

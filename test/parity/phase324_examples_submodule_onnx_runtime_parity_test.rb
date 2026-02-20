@@ -90,7 +90,7 @@ class Phase324ExamplesSubmoduleOnnxRuntimeParityTest < Minitest::Test
       model_id = spec.fetch("id")
       capture = capture_onnx_fixture(spec)
       payload = capture.fetch("payload")
-      compatibility = MLX::Core.graph_ir_webgpu_compatibility_report(payload)
+      compatibility = MLX::GraphIR.webgpu_compatibility_report(payload)
       assert_equal 0, compatibility.fetch("unsupported_nodes"), "#{model_id} unsupported ops: #{compatibility.fetch('unsupported_ops').inspect}"
 
       output_map = run_exported_onnx(payload, capture.fetch("feeds"), model_id: model_id)
@@ -185,7 +185,7 @@ class Phase324ExamplesSubmoduleOnnxRuntimeParityTest < Minitest::Test
   def run_exported_onnx(payload, feeds, model_id:)
     Dir.mktmpdir("phase324-onnx-#{model_id.tr('/', '_')}-") do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "phase324_#{model_id.tr('/', '_')}")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "phase324_#{model_id.tr('/', '_')}")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX_TYPED, onnx_path, JSON.generate(feeds))
       assert status.success?, "onnxruntime execution failed for #{model_id}\nstdout:\n#{out}\nstderr:\n#{err}"
       return JSON.parse(out)

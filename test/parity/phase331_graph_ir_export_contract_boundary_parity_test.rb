@@ -16,6 +16,15 @@ class Phase331GraphIrExportContractBoundaryParityTest < Minitest::Test
     nodes
   ].freeze
 
+  NATIVE_CAPTURE_KEYS = %w[
+    shapeless
+    inputs
+    keyword_inputs
+    outputs
+    constants
+    nodes
+  ].freeze
+
   def setup
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
@@ -54,11 +63,29 @@ class Phase331GraphIrExportContractBoundaryParityTest < Minitest::Test
     y = MLX::Core.array([3.0, 4.0], MLX::Core.float32)
 
     io = StringIO.new
-    io_content = MLX::Core.export_graph_ir(io, fun, x, y: y)
+    io_content = TestSupport.export_graph_ir_to_target(io, fun, x, y: y)
     path_content = export_raw_payload_via_path(fun, x, y: y)
 
     assert_equal io_content, io.string
     assert_equal io_content, path_content
+  end
+
+  def test_native_export_graph_ir_capture_returns_capture_sections_and_ruby_assembly_matches
+    fun = lambda do |x, y:|
+      MLX::Core.add(MLX::Core.exp(x), y)
+    end
+    x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
+    y = MLX::Core.array([3.0, 4.0], MLX::Core.float32)
+
+    capture = MLX::GraphIR::Native.export_graph_ir_capture(fun, x, y: y)
+    exported = export_payload(fun, x, y: y)
+
+    assert_equal NATIVE_CAPTURE_KEYS, capture.keys
+    assert_equal false, capture.fetch("shapeless")
+    refute capture.key?("ir_version")
+
+    assembled = MLX::GraphIR.assemble_export_payload(capture)
+    assert_equal assembled, exported
   end
 
   def test_export_graph_ir_tensor_info_and_keyword_entry_shapes
@@ -140,7 +167,7 @@ class Phase331GraphIrExportContractBoundaryParityTest < Minitest::Test
     payload["unknown"] = 1
 
     error = assert_raises(ArgumentError) do
-      MLX::Core.validate_graph_ir(payload)
+      MLX::GraphIR.validate!(payload)
     end
     assert_match("unknown keys", error.message)
   end
@@ -148,13 +175,13 @@ class Phase331GraphIrExportContractBoundaryParityTest < Minitest::Test
   private
 
   def export_payload(fun, *args, **kwargs)
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, *args, **kwargs))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, *args, **kwargs))
   end
 
   def export_payload_via_path(fun, *args, **kwargs)
     Dir.mktmpdir do |dir|
       path = File.join(dir, "graph_ir.json")
-      assert_nil MLX::Core.export_graph_ir(path, fun, *args, **kwargs)
+      assert_nil TestSupport.export_graph_ir_to_target(path, fun, *args, **kwargs)
       return JSON.parse(File.binread(path))
     end
   end
@@ -162,7 +189,7 @@ class Phase331GraphIrExportContractBoundaryParityTest < Minitest::Test
   def export_raw_payload_via_path(fun, *args, **kwargs)
     Dir.mktmpdir do |dir|
       path = File.join(dir, "graph_ir.json")
-      assert_nil MLX::Core.export_graph_ir(path, fun, *args, **kwargs)
+      assert_nil TestSupport.export_graph_ir_to_target(path, fun, *args, **kwargs)
       return File.binread(path)
     end
   end

@@ -80,7 +80,7 @@ class Phase314BenchmarkModelOnnxRuntimeParityTest < Minitest::Test
   private
 
   def assert_fixture_onnx_runtime_parity!(model_name, fixture)
-    compatibility = MLX::Core.graph_ir_webgpu_compatibility_report(fixture.fetch(:payload))
+    compatibility = MLX::GraphIR.webgpu_compatibility_report(fixture.fetch(:payload))
     assert_equal 0, compatibility.fetch("unsupported_nodes"), "unsupported ops: #{compatibility.fetch('unsupported_ops').inspect}"
 
     actual = run_exported_onnx(fixture.fetch(:payload), fixture.fetch(:feeds)).first
@@ -136,7 +136,7 @@ class Phase314BenchmarkModelOnnxRuntimeParityTest < Minitest::Test
       raise ArgumentError, "unknown benchmark model fixture: #{model_name.inspect}"
     end
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, trace, seed))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(trace, seed))
     input_name = payload.fetch("inputs").first.fetch("name")
     {
       payload: payload,
@@ -157,7 +157,7 @@ class Phase314BenchmarkModelOnnxRuntimeParityTest < Minitest::Test
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "benchmark_model_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "benchmark_model_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX_TYPED, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

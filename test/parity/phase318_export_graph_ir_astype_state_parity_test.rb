@@ -24,7 +24,7 @@ class Phase318ExportGraphIrAsTypeStateParityTest < Minitest::Test
     end
     x = MLX::Core.array([1.2, 2.3], MLX::Core.float32)
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x))
     node = payload.fetch("nodes").find { |n| n.fetch("op") == "AsType" }
 
     refute_nil node

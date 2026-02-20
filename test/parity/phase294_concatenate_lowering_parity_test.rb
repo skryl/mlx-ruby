@@ -47,7 +47,7 @@ class Phase294ConcatenateLoweringParityTest < Minitest::Test
     assert_equal "Concatenate", node.fetch("op")
     assert_equal [1], node.fetch("arguments")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Concat", onnx_node.fetch("op_type")
     assert_equal({ "axis" => 1 }, onnx_node.fetch("attributes"))
@@ -84,7 +84,7 @@ class Phase294ConcatenateLoweringParityTest < Minitest::Test
     end
     x = MLX::Core.array([[1.0, 2.0], [3.0, 4.0]], MLX::Core.float32)
     y = MLX::Core.array([[5.0, 6.0], [7.0, 8.0]], MLX::Core.float32)
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, y))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y))
   end
 
   def stack_axis1_payload
@@ -95,14 +95,14 @@ class Phase294ConcatenateLoweringParityTest < Minitest::Test
     y = [[5.0, 6.0], [7.0, 8.0]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
     y_array = MLX::Core.array(y, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, y_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, y_array))
     [payload, x, y]
   end
 
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "concatenate_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "concatenate_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

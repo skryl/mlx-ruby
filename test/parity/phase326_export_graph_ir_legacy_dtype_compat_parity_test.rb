@@ -5,7 +5,7 @@ require "stringio"
 require "tmpdir"
 require_relative "test_helper"
 
-class Phase326ExportGraphIrLegacyDtypeCompatParityTest < Minitest::Test
+class Phase326ExportGraphIrNoLegacyNormalizationParityTest < Minitest::Test
   def setup
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
@@ -16,166 +16,77 @@ class Phase326ExportGraphIrLegacyDtypeCompatParityTest < Minitest::Test
     $LOAD_PATH.delete(File.join(RUBY_ROOT, "lib"))
   end
 
-  def test_export_graph_ir_io_target_backfills_legacy_astype_arguments
-    payload = legacy_payload_with_missing_astype_arguments
+  def test_export_graph_ir_io_target_keeps_missing_astype_arguments_unchanged
+    payload = payload_with_missing_astype_arguments
+
     with_stubbed_native_export_graph_ir(JSON.generate(payload)) do
       io = StringIO.new
-      content = MLX::Core.export_graph_ir(io, ->(_x) { nil }, :seed)
-      normalized = JSON.parse(content)
+      content = TestSupport.export_graph_ir_to_target(io, ->(_x) { nil }, :seed)
+      exported = JSON.parse(content)
 
-      node = normalized.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
-      assert_equal ["int32"], node.fetch("arguments")
+      node = exported.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
+      assert_equal [], node.fetch("arguments")
       assert_equal content, io.string
     end
   end
 
-  def test_export_graph_ir_path_target_backfills_legacy_astype_arguments
-    payload = legacy_payload_with_missing_astype_arguments
+  def test_export_graph_ir_path_target_keeps_missing_astype_arguments_unchanged
+    payload = payload_with_missing_astype_arguments
+
     Dir.mktmpdir do |dir|
       path = File.join(dir, "graph_ir.json")
       with_stubbed_native_export_graph_ir(JSON.generate(payload)) do
-        assert_nil MLX::Core.export_graph_ir(path, ->(_x) { nil }, :seed)
+        assert_nil TestSupport.export_graph_ir_to_target(path, ->(_x) { nil }, :seed)
       end
 
-      normalized = JSON.parse(File.binread(path))
-      node = normalized.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
-      assert_equal ["int32"], node.fetch("arguments")
+      exported = JSON.parse(File.binread(path))
+      node = exported.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
+      assert_equal [], node.fetch("arguments")
     end
   end
 
   def test_export_graph_ir_keeps_payload_unchanged_when_dtype_argument_is_present
-    payload = legacy_payload_with_missing_astype_arguments
+    payload = payload_with_missing_astype_arguments
     payload.fetch("nodes").first["arguments"] = ["int32"]
     raw_payload = JSON.generate(payload)
 
     with_stubbed_native_export_graph_ir(raw_payload) do
-      content = MLX::Core.export_graph_ir(StringIO.new, ->(_x) { nil }, :seed)
+      content = MLX::GraphIR.export_graph_ir_json(->(_x) { nil }, :seed)
       assert_equal raw_payload, content
     end
-  end
-
-  def test_export_graph_ir_path_target_falls_back_when_binread_raises_einval
-    payload = legacy_payload_with_missing_astype_arguments
-    Dir.mktmpdir do |dir|
-      path = File.join(dir, "graph_ir.json")
-      with_stubbed_native_export_graph_ir(JSON.generate(payload)) do
-        with_stubbed_file_binread_einval(path) do
-          assert_nil MLX::Core.export_graph_ir(path, ->(_x) { nil }, :seed)
-        end
-      end
-
-      normalized = JSON.parse(File.binread(path))
-      node = normalized.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
-      assert_equal ["int32"], node.fetch("arguments")
-    end
-  end
-
-  def test_export_graph_ir_io_target_delegates_normalization_when_graph_ir_delegate_exists
-    payload = legacy_payload_with_missing_astype_arguments
-    delegate_calls = []
-
-    with_stubbed_native_export_graph_ir(JSON.generate(payload)) do
-      rewrite = method(:rewrite_astype_dtype_argument)
-      delegate = lambda do |path, include_content:|
-        delegate_calls << include_content
-        updated = rewrite.call(path, "int16")
-        include_content ? updated : nil
-      end
-      with_stubbed_graph_ir_normalize_exported_graph_ir_file(delegate) do
-        io = StringIO.new
-        content = MLX::Core.export_graph_ir(io, ->(_x) { nil }, :seed)
-        normalized = JSON.parse(content)
-        node = normalized.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
-        assert_equal ["int16"], node.fetch("arguments")
-        assert_equal content, io.string
-      end
-    end
-
-    assert_equal [true], delegate_calls
-  end
-
-  def test_export_graph_ir_path_target_delegates_normalization_when_graph_ir_delegate_exists
-    payload = legacy_payload_with_missing_astype_arguments
-    delegate_calls = []
-
-    Dir.mktmpdir do |dir|
-      path = File.join(dir, "graph_ir.json")
-      with_stubbed_native_export_graph_ir(JSON.generate(payload)) do
-        rewrite = method(:rewrite_astype_dtype_argument)
-        delegate = lambda do |delegate_path, include_content:|
-          delegate_calls << include_content
-          updated = rewrite.call(delegate_path, "int16")
-          include_content ? updated : nil
-        end
-        with_stubbed_graph_ir_normalize_exported_graph_ir_file(delegate) do
-          assert_nil MLX::Core.export_graph_ir(path, ->(_x) { nil }, :seed)
-        end
-      end
-
-      normalized = JSON.parse(File.binread(path))
-      node = normalized.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
-      assert_equal ["int16"], node.fetch("arguments")
-    end
-
-    assert_equal [false], delegate_calls
   end
 
   private
 
   def with_stubbed_native_export_graph_ir(raw_payload)
-    singleton = MLX::Core.singleton_class
-    backup = :__phase326_original_native_export_graph_ir
+    singleton = MLX::GraphIR::Native.singleton_class
+    backup_json = :__phase326_original_export_graph_ir_json
+    had_export_graph_ir_json =
+      singleton.method_defined?(:export_graph_ir_json) ||
+      singleton.private_method_defined?(:export_graph_ir_json)
+
     singleton.class_eval do
-      remove_method(backup) if method_defined?(backup)
-      alias_method backup, :native_export_graph_ir
-      define_method(:native_export_graph_ir) do |path, *_args|
-        File.binwrite(path, raw_payload)
-        nil
+      remove_method(backup_json) if method_defined?(backup_json)
+      alias_method backup_json, :export_graph_ir_json if had_export_graph_ir_json
+      define_method(:export_graph_ir_json) do |*args|
+        fun = args.first
+        raise TypeError, "expected callable object" unless fun.respond_to?(:call)
+
+        raw_payload
       end
     end
     yield
   ensure
     singleton.class_eval do
-      remove_method :native_export_graph_ir if method_defined?(:native_export_graph_ir)
-      if method_defined?(backup)
-        alias_method :native_export_graph_ir, backup
-        remove_method backup
+      remove_method :export_graph_ir_json if method_defined?(:export_graph_ir_json)
+      if method_defined?(backup_json)
+        alias_method :export_graph_ir_json, backup_json
+        remove_method backup_json
       end
     end
   end
 
-  def with_stubbed_graph_ir_normalize_exported_graph_ir_file(stub)
-    singleton = MLX::GraphIR.singleton_class
-    backup = :__phase326_original_graph_ir_normalize_exported_graph_ir_file
-    had_original = singleton.method_defined?(:normalize_exported_graph_ir_file!) ||
-                   singleton.private_method_defined?(:normalize_exported_graph_ir_file!)
-
-    singleton.class_eval do
-      remove_method(backup) if method_defined?(backup)
-      alias_method backup, :normalize_exported_graph_ir_file! if had_original
-      define_method(:normalize_exported_graph_ir_file!, &stub)
-    end
-    yield
-  ensure
-    singleton.class_eval do
-      remove_method :normalize_exported_graph_ir_file! if method_defined?(:normalize_exported_graph_ir_file!)
-      if method_defined?(backup)
-        alias_method :normalize_exported_graph_ir_file!, backup
-        remove_method backup
-      end
-    end
-  end
-
-  def rewrite_astype_dtype_argument(path, dtype_name)
-    payload = JSON.parse(File.binread(path))
-    node = payload.fetch("nodes").find { |entry| entry.fetch("op") == "AsType" }
-    node["arguments"] = [dtype_name]
-    content = JSON.generate(payload)
-    File.binwrite(path, content)
-    content
-  end
-
-  def legacy_payload_with_missing_astype_arguments
+  def payload_with_missing_astype_arguments
     {
       "ir_version" => 1,
       "shapeless" => false,
@@ -192,30 +103,5 @@ class Phase326ExportGraphIrLegacyDtypeCompatParityTest < Minitest::Test
         { "op" => "Reshape", "inputs" => ["B"], "outputs" => ["C"], "arguments" => [[2]] }
       ]
     }
-  end
-
-  def with_stubbed_file_binread_einval(target_path)
-    singleton = File.singleton_class
-    backup = :__phase326_original_file_binread
-    singleton.class_eval do
-      remove_method(backup) if method_defined?(backup)
-      alias_method backup, :binread
-      define_method(:binread) do |file, *args|
-        path = file.respond_to?(:to_path) ? file.to_path.to_s : file.to_s
-        if path == target_path && args.empty?
-          raise Errno::EINVAL, path
-        end
-        send(backup, file, *args)
-      end
-    end
-    yield
-  ensure
-    singleton.class_eval do
-      remove_method :binread if method_defined?(:binread)
-      if method_defined?(backup)
-        alias_method :binread, backup
-        remove_method backup
-      end
-    end
   end
 end

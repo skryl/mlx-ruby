@@ -101,7 +101,7 @@ class Phase313ModelFixtureWebgpuBrowserParityTest < Minitest::Test
       raise ArgumentError, "unknown benchmark model fixture: #{model_name.inspect}"
     end
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, trace, seed))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(trace, seed))
     input_name = payload.fetch("inputs").first.fetch("name")
     {
       name: "webgpu_#{model_name}_case",
@@ -112,12 +112,12 @@ class Phase313ModelFixtureWebgpuBrowserParityTest < Minitest::Test
   end
 
   def assert_fixture_webgpu_parity!(fixture)
-    compatibility = MLX::Core.graph_ir_webgpu_compatibility_report(fixture.fetch(:payload))
+    compatibility = MLX::GraphIR.webgpu_compatibility_report(fixture.fetch(:payload))
     assert_equal 0, compatibility.fetch("unsupported_nodes"), "unsupported ops: #{compatibility.fetch('unsupported_ops').inspect}"
 
     Dir.mktmpdir do |dir|
       harness_dir = File.join(dir, "#{fixture.fetch(:name)}_harness")
-      MLX::Core.export_onnx_webgpu_harness(
+      MLX::GraphIR.export_onnx_webgpu_harness(
         harness_dir,
         fixture.fetch(:payload),
         model_name: fixture.fetch(:name),
@@ -131,7 +131,7 @@ class Phase313ModelFixtureWebgpuBrowserParityTest < Minitest::Test
         JSON.pretty_generate(fixture.fetch(:feeds))
       )
 
-      telemetry = MLX::Core.smoke_test_onnx_webgpu_harness(
+      telemetry = MLX::GraphIR.smoke_test_onnx_webgpu_harness(
         harness_dir,
         timeout_seconds: 180,
         mock_ort: false,

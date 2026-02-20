@@ -27,14 +27,14 @@ class Phase310OnnxWebgpuHarnessSmokeParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       harness_dir = File.join(dir, "web_harness")
-      MLX::Core.export_onnx_webgpu_harness(
+      MLX::GraphIR.export_onnx_webgpu_harness(
         harness_dir,
         payload,
         benchmark_warmup_runs: 0,
         benchmark_measure_runs: 2
       )
 
-      telemetry = MLX::Core.smoke_test_onnx_webgpu_harness(
+      telemetry = MLX::GraphIR.smoke_test_onnx_webgpu_harness(
         harness_dir,
         mock_ort: true,
         timeout_seconds: 30

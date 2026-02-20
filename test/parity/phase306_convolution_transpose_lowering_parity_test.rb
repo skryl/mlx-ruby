@@ -43,7 +43,7 @@ class Phase306ConvolutionTransposeLoweringParityTest < Minitest::Test
     payload, = conv_transpose2d_payload_with_values
     assert_equal ["Convolution"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal ["Transpose", "Transpose", "ConvTranspose", "Transpose"], onnx_nodes.map { |node| node.fetch("op_type") }
 
@@ -98,14 +98,14 @@ class Phase306ConvolutionTransposeLoweringParityTest < Minitest::Test
     weight = [[[[1.0], [0.5]], [[-0.5], [1.5]]]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
     weight_array = MLX::Core.array(weight, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, weight_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, weight_array))
     [payload, x, weight]
   end
 
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "conv_transpose_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "conv_transpose_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

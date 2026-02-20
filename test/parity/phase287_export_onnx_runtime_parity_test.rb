@@ -48,7 +48,7 @@ class Phase287ExportOnnxRuntimeParityTest < Minitest::Test
     fun = lambda do |x_arg, y:|
       MLX::Core.add(MLX::Core.exp(x_arg), y)
     end
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, y: y))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y: y))
     expected = MLX::Core.add(MLX::Core.exp(x), y).to_a
 
     result = run_exported_onnx(payload, {
@@ -89,7 +89,7 @@ class Phase287ExportOnnxRuntimeParityTest < Minitest::Test
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "runtime_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "runtime_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

@@ -25,7 +25,7 @@ class Phase286GraphIrConstantsParityTest < Minitest::Test
     end
     x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x))
     constants = payload.fetch("constants")
     assert_equal 1, constants.length
 
@@ -47,7 +47,7 @@ class Phase286GraphIrConstantsParityTest < Minitest::Test
       "nodes" => [{ "op" => "Add", "inputs" => %w[x c], "outputs" => ["z"] }]
     }
 
-    error = assert_raises(ArgumentError) { MLX::Core.validate_graph_ir(payload) }
+    error = assert_raises(ArgumentError) { MLX::GraphIR.validate!(payload) }
     assert_match(/constants\[0\]/, error.message)
     assert_match(/values/, error.message)
   end
@@ -63,7 +63,7 @@ class Phase286GraphIrConstantsParityTest < Minitest::Test
       "nodes" => [{ "op" => "Add", "inputs" => %w[x c], "outputs" => ["z"] }]
     }
 
-    error = assert_raises(ArgumentError) { MLX::Core.validate_graph_ir(payload) }
+    error = assert_raises(ArgumentError) { MLX::GraphIR.validate!(payload) }
     assert_match(/expected 2/, error.message)
   end
 end

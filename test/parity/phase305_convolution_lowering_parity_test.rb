@@ -43,7 +43,7 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
     payload, = convolution2d_payload_with_values
     assert_equal ["Convolution"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal ["Transpose", "Transpose", "Conv", "Transpose"], onnx_nodes.map { |node| node.fetch("op_type") }
 
@@ -74,12 +74,12 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
 
   def test_conv_general_with_input_dilation_is_reported_unsupported
     payload = conv_general_input_dilation_payload
-    report = MLX::Core.graph_ir_webgpu_compatibility_report(payload)
+    report = MLX::GraphIR.webgpu_compatibility_report(payload)
     assert_equal 1, report.fetch("unsupported_nodes")
     assert_equal ["Convolution"], report.fetch("unsupported_ops")
 
     error = assert_raises(NotImplementedError) do
-      MLX::Core.graph_ir_to_onnx_stub(payload)
+      MLX::GraphIR.to_onnx_stub(payload)
     end
     assert_match("input_dilation", error.message)
   end
@@ -87,7 +87,7 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
   def test_flip_convolution_propagates_dtype_to_downstream_add
     payload = flip_convolution_add_int32_payload
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal ["Transpose", "Transpose", "ConvTranspose", "Transpose", "Cast", "Add"],
                  onnx_nodes.map { |node| node.fetch("op_type") }
@@ -121,7 +121,7 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
     weight = [[[[1.0], [1.0]], [[1.0], [1.0]]]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
     weight_array = MLX::Core.array(weight, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, weight_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, weight_array))
     [payload, x, weight]
   end
 
@@ -132,7 +132,7 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
 
     x = MLX::Core.array([[[[1.0], [2.0]], [[3.0], [4.0]]]], MLX::Core.float32)
     weight = MLX::Core.array([[[[1.0], [1.0]], [[1.0], [1.0]]]], MLX::Core.float32)
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, weight))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, weight))
   end
 
   def flip_convolution_add_int32_payload
@@ -180,7 +180,7 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "convolution_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "convolution_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

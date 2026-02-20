@@ -23,11 +23,11 @@ class Phase331OnnxExportNumericRegressionParityTest < Minitest::Test
   def test_arange_with_float_arguments_is_stub_compatible
     payload = arange_float_payload
 
-    report = MLX::Core.graph_ir_webgpu_compatibility_report(payload)
+    report = MLX::GraphIR.webgpu_compatibility_report(payload)
     assert_equal 0, report.fetch("unsupported_nodes")
     assert_equal [], report.fetch("unsupported_ops")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     assert_equal [], stub.fetch("graph").fetch("nodes")
 
     initializer = initializer_by_name(stub, "range_out")
@@ -38,7 +38,7 @@ class Phase331OnnxExportNumericRegressionParityTest < Minitest::Test
 
   def test_export_onnx_normalizes_wrapped_int64_shape_values
     payload = wrapped_reshape_payload
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     reshape = stub.fetch("graph").fetch("nodes").find { |node| node.fetch("op_type") == "Reshape" }
     refute_nil reshape
 
@@ -50,7 +50,7 @@ class Phase331OnnxExportNumericRegressionParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "wrapped_shape.onnx")
-      assert_nil MLX::Core.export_onnx(onnx_path, payload, model_name: "phase331_wrapped_shape_case")
+      assert_nil TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "phase331_wrapped_shape_case")
       assert_operator File.size(onnx_path), :>, 0
     end
   end

@@ -17,16 +17,17 @@ Minimal script example
    y = mx.array([[0.5, 0.25]], mx.float32)
 
    trace = ->(lhs, rhs) { MLX::Core.add(lhs, rhs) }
-   payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, trace, x, y))
+   payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(trace, x, y))
+   onnx_json = MLX::GraphIR.graph_ir_to_onnx_json(payload, model_name: "minimal_add")
 
-   MLX::Core.validate_graph_ir(payload)
-   report = MLX::Core.graph_ir_webgpu_compatibility_report(payload)
+   MLX::GraphIR.validate!(payload)
+   report = MLX::GraphIR.webgpu_compatibility_report(payload)
    abort("unsupported ops: #{report.fetch('unsupported_ops').inspect}") unless report.fetch("unsupported_nodes").zero?
 
-   MLX::Core.export_onnx("artifacts/model.onnx", payload, model_name: "minimal_add")
-   MLX::Core.export_onnx_webgpu_harness("artifacts/web_harness", payload, model_name: "minimal_add")
+   MLX::GraphIR.onnx_json_to_onnx("artifacts/model.onnx", onnx_json)
+   MLX::GraphIR.export_onnx_webgpu_harness("artifacts/web_harness", payload, model_name: "minimal_add")
 
-   telemetry = MLX::Core.smoke_test_onnx_webgpu_harness("artifacts/web_harness", mock_ort: true)
+   telemetry = MLX::GraphIR.smoke_test_onnx_webgpu_harness("artifacts/web_harness", mock_ort: true)
    puts telemetry.fetch("format")
 
 Repository task examples

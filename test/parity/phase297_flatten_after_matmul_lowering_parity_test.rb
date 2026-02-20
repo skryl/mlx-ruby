@@ -45,7 +45,7 @@ class Phase297FlattenAfterMatmulLoweringParityTest < Minitest::Test
     payload = matmul_flatten_payload
     assert_equal %w[Matmul Flatten], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     nodes = stub.fetch("graph").fetch("nodes")
     assert_equal %w[MatMul Reshape], nodes.map { |node| node.fetch("op_type") }
 
@@ -95,14 +95,14 @@ class Phase297FlattenAfterMatmulLoweringParityTest < Minitest::Test
     x_array = MLX::Core.array(x, MLX::Core.float32)
     y_array = MLX::Core.array(y, MLX::Core.float32)
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, y_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, y_array))
     [payload, x, y]
   end
 
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "flatten_after_matmul_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "flatten_after_matmul_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

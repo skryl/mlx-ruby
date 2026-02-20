@@ -72,7 +72,7 @@ module Gpt2WebAssets
     seed_tokens = Array.new(context_size, eos_token_id)
     input_seed = MLX::Core.array([seed_tokens], MLX::Core.int32)
     graph_ir_path = File.join(OUTPUT_DIR, "graph_ir.json")
-    MLX::Core.export_graph_ir(
+    MLX::GraphIR.export_graph_ir(
       graph_ir_path,
       ->(input_ids) { model.call(input_ids) },
       input_seed
@@ -80,7 +80,7 @@ module Gpt2WebAssets
     payload = JSON.parse(read_file_with_fallback(graph_ir_path))
 
     onnx_path = File.join(OUTPUT_DIR, "model.onnx")
-    MLX::Core.export_onnx(onnx_path, payload, model_name: MODEL_NAME)
+    MLX::GraphIR.export_onnx(onnx_path, payload, model_name: MODEL_NAME)
 
     inputs = normalize_io_specs(payload.fetch("inputs"))
     outputs = normalize_io_specs(payload.fetch("outputs"))

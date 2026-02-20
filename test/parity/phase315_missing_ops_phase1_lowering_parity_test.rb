@@ -63,7 +63,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = astype_payload
     assert_equal ["AsType"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Cast", onnx_node.fetch("op_type")
     assert_equal({ "to" => "FLOAT16" }, onnx_node.fetch("attributes"))
@@ -73,7 +73,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = sin_payload
     assert_equal ["Sin"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Sin", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -83,7 +83,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = cos_payload
     assert_equal ["Cos"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Cos", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -93,7 +93,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = erf_payload
     assert_equal ["Erf"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Erf", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -103,7 +103,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = less_payload
     assert_equal ["Less"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Less", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -188,7 +188,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
 
     x = [[1.0, -2.25], [3.5, 0.125]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array))
     expected = MLX::Core.astype(x_array, MLX::Core.float16).to_a
     [payload, x, expected]
   end
@@ -205,7 +205,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
 
     x = [[0.0, 0.5, 1.0], [-0.5, -1.0, 1.5]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array))
     expected = MLX::Core.sin(x_array).to_a
     [payload, x, expected]
   end
@@ -222,7 +222,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
 
     x = [[0.0, 0.5, 1.0], [-0.5, -1.0, 1.5]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array))
     expected = MLX::Core.cos(x_array).to_a
     [payload, x, expected]
   end
@@ -239,7 +239,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
 
     x = [[-1.0, -0.5, 0.0], [0.5, 1.0, 1.5]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array))
     expected = MLX::Core.erf(x_array).to_a
     [payload, x, expected]
   end
@@ -258,7 +258,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     y = [[1.5, 2.0, 2.5], [3.0, 5.0, 7.0]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
     y_array = MLX::Core.array(y, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, y_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, y_array))
     expected = MLX::Core.less(x_array, y_array).to_a
     [payload, x, y, expected]
   end
@@ -266,7 +266,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "phase315_missing_ops_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "phase315_missing_ops_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX_TYPED, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

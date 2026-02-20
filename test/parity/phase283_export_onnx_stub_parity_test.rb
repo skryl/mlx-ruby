@@ -21,7 +21,7 @@ class Phase283ExportOnnxStubParityTest < Minitest::Test
 
   def test_export_onnx_stub_accepts_file_like_targets
     io = StringIO.new
-    written = MLX::Core.export_onnx_stub(io, exported_payload, model_name: "exp_add")
+    written = TestSupport.export_onnx_json_dump(io, exported_payload, model_name: "exp_add")
     payload = JSON.parse(written)
 
     assert_equal "onnx_stub_v1", payload.fetch("format")
@@ -32,7 +32,7 @@ class Phase283ExportOnnxStubParityTest < Minitest::Test
   def test_export_onnx_stub_supports_path_targets
     Dir.mktmpdir do |dir|
       path = File.join(dir, "graph.onnx.json")
-      assert_nil MLX::Core.export_onnx_stub(path, exported_payload, model_name: "exp_add")
+      assert_nil TestSupport.export_onnx_json_dump(path, exported_payload, model_name: "exp_add")
 
       assert File.exist?(path)
       payload = JSON.parse(File.read(path))
@@ -49,6 +49,6 @@ class Phase283ExportOnnxStubParityTest < Minitest::Test
     end
     x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
     y = MLX::Core.array([3.0, 4.0], MLX::Core.float32)
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, y: y))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y: y))
   end
 end

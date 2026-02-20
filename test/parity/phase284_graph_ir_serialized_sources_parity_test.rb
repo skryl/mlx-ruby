@@ -22,19 +22,19 @@ class Phase284GraphIrSerializedSourcesParityTest < Minitest::Test
   def test_validate_graph_ir_accepts_json_string_and_path
     payload = exported_payload
     json = JSON.generate(payload)
-    from_string = MLX::Core.validate_graph_ir(json)
+    from_string = MLX::GraphIR.validate!(json)
     assert_equal payload, from_string
 
     Dir.mktmpdir do |dir|
       path = File.join(dir, "graph_ir.json")
       File.binwrite(path, json)
-      from_path = MLX::Core.validate_graph_ir(path)
+      from_path = MLX::GraphIR.validate!(path)
       assert_equal payload, from_path
     end
   end
 
   def test_graph_ir_to_onnx_stub_accepts_json_string_source
-    stub = MLX::Core.graph_ir_to_onnx_stub(JSON.generate(exported_payload), model_name: "exp_add")
+    stub = MLX::GraphIR.to_onnx_stub(JSON.generate(exported_payload), model_name: "exp_add")
     assert_equal "onnx_stub_v1", stub.fetch("format")
     assert_equal %w[Exp Add], stub.fetch("graph").fetch("nodes").map { |node| node.fetch("op_type") }
   end
@@ -47,6 +47,6 @@ class Phase284GraphIrSerializedSourcesParityTest < Minitest::Test
     end
     x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
     y = MLX::Core.array([3.0, 4.0], MLX::Core.float32)
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x, y: y))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y: y))
   end
 end

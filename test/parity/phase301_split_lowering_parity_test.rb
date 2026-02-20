@@ -45,7 +45,7 @@ class Phase301SplitLoweringParityTest < Minitest::Test
     payload = split_equal_payload
     assert_equal ["Split"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     split_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Split", split_node.fetch("op_type")
     assert_equal({ "axis" => 0 }, split_node.fetch("attributes"))
@@ -83,7 +83,7 @@ class Phase301SplitLoweringParityTest < Minitest::Test
       MLX::Core.split(x, 2, 0)
     end
     x = MLX::Core.reshape(MLX::Core.arange(0, 8, 1, MLX::Core.float32), [4, 2])
-    JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x))
+    JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x))
   end
 
   def split_indices_payload_with_values
@@ -92,14 +92,14 @@ class Phase301SplitLoweringParityTest < Minitest::Test
     end
     x = [[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array))
     [payload, x]
   end
 
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "split_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "split_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

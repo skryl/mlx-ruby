@@ -131,7 +131,7 @@ class Phase312ModelFixtureOnnxRuntimeParityTest < Minitest::Test
       MLX::Core.float32
     )
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x))
     expected = fun.call(x).to_a
     feeds = { payload.fetch("inputs").first.fetch("name") => x.to_a }
     [payload, feeds, expected]
@@ -184,7 +184,7 @@ class Phase312ModelFixtureOnnxRuntimeParityTest < Minitest::Test
       MLX::Core.float32
     )
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x))
     expected = fun.call(x).to_a
     feeds = { payload.fetch("inputs").first.fetch("name") => x.to_a }
     [payload, feeds, expected]
@@ -233,7 +233,7 @@ class Phase312ModelFixtureOnnxRuntimeParityTest < Minitest::Test
       MLX::Core.float32
     )
 
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x))
     expected = fun.call(x).to_a
     feeds = { payload.fetch("inputs").first.fetch("name") => x.to_a }
     [payload, feeds, expected]
@@ -242,7 +242,7 @@ class Phase312ModelFixtureOnnxRuntimeParityTest < Minitest::Test
   def run_exported_onnx(payload, feeds, model_name:)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: model_name)
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: model_name)
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX_TYPED, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

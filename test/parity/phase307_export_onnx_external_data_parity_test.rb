@@ -40,7 +40,7 @@ class Phase307ExportOnnxExternalDataParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      assert_nil MLX::Core.export_onnx(
+      assert_nil TestSupport.export_onnx_from_graph_ir_source(
         onnx_path,
         payload,
         model_name: "ext_data_case",
@@ -64,7 +64,7 @@ class Phase307ExportOnnxExternalDataParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "custom_name.onnx")
-      assert_nil MLX::Core.export_onnx(
+      assert_nil TestSupport.export_onnx_from_graph_ir_source(
         onnx_path,
         payload,
         model_name: "ext_data_custom",
@@ -84,7 +84,7 @@ class Phase307ExportOnnxExternalDataParityTest < Minitest::Test
   def test_export_onnx_external_data_rejects_io_targets
     payload = constant_payload
     error = assert_raises(ArgumentError) do
-      MLX::Core.export_onnx(
+      TestSupport.export_onnx_from_graph_ir_source(
         StringIO.new,
         payload,
         model_name: "ext_data_io",

@@ -65,7 +65,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     assert_equal [1], payload.fetch("nodes").first.fetch("arguments")
     assert_equal [2, 3], payload.fetch("outputs").first.fetch("shape")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "GatherElements", onnx_node.fetch("op_type")
     assert_equal({ "axis" => 1 }, onnx_node.fetch("attributes"))
@@ -88,7 +88,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     gather_axis = payload.fetch("nodes").find { |node| node.fetch("op") == "GatherAxis" }
     assert_equal [1], gather_axis.fetch("arguments")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     graph_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal "Expand", graph_nodes[-2].fetch("op_type")
     assert_equal "GatherElements", graph_nodes[-1].fetch("op_type")
@@ -113,7 +113,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     assert_equal [[0, 1], [1, 0], [0, 2]], payload.fetch("nodes").first.fetch("arguments")
     assert_equal [3, 4], payload.fetch("outputs").first.fetch("shape")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Pad", onnx_node.fetch("op_type")
     assert_equal 3, onnx_node.fetch("inputs").length
@@ -146,7 +146,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     assert_equal [false], payload.fetch("nodes").last.fetch("arguments")
     assert_equal [2, 3], payload.fetch("outputs").first.fetch("shape")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").last
     assert_equal "Equal", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -168,7 +168,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     assert_equal ["Floor"], payload.fetch("nodes").map { |node| node.fetch("op") }
     assert_equal [2, 3], payload.fetch("outputs").first.fetch("shape")
 
-    stub = MLX::Core.graph_ir_to_onnx_stub(payload)
+    stub = MLX::GraphIR.to_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Floor", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -215,7 +215,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     idx = [[2, 1, 0], [0, 2, 1]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
     idx_array = MLX::Core.array(idx, MLX::Core.int32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, idx_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, idx_array))
     [payload, x, idx]
   end
 
@@ -265,7 +265,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     pad_value = 9.0
     x_array = MLX::Core.array(x, MLX::Core.float32)
     pad_value_array = MLX::Core.array(pad_value, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, pad_value_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, pad_value_array))
     [payload, x, pad_value]
   end
 
@@ -283,7 +283,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     y = [[1.0, 0.0, 3.0]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
     y_array = MLX::Core.array(y, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array, y_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array, y_array))
     [payload, x, y]
   end
 
@@ -299,14 +299,14 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
 
     x = [[-1.2, 0.0, 1.7], [2.5, -3.9, 4.0]]
     x_array = MLX::Core.array(x, MLX::Core.float32)
-    payload = JSON.parse(MLX::Core.export_graph_ir(StringIO.new, fun, x_array))
+    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x_array))
     [payload, x]
   end
 
   def run_exported_onnx(payload, feeds)
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      MLX::Core.export_onnx(onnx_path, payload, model_name: "missing_ops_phase2_case")
+      TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "missing_ops_phase2_case")
       out, err, status = Open3.capture3("python3", "-c", PY_RUN_ONNX_TYPED, onnx_path, JSON.generate(feeds))
       raise "onnxruntime execution failed:\n#{err}" unless status.success?
 

@@ -80,6 +80,10 @@ run_or_abort(*cmake_build, chdir: ext_root)
 
 include_dir = mlx_include_dir
 lib_dir = File.join(mlx_install_dir, "lib")
+json_include_dirs = [
+  File.join(mlx_build_dir, "_deps", "json-src", "include"),
+  File.join(mlx_build_dir, "_deps", "json-src", "single_include")
+].select { |path| Dir.exist?(path) }
 
 abort("missing MLX include dir: #{include_dir}") unless Dir.exist?(include_dir)
 abort("missing MLX lib dir: #{lib_dir}") unless Dir.exist?(lib_dir)
@@ -88,6 +92,9 @@ dir_config("mlx", include_dir, lib_dir)
 
 $CXXFLAGS = "#{$CXXFLAGS} -std=c++20"
 $CPPFLAGS = "#{$CPPFLAGS} -I#{include_dir}"
+json_include_dirs.each do |path|
+  $CPPFLAGS = "#{$CPPFLAGS} -I#{path}"
+end
 $LDFLAGS = "#{$LDFLAGS} -L#{lib_dir} #{rpath_flag(lib_dir)}"
 $libs = "-lmlx #{$libs}"
 

@@ -25,8 +25,8 @@ class Phase280GraphIrDeterminismParityTest < Minitest::Test
     x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
     y = MLX::Core.array([3.0, 4.0], MLX::Core.float32)
 
-    first = MLX::Core.export_graph_ir(StringIO.new, fun, x, y: y)
-    second = MLX::Core.export_graph_ir(StringIO.new, fun, x, y: y)
+    first = MLX::GraphIR.export_graph_ir_json(fun, x, y: y)
+    second = MLX::GraphIR.export_graph_ir_json(fun, x, y: y)
     assert_equal first, second
   end
 end

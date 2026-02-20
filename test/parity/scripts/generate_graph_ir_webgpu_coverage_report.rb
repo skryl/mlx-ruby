@@ -79,11 +79,11 @@ def benchmark_payload(model_name)
     raise ArgumentError, "unknown benchmark model fixture: #{model_name.inspect}"
   end
 
-  JSON.parse(MLX::Core.export_graph_ir(StringIO.new, trace, seed))
+  JSON.parse(MLX::GraphIR.export_graph_ir_json(trace, seed))
 end
 
 def graph_report_from_payload(payload)
-  MLX::Core.graph_ir_webgpu_compatibility_report(payload)
+  MLX::GraphIR.webgpu_compatibility_report(payload)
 end
 
 def submodule_available?

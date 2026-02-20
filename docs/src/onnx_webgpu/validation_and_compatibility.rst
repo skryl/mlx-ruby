@@ -4,27 +4,37 @@ Validation And Compatibility
 After exporting Graph IR, run schema validation and ONNX/WebGPU preflight
 before conversion.
 
+Ownership boundary
+------------------
+
+- Public API: ``MLX::GraphIR.validate!`` and
+  ``MLX::GraphIR.webgpu_compatibility_report``.
+- Implementation ownership: ``MLX::GraphIR`` validation + ONNX compatibility
+  resolver/lowering modules.
+
 Schema and topology validation
 ------------------------------
 
-``MLX::Core.validate_graph_ir`` raises if required fields or topology are
+``MLX::GraphIR.validate!`` raises if required fields or topology are
 invalid.
 
 .. code-block:: ruby
 
    payload = JSON.parse(File.binread("artifacts/graph_ir.json"))
-   MLX::Core.validate_graph_ir(payload)
+   MLX::GraphIR.validate!(payload)
 
 WebGPU/ONNX preflight
 ---------------------
 
-``MLX::Core.graph_ir_webgpu_compatibility_report`` summarizes conversion
+``MLX::GraphIR.webgpu_compatibility_report`` summarizes conversion
 readiness and unsupported operations.
 
 .. code-block:: ruby
 
-   report = MLX::Core.graph_ir_webgpu_compatibility_report(payload)
+   report = MLX::GraphIR.webgpu_compatibility_report(payload)
 
+   puts "format=#{report.fetch('format')}" # => "webgpu_compat_report_v1"
+   puts "total_nodes=#{report.fetch('total_nodes')}"
    puts "unsupported_nodes=#{report.fetch('unsupported_nodes')}"
    puts "unsupported_ops=#{report.fetch('unsupported_ops').inspect}"
 
@@ -36,7 +46,7 @@ Current MLX -> ONNX mapped ops
 ------------------------------
 
 The compatibility preflight and lowering path use these current mappings from
-``lib/mlx/graph_ir.rb``.
+``lib/mlx/graph_ir/constants.rb`` and ``lib/mlx/graph_ir/onnx/*``.
 
 Direct op mapping table
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -150,8 +160,8 @@ Reduce code mapping
 
 ``Reduce`` lowering maps reducer codes as:
 
-- ``0 -> ReduceMin``
-- ``1 -> ReduceMax``
+- ``0/1`` (logical all/any) via
+  ``Cast(BOOL) -> Cast(INT64) -> ReduceMin/ReduceMax -> Cast(BOOL)``
 - ``2 -> ReduceSum``
 - ``3 -> ReduceProd``
 - ``4 -> ReduceMin``

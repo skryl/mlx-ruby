@@ -50,7 +50,7 @@ This repository packages:
     libopenblas-dev liblapacke-dev`)
 - ONNX export / benchmark helpers:
   - Python 3 with packages from `requirements.txt`
-  - `onnx` package available to the interpreter used by `MLX::Core.export_onnx`
+  - `onnx` package available to the interpreter used by `MLX::GraphIR.onnx_json_to_onnx`
 - Web smoke/harness workflows:
   - Node.js + `npm` (for `playwright` and `onnxruntime-web`)
 - Docs build:
@@ -307,22 +307,59 @@ MLX_DEFAULT_DEVICE=gpu bundle exec ruby your_script.rb
 
 ## Onnx/WebGPU Support
 
-MLX Ruby supports a full path from traced MLX graph captures to browser-runnable
-ONNX harness artifacts:
+MLX Ruby exposes Graph IR/ONNX/WebGPU entrypoints on `MLX::GraphIR`.
 
-1. Export Graph IR with `MLX::Core.export_graph_ir`.
-2. Validate and gate conversion with
-   `MLX::Core.validate_graph_ir` and
-   `MLX::Core.graph_ir_webgpu_compatibility_report`.
-3. Export ONNX with `MLX::Core.export_onnx`.
-4. Package browser harness assets with
-   `MLX::Core.export_onnx_webgpu_harness`.
-5. Verify runtime behavior with
-   `MLX::Core.smoke_test_onnx_webgpu_harness`.
+Architecture boundary:
+
+- Public API (`MLX::GraphIR`):
+  - `export_graph_ir_json`
+  - `validate!`
+  - `to_onnx_stub`
+  - `webgpu_compatibility_report`
+  - `graph_ir_to_onnx_json`
+  - `onnx_json_to_onnx`
+  - `export_onnx_json`
+  - `export_onnx_webgpu_harness`
+  - `smoke_test_onnx_webgpu_harness`
+- Internal implementation modules:
+  - `MLX::GraphIR`
+  - `MLX::GraphIR::Exporter`
+  - `MLX::GraphIR::ONNX::Exporter`
+  - `MLX::GraphIR::ONNX::PythonBuilder`
+  - `MLX::GraphIR::WebGPUHarness`
+
+End-to-end flow:
+
+1. Export Graph IR with `MLX::GraphIR.export_graph_ir_json`.
+2. Validate and gate conversion with `MLX::GraphIR.validate!` and
+   `MLX::GraphIR.webgpu_compatibility_report`.
+3. Generate JSON ONNX stubs with `MLX::GraphIR.to_onnx_stub` or
+   `MLX::GraphIR.graph_ir_to_onnx_json`.
+4. Export binary ONNX with `MLX::GraphIR.onnx_json_to_onnx`
+   (`external_data` options are available for large models), and/or export
+   ONNX JSON directly from trace with `MLX::GraphIR.export_onnx_json`.
+5. Package browser harness assets with `MLX::GraphIR.export_onnx_webgpu_harness`.
+6. Verify runtime behavior with `MLX::GraphIR.smoke_test_onnx_webgpu_harness`.
+
+Harness artifacts from `export_onnx_webgpu_harness`:
+
+- `model.onnx`
+- `harness.manifest.json`
+- `inputs.example.json`
+- `index.html`
+- `harness.js`
+- optional external data file (for example `model.data`)
+
+Smoke telemetry from `smoke_test_onnx_webgpu_harness` uses
+`onnx_webgpu_telemetry_v1` and reports provider selection/fallback details
+(`selected_provider`, `requested_providers`, `fallback_used`) plus timing
+fields (`run_timings_ms`, `model_load_latency_ms`,
+`first_inference_latency_ms`, `steady_state_inference_latency_ms`).
 
 Operational requirements:
 
-- `export_onnx` requires `python3` with the `onnx` package available.
+- `onnx_json_to_onnx` requires `python3` with the `onnx` package available.
+- `onnx_json_to_onnx` external data mode requires a path-like target (not IO).
 - Browser smoke tests require Node.js + Playwright (`web/`) and optionally
   local `onnxruntime-web` assets.
 - Harness execution providers are `webgpu` and `wasm`.
@@ -467,7 +504,8 @@ The repo’s Pages workflow builds docs together with the web demo for deploymen
 ## Repository layout
 
 - `lib/`: Ruby API surface (`core`, `nn`, `optimizers`, `dsl`, distributed
-  utilities, Graph IR helpers).
+  utilities), with Graph IR/ONNX implementation modules under
+  `lib/mlx/graph_ir/**`.
 - `ext/mlx/`: native extension build bridge (`extconf.rb`, C++ binding entry).
 - `mlx/`: upstream MLX submodule.
 - `examples/web/`: web demo model/export helpers (GPT-2, nanoGPT, Stable Diffusion).
@@ -489,7 +527,7 @@ ruby extconf.rb
 make -j4
 ```
 
-- `export_onnx` fails with Python import errors: ensure `onnx` is installed in
+- `onnx_json_to_onnx` fails with Python import errors: ensure `onnx` is installed in
   the Python selected by `PYTHON`/`python3`.
 - On Apple silicon, verify native architecture:
 
