@@ -2,7 +2,7 @@
 
 ## Status
 
-Completed on February 19, 2026.
+Completed on February 20, 2026.
 
 Phase progress update (local):
 
@@ -19,6 +19,7 @@ Phase progress update (local):
 11. Added full examples-submodule ONNX Runtime parity gate (`phase324`) that captures each model, exports ONNX, runs in Python ORT, and checks output parity.
 12. `rake benchmark:all` passes across cpu/gpu/webgpu lanes with explicit WebGPU skip policy on submodule examples models when runtime provider is unavailable.
 13. CI/report integration completed.
+14. Post-completion regression patch applied: `Arange` now accepts numeric arguments emitted as floats, wrapped signed-int64 values are normalized before ONNX initializer emission, and phase313/314/319/323/324 parity gates are green again.
 
 ## Context
 
@@ -231,3 +232,4 @@ In scope model set (from `benchmark/runner.rb`):
 - [x] Phase 4 full 23-model export/parity suites green.
 - [x] Phase 4 all-model Python ONNX Runtime parity suite green.
 - [x] CI lane/report integration completed.
+- [x] Post-completion regression fix for numeric argument normalization (`Arange` float args and wrapped int64 sentinel values) validated by phase313/314/319/323/324 gates.

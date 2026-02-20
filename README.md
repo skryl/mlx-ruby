@@ -7,10 +7,10 @@
 ## Index
 
 - [Full Docs](https://skryl.github.io/mlx-ruby)
-- [Web Demo](https://skryl.github.io/mlx-ruby/demo/)
-- [Examples Repo](https://github.com/skryl/mlx-ruby-examples)
+- [Examples](https://github.com/skryl/mlx-ruby-examples)
 - [Ruby DSL Docs](https://skryl.github.io/mlx-ruby/ruby_dsl/index.html)
-- [Onnx/WebGPU Docs](https://skryl.github.io/mlx-ruby/ruby/export.html#onnx-webgpu-support)
+- [ONNX/WebGPU Docs](https://skryl.github.io/mlx-ruby/ruby/export.html#onnx-webgpu-support)
+- [WebGPU Demo](https://skryl.github.io/mlx-ruby/demo/)
 
 ## About
 
@@ -123,16 +123,16 @@ bundle exec ruby -e 'require "mlx"; puts MLX::VERSION; puts "native=#{MLX.native
 Primary end-to-end examples live in
 [`skryl/mlx-ruby-examples`](https://github.com/skryl/mlx-ruby-examples).
 
-Web demo model/export scripts in this repo are under:
-
-- `examples/web/`
-- `tasks/web_assets_task/`
-
 - [Transformer](https://github.com/skryl/mlx-ruby-examples/tree/main/transformer_lm)
 - [LLaMA](https://github.com/skryl/mlx-ruby-examples/tree/main/llms/llama)
 - [LoRA](https://github.com/skryl/mlx-ruby-examples/tree/main/lora)
 - [Stable Diffusion](https://github.com/skryl/mlx-ruby-examples/tree/main/stable_diffusion)
 - [Whisper](https://github.com/skryl/mlx-ruby-examples/tree/main/whisper)
+
+Web demo model/export scripts in this repo are under:
+
+- `examples/web/`
+
 
 ## Quickstart
 

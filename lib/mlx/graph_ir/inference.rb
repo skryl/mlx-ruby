@@ -617,25 +617,73 @@ module MLX
 
     def integer_vector_argument(arguments, op_name)
       candidate = if arguments.is_a?(Array)
-        arguments.find { |value| value.is_a?(Array) && value.all? { |item| item.is_a?(Integer) } }
+        arguments.find do |value|
+          next false unless value.is_a?(Array)
+
+          begin
+            normalize_integer_vector(value, "#{op_name} argument")
+            true
+          rescue TypeError, RangeError
+            false
+          end
+        end
       end
       unless candidate
         raise ArgumentError, "[graph_ir_to_onnx_stub] #{op_name} requires an integer-vector argument"
       end
 
-      candidate
+      normalize_integer_vector(candidate, "#{op_name} argument")
     end
     private_class_method :integer_vector_argument
+
+    def integer_like_numeric?(value)
+      return true if value.is_a?(Integer)
+      return false unless value.is_a?(Numeric)
+
+      float = value.to_f
+      float.finite? && float == float.truncate
+    end
+    private_class_method :integer_like_numeric?
+
+    def normalized_integer_scalar(value, label)
+      unless value.is_a?(Numeric)
+        raise TypeError, "[graph_ir_to_onnx_stub] #{label} must be an Integer"
+      end
+
+      raw = if value.is_a?(Integer)
+        value
+      else
+        float = value.to_f
+        unless float.finite? && float == float.truncate
+          raise TypeError, "[graph_ir_to_onnx_stub] #{label} must be an Integer"
+        end
+        float.to_i
+      end
+
+      int64_min = -(1 << 63)
+      int64_max = (1 << 63) - 1
+      return raw if raw.between?(int64_min, int64_max)
+
+      uint64_max = (1 << 64) - 1
+      uint64_modulus = 1 << 64
+      if raw.positive? && raw <= uint64_max
+        wrapped = raw - uint64_modulus
+        return wrapped if wrapped.between?(int64_min, int64_max)
+      end
+
+      raise RangeError,
+            "[graph_ir_to_onnx_stub] #{label} #{value.inspect} is outside supported signed 64-bit range"
+    end
+    private_class_method :normalized_integer_scalar
 
     def normalize_integer_vector(value, label)
       case value
       when Integer
-        [value]
+        [normalized_integer_scalar(value, label)]
+      when Numeric
+        [normalized_integer_scalar(value, label)]
       when Array
-        unless value.all? { |item| item.is_a?(Integer) }
-          raise TypeError, "[graph_ir_to_onnx_stub] #{label} must contain only Integer values"
-        end
-        value
+        value.map { |item| normalized_integer_scalar(item, label) }
       else
         raise TypeError, "[graph_ir_to_onnx_stub] #{label} must be an Integer or Array of Integer"
       end
@@ -722,12 +770,28 @@ module MLX
       start = arguments[0]
       stop = arguments[1]
       step = arguments[2]
-      unless start.is_a?(Integer) && stop.is_a?(Integer) && step.is_a?(Integer)
-        raise TypeError, "[graph_ir_to_onnx_stub] Arange start/stop/step must be Integer"
+      unless [start, stop, step].all? { |value| value.is_a?(Numeric) }
+        raise TypeError, "[graph_ir_to_onnx_stub] Arange start/stop/step must be Numeric"
+      end
+
+      integral = [start, stop, step].all? { |value| integer_like_numeric?(value) }
+      if integral
+        start = normalized_integer_scalar(start, "Arange start")
+        stop = normalized_integer_scalar(stop, "Arange stop")
+        step = normalized_integer_scalar(step, "Arange step")
+        dtype = "int64"
+      else
+        start = start.to_f
+        stop = stop.to_f
+        step = step.to_f
+        unless start.finite? && stop.finite? && step.finite?
+          raise TypeError, "[graph_ir_to_onnx_stub] Arange start/stop/step must be finite Numeric values"
+        end
+        dtype = "float32"
       end
       raise ArgumentError, "[graph_ir_to_onnx_stub] Arange step must not be zero" if step.zero?
 
-      [start, stop, step]
+      [start, stop, step, dtype]
     end
     private_class_method :arange_arguments
 
@@ -837,10 +901,7 @@ module MLX
     private_class_method :asstrided_linear_indices
 
     def normalize_axis(axis, rank, label)
-      unless axis.is_a?(Integer)
-        raise TypeError, "[graph_ir_to_onnx_stub] #{label} must be an Integer"
-      end
-      index = axis
+      index = normalized_integer_scalar(axis, label)
       index += rank if index.negative?
       unless index.between?(0, rank - 1)
         raise ArgumentError, "[graph_ir_to_onnx_stub] #{label} #{axis} is out of bounds for rank #{rank}"
@@ -992,8 +1053,12 @@ module MLX
     private_class_method :collect_known_tensor_dtypes
 
     def concatenate_axis_from_arguments(arguments, strict: true)
-      if arguments.is_a?(Array) && arguments.length == 1 && arguments.first.is_a?(Integer)
-        return arguments.first
+      if arguments.is_a?(Array) && arguments.length == 1
+        begin
+          return normalized_integer_scalar(arguments.first, "Concatenate axis")
+        rescue TypeError, RangeError
+          # Handled below.
+        end
       end
       return nil unless strict
 
@@ -1005,9 +1070,18 @@ module MLX
     def gather_axis_from_arguments(arguments, strict: true)
       if arguments.is_a?(Array) && !arguments.empty?
         first = arguments.first
-        return first if first.is_a?(Integer)
-        if first.is_a?(Array) && first.length == 1 && first.first.is_a?(Integer)
-          return first.first
+        begin
+          return normalized_integer_scalar(first, "Gather axis")
+        rescue TypeError, RangeError
+          # Try vector-encoded axis below.
+        end
+
+        if first.is_a?(Array) && first.length == 1
+          begin
+            return normalized_integer_scalar(first.first, "Gather axis")
+          rescue TypeError, RangeError
+            # Handled below.
+          end
         end
       end
       return nil unless strict
@@ -1027,7 +1101,10 @@ module MLX
 
       mode = arguments[0]
       axis = arguments[1]
-      unless mode.is_a?(Integer) && axis.is_a?(Integer)
+      begin
+        mode = normalized_integer_scalar(mode, "ScatterAxis mode")
+        axis = normalized_integer_scalar(axis, "ScatterAxis axis")
+      rescue TypeError, RangeError
         return nil unless strict
 
         raise NotImplementedError,

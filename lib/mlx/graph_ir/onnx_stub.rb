@@ -88,10 +88,24 @@ module MLX
 
     def onnx_initializer_info(tensor)
       info = onnx_value_info(tensor)
-      info["values"] = tensor.fetch("values")
+      values = tensor.fetch("values")
+      if info["dtype"] == "int64"
+        values = normalize_initializer_int64_values(values, "initializer #{info['name']}")
+      end
+      info["values"] = values
       info
     end
     private_class_method :onnx_initializer_info
+
+    def normalize_initializer_int64_values(value, label)
+      case value
+      when Array
+        value.map { |item| normalize_initializer_int64_values(item, label) }
+      else
+        normalized_integer_scalar(value, label)
+      end
+    end
+    private_class_method :normalize_initializer_int64_values
 
     def onnx_node_attributes(node)
       op = node.fetch("op")
@@ -129,11 +143,18 @@ module MLX
 
     def transpose_perm_from_arguments(arguments)
       candidate = arguments.find do |value|
-        value.is_a?(Array) && value.all? { |item| item.is_a?(Integer) }
+        next false unless value.is_a?(Array)
+
+        begin
+          normalize_integer_vector(value, "Transpose permutation")
+          true
+        rescue TypeError, RangeError
+          false
+        end
       end
       return nil if candidate.nil?
 
-      candidate
+      normalize_integer_vector(candidate, "Transpose permutation")
     end
     private_class_method :transpose_perm_from_arguments
 
@@ -153,17 +174,17 @@ module MLX
 
       case op
       when "Arange"
-        start, stop, step = arange_arguments(arguments)
+        start, stop, step, arange_dtype = arange_arguments(arguments)
         values = arange_values(start, stop, step)
         output_name = outputs.fetch(0)
         initializers << onnx_initializer_info(
           "name" => output_name,
           "shape" => [values.length],
-          "dtype" => "int64",
+          "dtype" => arange_dtype,
           "values" => values
         )
         known_shapes[output_name] = [values.length]
-        known_dtypes[output_name] = "int64"
+        known_dtypes[output_name] = arange_dtype
         return []
       when "Transpose"
         transpose_input = inputs.fetch(0)

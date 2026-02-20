@@ -75,3 +75,4 @@ Treat work as complete only when all are true:
 2. New/updated tests are green.
 3. Regressions in touched areas are checked.
 4. PRD status reflects reality (`Completed` only when fully done).
+
