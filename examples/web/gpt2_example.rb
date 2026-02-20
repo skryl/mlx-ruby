@@ -163,7 +163,7 @@ module Gpt2Example
     end
 
     def call(input_ids)
-      batch_size, sequence_length = input_ids.shape
+      _batch_size, sequence_length = input_ids.shape
       if sequence_length > config.n_positions
         raise ArgumentError, "sequence length #{sequence_length} exceeds context #{config.n_positions}"
       end

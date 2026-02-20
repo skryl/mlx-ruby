@@ -123,13 +123,17 @@ class Phase328Gpt2ExampleWeightMappingTest < Minitest::Test
     singleton = target.singleton_class
     had_original = singleton.method_defined?(method_name)
     original_method = singleton.instance_method(method_name) if had_original
-    singleton.define_method(method_name, &replacement)
+    stubbed = false
+
+    singleton.send(:remove_method, method_name) if had_original
+    singleton.send(:define_method, method_name, &replacement)
+    stubbed = true
     yield
   ensure
-    if had_original
+    singleton.send(:remove_method, method_name) if stubbed
+
+    if had_original && original_method
       singleton.define_method(method_name, original_method)
-    else
-      singleton.send(:remove_method, method_name)
     end
   end
 

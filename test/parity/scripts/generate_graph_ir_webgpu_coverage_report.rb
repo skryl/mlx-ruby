@@ -15,7 +15,6 @@ OUT_FILE = PARITY_ROOT.join("graph_ir_webgpu_coverage.json").freeze
 SUBMODULE_ROOT = REPO_ROOT.join("mlx-ruby-examples").freeze
 SUBMODULE_RUNNER = SUBMODULE_ROOT.join("benchmark", "runner.rb").freeze
 SUBMODULE_FORCE_CPU = SUBMODULE_ROOT.join("benchmark", "ruby", "force_cpu.rb").freeze
-SUBMODULE_DRYRUN = SUBMODULE_ROOT.join("benchmark", "ruby", "run_with_dryrun.rb").freeze
 SUBMODULE_CAPTURE_HOOK = REPO_ROOT.join("examples", "benchmark", "benchmark_mlx_examples", "onnx_capture_hook.rb").freeze
 
 $LOAD_PATH.unshift(LIB_ROOT.to_s) unless $LOAD_PATH.include?(LIB_ROOT.to_s)
@@ -90,7 +89,6 @@ end
 def submodule_available?
   SUBMODULE_RUNNER.exist? &&
     SUBMODULE_FORCE_CPU.exist? &&
-    SUBMODULE_DRYRUN.exist? &&
     SUBMODULE_CAPTURE_HOOK.exist?
 end
 
@@ -192,6 +190,7 @@ def run_submodule_coverage(spec)
     env = unbundled_env(
       "MLX_BENCHMARK" => "1",
       "MLX_BENCHMARK_DEVICE" => "cpu",
+      "MLX_BENCHMARK_DRYRUN" => "1",
       "MLX_EXAMPLES_SUBMODULE_ROOT" => SUBMODULE_ROOT.to_s,
       "MLX_EXAMPLES_ONNX_CAPTURE_FILE" => capture.path
     )
@@ -200,7 +199,6 @@ def run_submodule_coverage(spec)
       "-I#{LIB_ROOT}",
       "-r", SUBMODULE_FORCE_CPU.to_s,
       "-r", SUBMODULE_CAPTURE_HOOK.to_s,
-      SUBMODULE_DRYRUN.to_s,
       spec.fetch("ruby_script")
     ]
     stdout, stderr, status = Open3.capture3(env, *command, chdir: SUBMODULE_ROOT.to_s)

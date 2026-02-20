@@ -14,8 +14,7 @@ class Phase321ExamplesOnnxCaptureHookParityTest < Minitest::Test
     @repo_root = RUBY_ROOT
     @submodule_root = File.join(@repo_root, "mlx-ruby-examples")
     @runner = File.join(@submodule_root, "benchmark", "runner.rb")
-    @run_with_dryrun = File.join(@submodule_root, "benchmark", "ruby", "run_with_dryrun.rb")
-    @force_gpu = File.join(@submodule_root, "benchmark", "ruby", "force_gpu.rb")
+    @force_cpu = File.join(@submodule_root, "benchmark", "ruby", "force_cpu.rb")
     @capture_hook = File.join(@repo_root, "examples", "benchmark", "benchmark_mlx_examples", "onnx_capture_hook.rb")
   end
 
@@ -25,16 +24,16 @@ class Phase321ExamplesOnnxCaptureHookParityTest < Minitest::Test
     Tempfile.create(["examples_onnx_capture", ".json"]) do |capture|
       env = {
         "MLX_BENCHMARK" => "1",
-        "MLX_BENCHMARK_DEVICE" => "gpu",
+        "MLX_BENCHMARK_DEVICE" => "cpu",
+        "MLX_BENCHMARK_DRYRUN" => "1",
         "MLX_EXAMPLES_SUBMODULE_ROOT" => @submodule_root,
         "MLX_EXAMPLES_ONNX_CAPTURE_FILE" => capture.path
       }
       command = [
         RbConfig.ruby,
         "-I#{File.join(@repo_root, 'lib')}",
-        "-r", @force_gpu,
+        "-r", @force_cpu,
         "-r", @capture_hook,
-        @run_with_dryrun,
         "mnist/test.rb"
       ]
 

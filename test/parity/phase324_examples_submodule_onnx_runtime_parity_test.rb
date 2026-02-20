@@ -62,7 +62,6 @@ class Phase324ExamplesSubmoduleOnnxRuntimeParityTest < Minitest::Test
     @submodule_root = File.join(@repo_root, "mlx-ruby-examples")
     @submodule_runner = File.join(@submodule_root, "benchmark", "runner.rb")
     @force_cpu = File.join(@submodule_root, "benchmark", "ruby", "force_cpu.rb")
-    @run_with_dryrun = File.join(@submodule_root, "benchmark", "ruby", "run_with_dryrun.rb")
     @capture_hook = File.join(@repo_root, "examples", "benchmark", "benchmark_mlx_examples", "onnx_capture_hook.rb")
     @lib_root = File.join(@repo_root, "lib")
 
@@ -151,6 +150,7 @@ class Phase324ExamplesSubmoduleOnnxRuntimeParityTest < Minitest::Test
       env = unbundled_env(
         "MLX_BENCHMARK" => "1",
         "MLX_BENCHMARK_DEVICE" => "cpu",
+        "MLX_BENCHMARK_DRYRUN" => "1",
         "MLX_EXAMPLES_SUBMODULE_ROOT" => @submodule_root,
         "MLX_EXAMPLES_ONNX_CAPTURE_FILE" => capture.path
       )
@@ -162,7 +162,6 @@ class Phase324ExamplesSubmoduleOnnxRuntimeParityTest < Minitest::Test
         @force_cpu,
         "-r",
         @capture_hook,
-        @run_with_dryrun,
         spec.fetch("ruby_script")
       ]
 

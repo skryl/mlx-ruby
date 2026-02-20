@@ -22,6 +22,7 @@ module ExamplesModelsOnnxCaptureHook
     return unless defined?(BenchmarkParity)
 
     install_eval_hook!
+    install_capture_finalizer!
 
     singleton = BenchmarkParity.singleton_class
     unless singleton.method_defined?(:__examples_onnx_original_validate!)
@@ -62,6 +63,33 @@ module ExamplesModelsOnnxCaptureHook
     end
 
     @installed = true
+  end
+
+  def install_capture_finalizer!
+    return if @capture_finalizer_installed
+
+    at_exit do
+      begin
+        ExamplesModelsOnnxCaptureHook.finalize_capture_file!
+      rescue StandardError
+        nil
+      end
+    end
+    @capture_finalizer_installed = true
+  end
+
+  def finalize_capture_file!
+    return unless capture_enabled?
+
+    capture_file = ENV["MLX_EXAMPLES_ONNX_CAPTURE_FILE"].to_s
+    return if capture_file.empty?
+    return if File.exist?(capture_file) && !File.zero?(capture_file)
+
+    payload = build_capture(nil)
+    File.write(capture_file, JSON.generate(payload))
+  rescue StandardError => e
+    error_payload = { "error" => "#{e.class}: #{e.message}" }
+    File.write(capture_file, JSON.generate(error_payload)) unless capture_file.empty?
   end
 
   def install_eval_hook!
