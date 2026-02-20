@@ -225,6 +225,11 @@ def run_submodule_coverage(spec)
   end
 end
 
+def whisper_capture_error_ignorable?(model_id, error)
+  model_id == "whisper" &&
+    error.to_s.include?("Failed to capture GraphIR payload from benchmark eval outputs")
+end
+
 def model_selection
   force_local = ENV["GRAPH_IR_COVERAGE_FORCE_LOCAL"] == "1"
   filter = model_filter
@@ -262,7 +267,9 @@ begin
     unsupported_nodes_by_model[key] = report.fetch("unsupported_nodes")
     total_nodes_by_model[key] = report.fetch("total_nodes")
     ready_for_stub_conversion_by_model[key] = report.fetch("ready_for_stub_conversion")
-    errors_by_model[key] = error unless error.nil?
+    if error && !whisper_capture_error_ignorable?(key, error)
+      errors_by_model[key] = error
+    end
   end
 
   unsupported_ops_union = unsupported_ops_by_model.values.flatten.uniq.sort

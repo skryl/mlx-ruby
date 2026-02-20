@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "open3"
 require "tmpdir"
 require_relative "test_helper"
 
@@ -11,6 +12,7 @@ class Phase309ExportOnnxWebgpuHarnessParityTest < Minitest::Test
     require "mlx"
     @previous_device = MLX::Core.default_device
     MLX::Core.set_default_device(MLX::Core.cpu)
+    skip "python onnx module is required for phase309 tests" unless python_module_available?("onnx")
   end
 
   def teardown
@@ -56,6 +58,17 @@ class Phase309ExportOnnxWebgpuHarnessParityTest < Minitest::Test
   end
 
   private
+
+  def python_module_available?(name)
+    _out, _err, status = Open3.capture3(
+      "python3",
+      "-c",
+      "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('#{name}') else 1)"
+    )
+    status.success?
+  rescue StandardError
+    false
+  end
 
   def sample_payload
     {
