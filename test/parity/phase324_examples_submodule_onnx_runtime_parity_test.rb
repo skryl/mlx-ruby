@@ -90,7 +90,7 @@ class Phase324ExamplesSubmoduleOnnxRuntimeParityTest < Minitest::Test
       model_id = spec.fetch("id")
       capture = capture_onnx_fixture(spec)
       payload = capture.fetch("payload")
-      compatibility = MLX::GraphIR.webgpu_compatibility_report(payload)
+      compatibility = MLX::GraphIR.compatibility_report(payload)
       assert_equal 0, compatibility.fetch("unsupported_nodes"), "#{model_id} unsupported ops: #{compatibility.fetch('unsupported_ops').inspect}"
 
       output_map = run_exported_onnx(payload, capture.fetch("feeds"), model_id: model_id)

@@ -35,7 +35,7 @@ class Phase329GraphIrFileReadFallbackParityTest < Minitest::Test
       File.binwrite(path, JSON.generate(payload))
 
       with_stubbed_file_binread_einval(path) do
-        stub = MLX::GraphIR.to_onnx_stub(path, model_name: "phase329_graph_ir_fallback")
+        stub = MLX::GraphIR.graph_ir_to_onnx_payload(path, model_name: "phase329_graph_ir_fallback")
         assert_equal "onnx_stub_v1", stub.fetch("format")
         assert_equal "phase329_graph_ir_fallback", stub.fetch("graph").fetch("name")
       end

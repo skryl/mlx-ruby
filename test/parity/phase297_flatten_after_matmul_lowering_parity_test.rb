@@ -45,7 +45,7 @@ class Phase297FlattenAfterMatmulLoweringParityTest < Minitest::Test
     payload = matmul_flatten_payload
     assert_equal %w[Matmul Flatten], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     nodes = stub.fetch("graph").fetch("nodes")
     assert_equal %w[MatMul Reshape], nodes.map { |node| node.fetch("op_type") }
 

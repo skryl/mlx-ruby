@@ -37,7 +37,7 @@ MLX Ruby supports an end-to-end browser export path:
 1. Trace and export Graph IR via ``MLX::GraphIR.export_graph_ir_json``.
 2. Validate payload/schema via ``MLX::GraphIR.validate!``.
 3. Preflight for WebGPU/ONNX conversion via
-   ``MLX::GraphIR.webgpu_compatibility_report``.
+   ``MLX::GraphIR.compatibility_report``.
 4. Emit ONNX via ``MLX::GraphIR.onnx_json_to_onnx`` (or JSON stub via
    ``MLX::GraphIR.graph_ir_to_onnx_json``), or export ONNX directly from trace via
    ``MLX::GraphIR.export_onnx_json``.
@@ -46,7 +46,7 @@ MLX Ruby supports an end-to-end browser export path:
 6. Run browser smoke verification via
    ``MLX::GraphIR.smoke_test_onnx_webgpu_harness``.
 
-``MLX::GraphIR.webgpu_compatibility_report`` is the recommended conversion gate.
+``MLX::GraphIR.compatibility_report`` is the recommended conversion gate.
 If ``unsupported_nodes`` is non-zero, the payload is not ready for ONNX/WebGPU
 stub conversion.
 

@@ -83,7 +83,7 @@ def benchmark_payload(model_name)
 end
 
 def graph_report_from_payload(payload)
-  MLX::GraphIR.webgpu_compatibility_report(payload)
+  MLX::GraphIR.compatibility_report(payload)
 end
 
 def submodule_available?

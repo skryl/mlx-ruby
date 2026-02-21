@@ -123,7 +123,7 @@ Branch review for `main...HEAD` in `lib/mlx` and `ext/mlx` shows:
    - `lib/mlx/graph_ir/onnx/lowering/convolution.rb`
    - `lib/mlx/graph_ir/onnx/lowering/indexing.rb`
 2. Replace large case-driven lowering with table/registry dispatch by op family.
-3. Keep `MLX::GraphIR.to_onnx_stub` and `MLX::GraphIR.webgpu_compatibility_report` signatures unchanged.
+3. Keep `MLX::GraphIR.graph_ir_to_onnx_payload` and `MLX::GraphIR.compatibility_report` signatures unchanged.
 
 #### Exit Criteria
 

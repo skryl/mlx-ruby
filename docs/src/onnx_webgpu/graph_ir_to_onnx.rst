@@ -8,7 +8,7 @@ Ownership boundary
 
 Use ``MLX::GraphIR`` as the public API:
 
-- ``MLX::GraphIR.to_onnx_stub``
+- ``MLX::GraphIR.graph_ir_to_onnx_payload``
 - ``MLX::GraphIR.graph_ir_to_onnx_json``
 - ``MLX::GraphIR.export_onnx_json``
 - ``MLX::GraphIR.onnx_json_to_onnx``

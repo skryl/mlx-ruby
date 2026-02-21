@@ -34,7 +34,7 @@ class Phase284GraphIrSerializedSourcesParityTest < Minitest::Test
   end
 
   def test_graph_ir_to_onnx_stub_accepts_json_string_source
-    stub = MLX::GraphIR.to_onnx_stub(JSON.generate(exported_payload), model_name: "exp_add")
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(JSON.generate(exported_payload), model_name: "exp_add")
     assert_equal "onnx_stub_v1", stub.fetch("format")
     assert_equal %w[Exp Add], stub.fetch("graph").fetch("nodes").map { |node| node.fetch("op_type") }
   end

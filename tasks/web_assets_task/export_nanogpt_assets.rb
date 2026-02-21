@@ -69,7 +69,7 @@ module NanoGptWebAssets
       input_seed
     )
     payload = JSON.parse(payload_json)
-    report = MLX::GraphIR.webgpu_compatibility_report(payload)
+    report = MLX::GraphIR.compatibility_report(payload)
     unsupported_nodes = report.fetch("unsupported_nodes").to_i
     unless unsupported_nodes.zero?
       abort(

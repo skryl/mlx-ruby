@@ -80,7 +80,7 @@ class Phase314BenchmarkModelOnnxRuntimeParityTest < Minitest::Test
   private
 
   def assert_fixture_onnx_runtime_parity!(model_name, fixture)
-    compatibility = MLX::GraphIR.webgpu_compatibility_report(fixture.fetch(:payload))
+    compatibility = MLX::GraphIR.compatibility_report(fixture.fetch(:payload))
     assert_equal 0, compatibility.fetch("unsupported_nodes"), "unsupported ops: #{compatibility.fetch('unsupported_ops').inspect}"
 
     actual = run_exported_onnx(fixture.fetch(:payload), fixture.fetch(:feeds)).first

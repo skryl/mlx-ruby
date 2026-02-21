@@ -128,7 +128,7 @@ class ExamplesModelsBenchmarkAdapter
       spec = @specs_by_id.fetch(model_id)
       capture = capture_onnx_fixture(spec)
       payload = capture.fetch("payload")
-      compatibility = MLX::GraphIR.webgpu_compatibility_report(payload)
+      compatibility = MLX::GraphIR.compatibility_report(payload)
 
       if compatibility.fetch("unsupported_nodes").to_i > 0
         unsupported = compatibility.fetch("unsupported_ops")

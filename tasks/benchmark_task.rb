@@ -125,7 +125,7 @@ class BenchmarkTask
     raise "Unknown benchmark model: #{model_name}" unless available_models.include?(model_name)
 
     fixture = build_webgpu_fixture(model_name)
-    compatibility = MLX::GraphIR.webgpu_compatibility_report(fixture.fetch(:payload))
+    compatibility = MLX::GraphIR.compatibility_report(fixture.fetch(:payload))
     unless compatibility.fetch("unsupported_nodes").zero?
       unsupported = compatibility.fetch("unsupported_ops")
       raise "WebGPU export does not support #{model_name}: unsupported ops #{unsupported.inspect}"

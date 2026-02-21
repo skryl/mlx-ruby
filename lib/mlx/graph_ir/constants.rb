@@ -135,6 +135,5 @@ module MLX
       out[dtype] = rank
     end.freeze
     GRAPH_IR_NORMALIZATION_MAX_BYTES = 2_000_000_000
-    FILE_READ_CHUNK_BYTES = 8 * 1024 * 1024
   end
 end

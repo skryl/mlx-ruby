@@ -314,8 +314,8 @@ Architecture boundary:
 - Public API (`MLX::GraphIR`):
   - `export_graph_ir_json`
   - `validate!`
-  - `to_onnx_stub`
-  - `webgpu_compatibility_report`
+  - `graph_ir_to_onnx_payload`
+  - `compatibility_report`
   - `graph_ir_to_onnx_json`
   - `onnx_json_to_onnx`
   - `export_onnx_json`
@@ -332,8 +332,8 @@ End-to-end flow:
 
 1. Export Graph IR with `MLX::GraphIR.export_graph_ir_json`.
 2. Validate and gate conversion with `MLX::GraphIR.validate!` and
-   `MLX::GraphIR.webgpu_compatibility_report`.
-3. Generate JSON ONNX stubs with `MLX::GraphIR.to_onnx_stub` or
+   `MLX::GraphIR.compatibility_report`.
+3. Generate JSON ONNX stubs with `MLX::GraphIR.graph_ir_to_onnx_payload` or
    `MLX::GraphIR.graph_ir_to_onnx_json`.
 4. Export binary ONNX with `MLX::GraphIR.onnx_json_to_onnx`
    (`external_data` options are available for large models), and/or export

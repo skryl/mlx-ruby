@@ -19,7 +19,7 @@ class Phase289GraphIrWebgpuCompatReportParityTest < Minitest::Test
   end
 
   def test_webgpu_compatibility_report_for_supported_graph
-    report = MLX::GraphIR.webgpu_compatibility_report(exported_payload)
+    report = MLX::GraphIR.compatibility_report(exported_payload)
     assert_equal "webgpu_compat_report_v1", report.fetch("format")
     assert_equal 2, report.fetch("total_nodes")
     assert_equal 0, report.fetch("unsupported_nodes")
@@ -31,7 +31,7 @@ class Phase289GraphIrWebgpuCompatReportParityTest < Minitest::Test
     payload = exported_payload
     payload["nodes"][0]["op"] = "FutureCustomFusionOp"
 
-    report = MLX::GraphIR.webgpu_compatibility_report(payload)
+    report = MLX::GraphIR.compatibility_report(payload)
     assert_equal 1, report.fetch("unsupported_nodes")
     assert_equal ["FutureCustomFusionOp"], report.fetch("unsupported_ops")
     assert_equal false, report.fetch("ready_for_stub_conversion")

@@ -43,7 +43,7 @@ class Phase293ReshapeUnsqueezeLoweringParityTest < Minitest::Test
 
   def test_reshape_and_unsqueeze_use_shape_input_initializers
     payload = reshape_unsqueeze_payload
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     nodes = stub.fetch("graph").fetch("nodes")
 
     assert_equal %w[Reshape Unsqueeze], nodes.map { |node| node.fetch("op_type") }

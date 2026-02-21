@@ -17,6 +17,20 @@ module MLX
           native_graph_ir_to_onnx_json(graph_ir_json, opset: opset, model_name: model_name)
         end
 
+        def compatibility_report(payload_or_source)
+          report_json = compatibility_report_json(payload_or_source)
+          report = JSON.parse(report_json)
+          unless report.is_a?(Hash)
+            raise TypeError, "MLX::GraphIR::Native.graph_ir_compatibility_report_json must return JSON object"
+          end
+          report
+        end
+
+        def compatibility_report_json(payload_or_source)
+          graph_ir_json = graph_ir_json_from_payload(payload_or_source)
+          native_graph_ir_compatibility_report_json(graph_ir_json)
+        end
+
         def export_onnx_json(
           fun,
           *extras,
@@ -33,13 +47,7 @@ module MLX
             raise TypeError, "shapeless must be true or false"
           end
 
-          native = graph_ir_native_module
-          unless native.respond_to?(:export_onnx_json)
-            raise RuntimeError,
-                  "MLX::GraphIR::Native.export_onnx_json is unavailable; rebuild ext/mlx to a compatible native ABI"
-          end
-
-          onnx_json = native.export_onnx_json(fun, extras, trace_kwargs, shapeless, opset, model_name)
+          onnx_json = MLX::GraphIR::Native.export_onnx_json(fun, extras, trace_kwargs, shapeless, opset, model_name)
           unless onnx_json.is_a?(String)
             raise TypeError, "MLX::GraphIR::Native.export_onnx_json must return String JSON"
           end
@@ -105,13 +113,7 @@ module MLX
 
         def native_graph_ir_to_onnx_json(graph_ir_json, opset:, model_name:)
           MLX::Core.ensure_native!
-          native = graph_ir_native_module
-          unless native.respond_to?(:graph_ir_to_onnx_json)
-            raise RuntimeError,
-                  "MLX::GraphIR::Native.graph_ir_to_onnx_json is unavailable; rebuild ext/mlx to a compatible native ABI"
-          end
-
-          onnx_json = native.graph_ir_to_onnx_json(graph_ir_json, opset, model_name)
+          onnx_json = MLX::GraphIR::Native.graph_ir_to_onnx_json(graph_ir_json, opset, model_name)
           unless onnx_json.is_a?(String)
             raise TypeError, "MLX::GraphIR::Native.graph_ir_to_onnx_json must return String JSON"
           end
@@ -119,15 +121,15 @@ module MLX
         end
         private_class_method :native_graph_ir_to_onnx_json
 
-        def graph_ir_native_module
-          unless defined?(MLX::GraphIR::Native)
-            raise RuntimeError,
-                  "MLX::GraphIR::Native is unavailable; rebuild ext/mlx to a compatible native ABI"
+        def native_graph_ir_compatibility_report_json(graph_ir_json)
+          MLX::Core.ensure_native!
+          report_json = MLX::GraphIR::Native.graph_ir_compatibility_report_json(graph_ir_json)
+          unless report_json.is_a?(String)
+            raise TypeError, "MLX::GraphIR::Native.graph_ir_compatibility_report_json must return String JSON"
           end
-
-          MLX::GraphIR::Native
+          report_json
         end
-        private_class_method :graph_ir_native_module
+        private_class_method :native_graph_ir_compatibility_report_json
 
         def normalize_external_data_options(
           target:,

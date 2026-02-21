@@ -34,6 +34,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
   spec.extensions = ["ext/mlx/extconf.rb"]
   spec.add_development_dependency "rake"
+  spec.add_development_dependency "ostruct"
   spec.add_development_dependency "minitest"
   spec.add_development_dependency "benchmark"
 

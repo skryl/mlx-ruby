@@ -112,7 +112,7 @@ class Phase313ModelFixtureWebgpuBrowserParityTest < Minitest::Test
   end
 
   def assert_fixture_webgpu_parity!(fixture)
-    compatibility = MLX::GraphIR.webgpu_compatibility_report(fixture.fetch(:payload))
+    compatibility = MLX::GraphIR.compatibility_report(fixture.fetch(:payload))
     assert_equal 0, compatibility.fetch("unsupported_nodes"), "unsupported ops: #{compatibility.fetch('unsupported_ops').inspect}"
 
     Dir.mktmpdir do |dir|

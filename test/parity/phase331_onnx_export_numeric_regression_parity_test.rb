@@ -23,11 +23,11 @@ class Phase331OnnxExportNumericRegressionParityTest < Minitest::Test
   def test_arange_with_float_arguments_is_stub_compatible
     payload = arange_float_payload
 
-    report = MLX::GraphIR.webgpu_compatibility_report(payload)
+    report = MLX::GraphIR.compatibility_report(payload)
     assert_equal 0, report.fetch("unsupported_nodes")
     assert_equal [], report.fetch("unsupported_ops")
 
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     assert_equal [], stub.fetch("graph").fetch("nodes")
 
     initializer = initializer_by_name(stub, "range_out")
@@ -38,7 +38,7 @@ class Phase331OnnxExportNumericRegressionParityTest < Minitest::Test
 
   def test_export_onnx_normalizes_wrapped_int64_shape_values
     payload = wrapped_reshape_payload
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     reshape = stub.fetch("graph").fetch("nodes").find { |node| node.fetch("op_type") == "Reshape" }
     refute_nil reshape
 

@@ -64,7 +64,7 @@ class Phase299GatherLoweringParityTest < Minitest::Test
     gather_node = payload.fetch("nodes").find { |node| node.fetch("op") == "Gather" }
     assert_equal [[1], [2, 1]], gather_node.fetch("arguments")
 
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     onnx_gather = stub.fetch("graph").fetch("nodes").find { |node| node.fetch("op_type") == "Gather" }
     assert_equal({ "axis" => 1 }, onnx_gather.fetch("attributes"))
   end

@@ -65,7 +65,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     assert_equal [1], payload.fetch("nodes").first.fetch("arguments")
     assert_equal [2, 3], payload.fetch("outputs").first.fetch("shape")
 
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "GatherElements", onnx_node.fetch("op_type")
     assert_equal({ "axis" => 1 }, onnx_node.fetch("attributes"))
@@ -88,7 +88,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     gather_axis = payload.fetch("nodes").find { |node| node.fetch("op") == "GatherAxis" }
     assert_equal [1], gather_axis.fetch("arguments")
 
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     graph_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal "Expand", graph_nodes[-2].fetch("op_type")
     assert_equal "GatherElements", graph_nodes[-1].fetch("op_type")
@@ -113,7 +113,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     assert_equal [[0, 1], [1, 0], [0, 2]], payload.fetch("nodes").first.fetch("arguments")
     assert_equal [3, 4], payload.fetch("outputs").first.fetch("shape")
 
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Pad", onnx_node.fetch("op_type")
     assert_equal 3, onnx_node.fetch("inputs").length
@@ -146,7 +146,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     assert_equal [false], payload.fetch("nodes").last.fetch("arguments")
     assert_equal [2, 3], payload.fetch("outputs").first.fetch("shape")
 
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").last
     assert_equal "Equal", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -168,7 +168,7 @@ class Phase316MissingOpsPhase2LoweringParityTest < Minitest::Test
     assert_equal ["Floor"], payload.fetch("nodes").map { |node| node.fetch("op") }
     assert_equal [2, 3], payload.fetch("outputs").first.fetch("shape")
 
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Floor", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))

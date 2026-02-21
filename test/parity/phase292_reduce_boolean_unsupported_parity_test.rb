@@ -43,7 +43,7 @@ class Phase292ReduceBooleanLoweringParityTest < Minitest::Test
 
   def test_any_axis1_stub_uses_bool_reduce_decomposition
     payload = reduce_payload(1) { |x| MLX::Core.any(x, 1, false) }
-    stub = MLX::GraphIR.to_onnx_stub(payload)
+    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
     nodes = stub.fetch("graph").fetch("nodes")
 
     assert_equal %w[Cast Cast ReduceMax Cast Squeeze], nodes.map { |node| node.fetch("op_type") }

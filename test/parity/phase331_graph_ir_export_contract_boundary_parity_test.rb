@@ -16,15 +16,6 @@ class Phase331GraphIrExportContractBoundaryParityTest < Minitest::Test
     nodes
   ].freeze
 
-  NATIVE_CAPTURE_KEYS = %w[
-    shapeless
-    inputs
-    keyword_inputs
-    outputs
-    constants
-    nodes
-  ].freeze
-
   def setup
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
@@ -70,22 +61,20 @@ class Phase331GraphIrExportContractBoundaryParityTest < Minitest::Test
     assert_equal io_content, path_content
   end
 
-  def test_native_export_graph_ir_capture_returns_capture_sections_and_ruby_assembly_matches
+  def test_native_export_graph_ir_json_matches_public_export_payload
     fun = lambda do |x, y:|
       MLX::Core.add(MLX::Core.exp(x), y)
     end
     x = MLX::Core.array([1.0, 2.0], MLX::Core.float32)
     y = MLX::Core.array([3.0, 4.0], MLX::Core.float32)
 
-    capture = MLX::GraphIR::Native.export_graph_ir_capture(fun, x, y: y)
+    native_payload = JSON.parse(MLX::GraphIR::Native.export_graph_ir_json(fun, x, y: y))
     exported = export_payload(fun, x, y: y)
 
-    assert_equal NATIVE_CAPTURE_KEYS, capture.keys
-    assert_equal false, capture.fetch("shapeless")
-    refute capture.key?("ir_version")
-
-    assembled = MLX::GraphIR.assemble_export_payload(capture)
-    assert_equal assembled, exported
+    assert_equal exported, native_payload
+    assert_equal REQUIRED_TOP_LEVEL_KEYS, native_payload.keys
+    assert_equal false, native_payload.fetch("shapeless")
+    assert_equal 1, native_payload.fetch("ir_version")
   end
 
   def test_export_graph_ir_tensor_info_and_keyword_entry_shapes

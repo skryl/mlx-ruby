@@ -21,7 +21,7 @@ Minimal script example
    onnx_json = MLX::GraphIR.graph_ir_to_onnx_json(payload, model_name: "minimal_add")
 
    MLX::GraphIR.validate!(payload)
-   report = MLX::GraphIR.webgpu_compatibility_report(payload)
+   report = MLX::GraphIR.compatibility_report(payload)
    abort("unsupported ops: #{report.fetch('unsupported_ops').inspect}") unless report.fetch("unsupported_nodes").zero?
 
    MLX::GraphIR.onnx_json_to_onnx("artifacts/model.onnx", onnx_json)

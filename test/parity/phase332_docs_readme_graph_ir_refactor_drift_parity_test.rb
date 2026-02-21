@@ -26,8 +26,8 @@ class Phase332DocsReadmeGraphIrRefactorDriftParityTest < Minitest::Test
   REQUIRED_PUBLIC_FLOW_TERMS = [
     "MLX::GraphIR.export_graph_ir_json",
     "MLX::GraphIR.validate!",
-    "MLX::GraphIR.webgpu_compatibility_report",
-    "MLX::GraphIR.to_onnx_stub",
+    "MLX::GraphIR.compatibility_report",
+    "MLX::GraphIR.graph_ir_to_onnx_payload",
     "MLX::GraphIR.graph_ir_to_onnx_json",
     "MLX::GraphIR.export_onnx_json",
     "MLX::GraphIR.onnx_json_to_onnx",

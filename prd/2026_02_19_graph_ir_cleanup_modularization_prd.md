@@ -93,7 +93,7 @@ A review of `main...HEAD` identified two correctness risks and several maintaina
 
 #### Red
 
-1. Add smoke tests asserting stable `validate!`, `to_onnx_stub`, and `webgpu_compatibility_report` behavior before code movement.
+1. Add smoke tests asserting stable `validate!`, `graph_ir_to_onnx_payload`, and `compatibility_report` behavior before code movement.
 2. Add load tests for each extracted module file.
 
 #### Green

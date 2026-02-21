@@ -8,7 +8,7 @@ Ownership boundary
 ------------------
 
 - Public API: ``MLX::GraphIR.validate!`` and
-  ``MLX::GraphIR.webgpu_compatibility_report``.
+  ``MLX::GraphIR.compatibility_report``.
 - Implementation ownership: ``MLX::GraphIR`` validation + ONNX compatibility
   resolver/lowering modules.
 
@@ -26,12 +26,12 @@ invalid.
 WebGPU/ONNX preflight
 ---------------------
 
-``MLX::GraphIR.webgpu_compatibility_report`` summarizes conversion
+``MLX::GraphIR.compatibility_report`` summarizes conversion
 readiness and unsupported operations.
 
 .. code-block:: ruby
 
-   report = MLX::GraphIR.webgpu_compatibility_report(payload)
+   report = MLX::GraphIR.compatibility_report(payload)
 
    puts "format=#{report.fetch('format')}" # => "webgpu_compat_report_v1"
    puts "total_nodes=#{report.fetch('total_nodes')}"

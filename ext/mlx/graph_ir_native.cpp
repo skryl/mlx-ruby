@@ -1,7 +1,5 @@
 #include "graph_ir_native.hpp"
 
-#include <ruby.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -20,6 +18,10 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+#ifdef snprintf
+#undef snprintf
+#endif
 
 #include <nlohmann/json.hpp>
 
@@ -544,19 +546,6 @@ static OrderedJson capture_json_state_values_from_mx_states(const std::vector<mx
     out.push_back(capture_json_state_value_from_mx_state(value));
   }
   return out;
-}
-
-VALUE core_native_export_graph_ir(int argc, VALUE* argv, VALUE) {
-  try {
-    VALUE json = core_native_export_graph_ir_json(argc, argv, Qnil);
-    rb_require("json");
-    VALUE json_module = rb_const_get(rb_cObject, rb_intern("JSON"));
-    VALUE parse_argv[] = {json};
-    return rb_funcallv(json_module, rb_intern("parse"), 1, parse_argv);
-  } catch (const std::exception& error) {
-    rb_raise(rb_eRuntimeError, "%s", error.what());
-    return Qnil;
-  }
 }
 
 VALUE core_native_export_graph_ir_json(int argc, VALUE* argv, VALUE) {
@@ -3946,28 +3935,132 @@ static OrderedJson graph_ir_to_onnx_json_payload(
   return out;
 }
 
-static VALUE graph_ir_to_onnx_json_from_graph_ir_json(VALUE graph_ir_json, VALUE opset, VALUE model_name) {
+static OrderedJson parse_graph_ir_json_payload(VALUE graph_ir_json) {
   VALUE graph_ir_json_str = StringValue(graph_ir_json);
-
-  const auto opset_int = normalize_positive_integer(opset, "opset");
-  const auto model_name_str = non_empty_model_name(model_name);
-
   const std::string payload_raw(
       RSTRING_PTR(graph_ir_json_str),
       static_cast<size_t>(RSTRING_LEN(graph_ir_json_str)));
 
-  OrderedJson payload;
   try {
-    payload = OrderedJson::parse(payload_raw);
+    return OrderedJson::parse(payload_raw);
   } catch (const std::exception& error) {
     std::ostringstream out;
     out << "failed to parse graph ir json: " << error.what();
     throw std::invalid_argument(out.str());
   }
+}
+
+static OrderedJson graph_ir_compatibility_report_payload(const OrderedJson& payload) {
+  OrderedJson probe_initializers = OrderedJson::array();
+  auto probe_used_tensor_names = collect_payload_tensor_names(payload);
+  auto probe_known_shapes = collect_known_tensor_shapes(payload);
+  auto probe_known_dtypes = collect_known_tensor_dtypes(payload);
+
+  OrderedJson node_support = OrderedJson::array();
+  size_t unsupported_nodes = 0;
+  std::set<std::string> unsupported_ops;
+
+  const auto& source_nodes = payload.at("nodes");
+  for (size_t index = 0; index < source_nodes.size(); ++index) {
+    const auto& node = source_nodes.at(index);
+    const auto op = node.at("op").get<std::string>();
+
+    bool supported = false;
+    std::optional<std::string> mapped;
+
+    try {
+      auto trial_initializers = probe_initializers;
+      auto trial_used_tensor_names = probe_used_tensor_names;
+      auto trial_known_shapes = probe_known_shapes;
+      auto trial_known_dtypes = probe_known_dtypes;
+
+      auto lowered = lower_onnx_node_default(
+          node,
+          index,
+          trial_initializers,
+          trial_used_tensor_names,
+          trial_known_shapes,
+          trial_known_dtypes);
+      if (!lowered.empty() && lowered.front().contains("op_type") && lowered.front().at("op_type").is_string()) {
+        mapped = lowered.front().at("op_type").get<std::string>();
+      } else {
+        mapped = onnx_op_type_for_node(node, false, &trial_known_shapes);
+      }
+
+      probe_initializers = std::move(trial_initializers);
+      probe_used_tensor_names = std::move(trial_used_tensor_names);
+      probe_known_shapes = std::move(trial_known_shapes);
+      probe_known_dtypes = std::move(trial_known_dtypes);
+      supported = true;
+    } catch (const std::exception&) {
+      try {
+        mapped = onnx_op_type_for_node(node, false, &probe_known_shapes);
+      } catch (const std::exception&) {
+        mapped = std::nullopt;
+      }
+    }
+
+    OrderedJson entry = OrderedJson::object();
+    entry["index"] = index;
+    entry["op"] = op;
+    entry["supported"] = supported;
+    if (mapped.has_value()) {
+      entry["onnx_op_type"] = mapped.value();
+    } else {
+      entry["onnx_op_type"] = nullptr;
+    }
+    node_support.push_back(std::move(entry));
+
+    if (!supported) {
+      ++unsupported_nodes;
+      unsupported_ops.insert(op);
+    }
+  }
+
+  int64_t ir_version = kGraphIrVersion;
+  if (payload.contains("ir_version")) {
+    const auto& value = payload.at("ir_version");
+    if (value.is_number_integer()) {
+      ir_version = value.get<int64_t>();
+    } else if (value.is_number_unsigned()) {
+      const auto raw = value.get<uint64_t>();
+      if (raw <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        ir_version = static_cast<int64_t>(raw);
+      }
+    }
+  }
+
+  OrderedJson unsupported_ops_json = OrderedJson::array();
+  for (const auto& op : unsupported_ops) {
+    unsupported_ops_json.push_back(op);
+  }
+
+  OrderedJson report = OrderedJson::object();
+  report["format"] = "webgpu_compat_report_v1";
+  report["ir_version"] = ir_version;
+  report["total_nodes"] = source_nodes.size();
+  report["supported_nodes"] = source_nodes.size() - unsupported_nodes;
+  report["unsupported_nodes"] = unsupported_nodes;
+  report["unsupported_ops"] = std::move(unsupported_ops_json);
+  report["ready_for_stub_conversion"] = unsupported_nodes == 0;
+  report["nodes"] = std::move(node_support);
+  return report;
+}
+
+static VALUE graph_ir_to_onnx_json_from_graph_ir_json(VALUE graph_ir_json, VALUE opset, VALUE model_name) {
+  const auto opset_int = normalize_positive_integer(opset, "opset");
+  const auto model_name_str = non_empty_model_name(model_name);
+  const auto payload = parse_graph_ir_json_payload(graph_ir_json);
 
   const auto onnx_payload = graph_ir_to_onnx_json_payload(payload, opset_int, model_name_str);
   const auto content = onnx_payload.dump();
   return ruby_string_from_std(content);
+}
+
+static VALUE graph_ir_compatibility_report_json_from_graph_ir_json(VALUE graph_ir_json) {
+  const auto payload = parse_graph_ir_json_payload(graph_ir_json);
+  const auto report = graph_ir_compatibility_report_payload(payload);
+  return ruby_string_from_std(report.dump());
 }
 
 static VALUE graph_ir_native_graph_ir_to_onnx_json(
@@ -4026,14 +4119,21 @@ static VALUE graph_ir_native_export_onnx_json(
   }
 }
 
+static VALUE graph_ir_native_graph_ir_compatibility_report_json(VALUE, VALUE graph_ir_json) {
+  try {
+    return graph_ir_compatibility_report_json_from_graph_ir_json(graph_ir_json);
+  } catch (const std::exception& error) {
+    rb_raise(rb_eRuntimeError, "%s", error.what());
+    return Qnil;
+  }
+}
+
 } // namespace
 
 extern "C" void init_graph_ir_native_bindings(VALUE mMLX) {
   mGraphIR = rb_define_module_under(mMLX, "GraphIR");
   mGraphIRNative = rb_define_module_under(mGraphIR, "Native");
 
-  rb_define_singleton_method(
-      mGraphIRNative, "export_graph_ir_capture", RUBY_METHOD_FUNC(core_native_export_graph_ir), -1);
   rb_define_singleton_method(
       mGraphIRNative, "export_graph_ir_json", RUBY_METHOD_FUNC(core_native_export_graph_ir_json), -1);
   rb_define_singleton_method(
@@ -4046,4 +4146,9 @@ extern "C" void init_graph_ir_native_bindings(VALUE mMLX) {
       "export_onnx_json",
       RUBY_METHOD_FUNC(graph_ir_native_export_onnx_json),
       6);
+  rb_define_singleton_method(
+      mGraphIRNative,
+      "graph_ir_compatibility_report_json",
+      RUBY_METHOD_FUNC(graph_ir_native_graph_ir_compatibility_report_json),
+      1);
 }
