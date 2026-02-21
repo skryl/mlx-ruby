@@ -18,9 +18,15 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+
+#include "mlx/export.h"
+#include "mlx/ops.h"
+
+namespace mx = mlx::core;
 
 using OrderedJson = nlohmann::ordered_json;
 
@@ -135,6 +141,563 @@ static const std::unordered_map<std::string, int> kDtypePromotionRank = {
     {"float32", 11},
     {"float64", 12},
 };
+
+using GraphTensorInfo = std::tuple<std::string, mx::Shape, mx::Dtype>;
+
+struct GraphIrExportInvocation {
+  VALUE fun;
+  mx::Args args;
+  mx::Kwargs kwargs;
+  bool shapeless;
+};
+
+static std::string dtype_to_string(mx::Dtype dtype) {
+  std::ostringstream out;
+  out << dtype;
+  return out.str();
+}
+
+static void ruby_hash_set_cstr(VALUE hash, const char* key, VALUE value) {
+  rb_hash_aset(hash, rb_str_new_cstr(key), value);
+}
+
+static GraphIrExportInvocation parse_graph_ir_export_invocation(
+    int argc,
+    VALUE* argv,
+    const char* method_name) {
+  if (argc < 1) {
+    rb_raise(rb_eArgError, "%s expects at least callable", method_name);
+  }
+  VALUE fun = argv[0];
+
+  bool shapeless = false;
+  int end = argc;
+  if (argc > 1 && (argv[argc - 1] == Qtrue || argv[argc - 1] == Qfalse)) {
+    shapeless = RTEST(argv[argc - 1]);
+    end -= 1;
+  }
+
+  std::vector<VALUE> extras;
+  extras.reserve(static_cast<size_t>(std::max(0, end - 1)));
+  for (int i = 1; i < end; ++i) {
+    extras.push_back(argv[i]);
+  }
+
+  VALUE kwargs_hash = Qnil;
+  if (!extras.empty() && RB_TYPE_P(extras.back(), T_HASH)) {
+    kwargs_hash = extras.back();
+    extras.pop_back();
+  }
+
+  mx::Args args;
+  if (extras.size() == 1) {
+    VALUE item = extras[0];
+    if (RB_TYPE_P(item, T_ARRAY)) {
+      args = graph_ir_array_vector_from_ruby(item);
+    } else {
+      args.push_back(graph_ir_array_from_ruby(item));
+    }
+  } else {
+    args.reserve(extras.size());
+    for (VALUE item : extras) {
+      args.push_back(graph_ir_array_from_ruby(item));
+    }
+  }
+
+  mx::Kwargs kwargs = NIL_P(kwargs_hash) ? mx::Kwargs{} : graph_ir_array_map_from_ruby_hash(kwargs_hash);
+  if (args.empty() && kwargs.empty()) {
+    rb_raise(
+        rb_eArgError,
+        "[%s] Inputs must include at least one positional or keyword array",
+        method_name);
+  }
+
+  GraphIrExportInvocation invocation;
+  invocation.fun = fun;
+  invocation.args = std::move(args);
+  invocation.kwargs = std::move(kwargs);
+  invocation.shapeless = shapeless;
+  return invocation;
+}
+
+template <typename ValueAt>
+static OrderedJson capture_build_nested_json_array(
+    const mx::Shape& shape,
+    size_t dim,
+    size_t& flat_index,
+    ValueAt value_at) {
+  if (dim == shape.size()) {
+    return value_at(flat_index++);
+  }
+
+  OrderedJson out = OrderedJson::array();
+  for (size_t i = 0; i < shape[dim]; ++i) {
+    out.push_back(capture_build_nested_json_array(shape, dim + 1, flat_index, value_at));
+  }
+  return out;
+}
+
+template <typename ValueAt>
+static OrderedJson capture_build_flat_json_array(size_t size, ValueAt value_at) {
+  OrderedJson out = OrderedJson::array();
+  for (size_t i = 0; i < size; ++i) {
+    out.push_back(value_at(i));
+  }
+  return out;
+}
+
+static OrderedJson capture_json_shape_from_mx_shape(const mx::Shape& shape) {
+  OrderedJson out = OrderedJson::array();
+  for (size_t dim : shape) {
+    out.push_back(dim);
+  }
+  return out;
+}
+
+static OrderedJson capture_json_scalar_from_array(const mx::array& array) {
+  switch (array.dtype()) {
+    case mx::bool_:
+      return OrderedJson(array.item<bool>());
+    case mx::uint8:
+      return OrderedJson(array.item<uint8_t>());
+    case mx::uint16:
+      return OrderedJson(array.item<uint16_t>());
+    case mx::uint32:
+      return OrderedJson(array.item<uint32_t>());
+    case mx::uint64:
+      return OrderedJson(array.item<uint64_t>());
+    case mx::int8:
+      return OrderedJson(array.item<int8_t>());
+    case mx::int16:
+      return OrderedJson(array.item<int16_t>());
+    case mx::int32:
+      return OrderedJson(array.item<int32_t>());
+    case mx::int64:
+      return OrderedJson(array.item<int64_t>());
+    case mx::float16:
+      return OrderedJson(static_cast<double>(array.item<mx::float16_t>()));
+    case mx::bfloat16:
+      return OrderedJson(static_cast<double>(array.item<mx::bfloat16_t>()));
+    case mx::float32:
+      return OrderedJson(static_cast<double>(array.item<float>()));
+    case mx::float64:
+      return OrderedJson(array.item<double>());
+    default:
+      throw std::runtime_error("unsupported dtype for graph ir constant conversion");
+  }
+}
+
+static OrderedJson capture_json_values_from_array(const mx::array& source) {
+  mx::array array = source;
+  if (array.ndim() == 0) {
+    array.eval();
+    return capture_json_scalar_from_array(array);
+  }
+
+  if (array.ndim() == 1) {
+    array.eval();
+    const size_t size = array.size();
+    switch (array.dtype()) {
+      case mx::bool_: {
+        const bool* data = array.data<bool>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      case mx::uint8: {
+        const uint8_t* data = array.data<uint8_t>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      case mx::uint16: {
+        const uint16_t* data = array.data<uint16_t>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      case mx::uint32: {
+        const uint32_t* data = array.data<uint32_t>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      case mx::uint64: {
+        const uint64_t* data = array.data<uint64_t>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      case mx::int8: {
+        const int8_t* data = array.data<int8_t>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      case mx::int16: {
+        const int16_t* data = array.data<int16_t>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      case mx::int32: {
+        const int32_t* data = array.data<int32_t>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      case mx::int64: {
+        const int64_t* data = array.data<int64_t>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      case mx::float16: {
+        const mx::float16_t* data = array.data<mx::float16_t>();
+        return capture_build_flat_json_array(
+            size,
+            [&](size_t i) { return OrderedJson(static_cast<double>(data[i])); });
+      }
+      case mx::bfloat16: {
+        const mx::bfloat16_t* data = array.data<mx::bfloat16_t>();
+        return capture_build_flat_json_array(
+            size,
+            [&](size_t i) { return OrderedJson(static_cast<double>(data[i])); });
+      }
+      case mx::float32: {
+        const float* data = array.data<float>();
+        return capture_build_flat_json_array(
+            size,
+            [&](size_t i) { return OrderedJson(static_cast<double>(data[i])); });
+      }
+      case mx::float64: {
+        const double* data = array.data<double>();
+        return capture_build_flat_json_array(size, [&](size_t i) { return OrderedJson(data[i]); });
+      }
+      default:
+        throw std::runtime_error("unsupported dtype for graph ir constant conversion");
+    }
+  }
+
+  const mx::Shape shape = array.shape();
+  mx::array flat = mx::reshape(array, mx::Shape{static_cast<mx::ShapeElem>(array.size())});
+  flat.eval();
+
+  size_t idx = 0;
+  switch (flat.dtype()) {
+    case mx::bool_: {
+      const bool* data = flat.data<bool>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    case mx::uint8: {
+      const uint8_t* data = flat.data<uint8_t>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    case mx::uint16: {
+      const uint16_t* data = flat.data<uint16_t>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    case mx::uint32: {
+      const uint32_t* data = flat.data<uint32_t>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    case mx::uint64: {
+      const uint64_t* data = flat.data<uint64_t>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    case mx::int8: {
+      const int8_t* data = flat.data<int8_t>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    case mx::int16: {
+      const int16_t* data = flat.data<int16_t>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    case mx::int32: {
+      const int32_t* data = flat.data<int32_t>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    case mx::int64: {
+      const int64_t* data = flat.data<int64_t>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    case mx::float16: {
+      const mx::float16_t* data = flat.data<mx::float16_t>();
+      return capture_build_nested_json_array(
+          shape,
+          0,
+          idx,
+          [&](size_t i) { return OrderedJson(static_cast<double>(data[i])); });
+    }
+    case mx::bfloat16: {
+      const mx::bfloat16_t* data = flat.data<mx::bfloat16_t>();
+      return capture_build_nested_json_array(
+          shape,
+          0,
+          idx,
+          [&](size_t i) { return OrderedJson(static_cast<double>(data[i])); });
+    }
+    case mx::float32: {
+      const float* data = flat.data<float>();
+      return capture_build_nested_json_array(
+          shape,
+          0,
+          idx,
+          [&](size_t i) { return OrderedJson(static_cast<double>(data[i])); });
+    }
+    case mx::float64: {
+      const double* data = flat.data<double>();
+      return capture_build_nested_json_array(shape, 0, idx, [&](size_t i) { return OrderedJson(data[i]); });
+    }
+    default:
+      throw std::runtime_error("unsupported dtype for graph ir constant conversion");
+  }
+}
+
+static OrderedJson capture_json_tensor_info_from_graph_tensor(const GraphTensorInfo& info) {
+  OrderedJson out = OrderedJson::object();
+  out["name"] = std::get<0>(info);
+  out["shape"] = capture_json_shape_from_mx_shape(std::get<1>(info));
+  out["dtype"] = dtype_to_string(std::get<2>(info));
+  return out;
+}
+
+static OrderedJson capture_json_tensor_infos_from_graph_tensors(const std::vector<GraphTensorInfo>& infos) {
+  OrderedJson out = OrderedJson::array();
+  for (const auto& info : infos) {
+    out.push_back(capture_json_tensor_info_from_graph_tensor(info));
+  }
+  return out;
+}
+
+static OrderedJson capture_json_tensor_names_from_graph_tensors(const std::vector<GraphTensorInfo>& infos) {
+  OrderedJson out = OrderedJson::array();
+  for (const auto& info : infos) {
+    out.push_back(std::get<0>(info));
+  }
+  return out;
+}
+
+static OrderedJson capture_json_state_value_from_mx_state(const mx::StateT& value) {
+  if (std::holds_alternative<bool>(value)) {
+    return OrderedJson(std::get<bool>(value));
+  }
+  if (std::holds_alternative<int>(value)) {
+    return OrderedJson(std::get<int>(value));
+  }
+  if (std::holds_alternative<size_t>(value)) {
+    return OrderedJson(std::get<size_t>(value));
+  }
+  if (std::holds_alternative<float>(value)) {
+    return OrderedJson(static_cast<double>(std::get<float>(value)));
+  }
+  if (std::holds_alternative<double>(value)) {
+    return OrderedJson(std::get<double>(value));
+  }
+  if (std::holds_alternative<mx::Dtype>(value)) {
+    return OrderedJson(dtype_to_string(std::get<mx::Dtype>(value)));
+  }
+  if (std::holds_alternative<mx::Shape>(value)) {
+    return capture_json_shape_from_mx_shape(std::get<mx::Shape>(value));
+  }
+  if (std::holds_alternative<mx::Strides>(value)) {
+    OrderedJson out = OrderedJson::array();
+    const auto& strides = std::get<mx::Strides>(value);
+    for (auto stride : strides) {
+      out.push_back(static_cast<long long>(stride));
+    }
+    return out;
+  }
+  if (std::holds_alternative<std::vector<int>>(value)) {
+    OrderedJson out = OrderedJson::array();
+    const auto& values = std::get<std::vector<int>>(value);
+    for (int item : values) {
+      out.push_back(item);
+    }
+    return out;
+  }
+  if (std::holds_alternative<std::vector<size_t>>(value)) {
+    OrderedJson out = OrderedJson::array();
+    const auto& values = std::get<std::vector<size_t>>(value);
+    for (size_t item : values) {
+      out.push_back(item);
+    }
+    return out;
+  }
+  if (std::holds_alternative<std::vector<std::tuple<bool, bool, bool>>>(value)) {
+    OrderedJson out = OrderedJson::array();
+    const auto& tuples = std::get<std::vector<std::tuple<bool, bool, bool>>>(value);
+    for (const auto& item : tuples) {
+      out.push_back(OrderedJson::array({std::get<0>(item), std::get<1>(item), std::get<2>(item)}));
+    }
+    return out;
+  }
+  if (std::holds_alternative<std::vector<std::variant<bool, int, float>>>(value)) {
+    OrderedJson out = OrderedJson::array();
+    const auto& vars = std::get<std::vector<std::variant<bool, int, float>>>(value);
+    for (const auto& item : vars) {
+      if (std::holds_alternative<bool>(item)) {
+        out.push_back(std::get<bool>(item));
+      } else if (std::holds_alternative<int>(item)) {
+        out.push_back(std::get<int>(item));
+      } else {
+        out.push_back(static_cast<double>(std::get<float>(item)));
+      }
+    }
+    return out;
+  }
+  if (std::holds_alternative<std::optional<float>>(value)) {
+    const auto& opt = std::get<std::optional<float>>(value);
+    if (!opt.has_value()) {
+      return nullptr;
+    }
+    return OrderedJson(static_cast<double>(opt.value()));
+  }
+  return OrderedJson(std::get<std::string>(value));
+}
+
+static OrderedJson capture_json_state_values_from_mx_states(const std::vector<mx::StateT>& values) {
+  OrderedJson out = OrderedJson::array();
+  for (const auto& value : values) {
+    out.push_back(capture_json_state_value_from_mx_state(value));
+  }
+  return out;
+}
+
+VALUE core_native_export_graph_ir(int argc, VALUE* argv, VALUE) {
+  try {
+    VALUE json = core_native_export_graph_ir_json(argc, argv, Qnil);
+    rb_require("json");
+    VALUE json_module = rb_const_get(rb_cObject, rb_intern("JSON"));
+    VALUE parse_argv[] = {json};
+    return rb_funcallv(json_module, rb_intern("parse"), 1, parse_argv);
+  } catch (const std::exception& error) {
+    rb_raise(rb_eRuntimeError, "%s", error.what());
+    return Qnil;
+  }
+}
+
+VALUE core_native_export_graph_ir_json(int argc, VALUE* argv, VALUE) {
+  try {
+    auto invocation = parse_graph_ir_export_invocation(argc, argv, "native_export_graph_ir_json");
+
+    OrderedJson graph_inputs = OrderedJson::array();
+    OrderedJson keyword_inputs = OrderedJson::array();
+    OrderedJson graph_outputs = OrderedJson::array();
+    OrderedJson graph_constants = OrderedJson::array();
+    OrderedJson graph_nodes = OrderedJson::array();
+
+    mx::export_function(
+        [&graph_inputs, &keyword_inputs, &graph_outputs, &graph_constants, &graph_nodes](
+            const mx::ExportCallbackInput& data) {
+          auto type_it = data.find("type");
+          if (type_it == data.end() || !std::holds_alternative<std::string>(type_it->second)) {
+            return;
+          }
+          const auto& record_type = std::get<std::string>(type_it->second);
+
+          if (record_type == "inputs") {
+            auto inputs_it = data.find("inputs");
+            if (inputs_it != data.end() &&
+                std::holds_alternative<std::vector<GraphTensorInfo>>(inputs_it->second)) {
+              graph_inputs = capture_json_tensor_infos_from_graph_tensors(
+                  std::get<std::vector<GraphTensorInfo>>(inputs_it->second));
+            }
+            return;
+          }
+
+          if (record_type == "keyword_inputs") {
+            auto keywords_it = data.find("keywords");
+            if (keywords_it != data.end() &&
+                std::holds_alternative<std::vector<std::pair<std::string, std::string>>>(
+                    keywords_it->second)) {
+              keyword_inputs = OrderedJson::array();
+              const auto& keywords =
+                  std::get<std::vector<std::pair<std::string, std::string>>>(keywords_it->second);
+              for (const auto& [name, tensor] : keywords) {
+                OrderedJson entry = OrderedJson::object();
+                entry["name"] = name;
+                entry["tensor"] = tensor;
+                keyword_inputs.push_back(std::move(entry));
+              }
+            }
+            return;
+          }
+
+          if (record_type == "outputs") {
+            auto outputs_it = data.find("outputs");
+            if (outputs_it != data.end() &&
+                std::holds_alternative<std::vector<GraphTensorInfo>>(outputs_it->second)) {
+              graph_outputs = capture_json_tensor_infos_from_graph_tensors(
+                  std::get<std::vector<GraphTensorInfo>>(outputs_it->second));
+            }
+            return;
+          }
+
+          if (record_type == "constants") {
+            auto constants_it = data.find("constants");
+            if (constants_it != data.end() &&
+                std::holds_alternative<std::vector<std::pair<std::string, mx::array>>>(
+                    constants_it->second)) {
+              graph_constants = OrderedJson::array();
+              const auto& constants =
+                  std::get<std::vector<std::pair<std::string, mx::array>>>(constants_it->second);
+              for (const auto& [name, arr] : constants) {
+                OrderedJson entry = OrderedJson::object();
+                entry["name"] = name;
+                entry["shape"] = capture_json_shape_from_mx_shape(arr.shape());
+                entry["dtype"] = dtype_to_string(arr.dtype());
+                entry["values"] = capture_json_values_from_array(arr);
+                graph_constants.push_back(std::move(entry));
+              }
+            }
+            return;
+          }
+
+          if (record_type != "primitive") {
+            return;
+          }
+
+          auto name_it = data.find("name");
+          if (name_it == data.end() || !std::holds_alternative<std::string>(name_it->second)) {
+            return;
+          }
+
+          OrderedJson node = OrderedJson::object();
+          node["op"] = std::get<std::string>(name_it->second);
+
+          OrderedJson node_inputs = OrderedJson::array();
+          auto inputs_it = data.find("inputs");
+          if (inputs_it != data.end() &&
+              std::holds_alternative<std::vector<GraphTensorInfo>>(inputs_it->second)) {
+            node_inputs = capture_json_tensor_names_from_graph_tensors(
+                std::get<std::vector<GraphTensorInfo>>(inputs_it->second));
+          }
+          node["inputs"] = std::move(node_inputs);
+
+          OrderedJson node_outputs = OrderedJson::array();
+          auto outputs_it = data.find("outputs");
+          if (outputs_it != data.end() &&
+              std::holds_alternative<std::vector<GraphTensorInfo>>(outputs_it->second)) {
+            node_outputs = capture_json_tensor_names_from_graph_tensors(
+                std::get<std::vector<GraphTensorInfo>>(outputs_it->second));
+          }
+          node["outputs"] = std::move(node_outputs);
+
+          OrderedJson node_arguments = OrderedJson::array();
+          auto arguments_it = data.find("arguments");
+          if (arguments_it != data.end() &&
+              std::holds_alternative<std::vector<mx::StateT>>(arguments_it->second)) {
+            node_arguments = capture_json_state_values_from_mx_states(
+                std::get<std::vector<mx::StateT>>(arguments_it->second));
+          }
+          node["arguments"] = std::move(node_arguments);
+
+          graph_nodes.push_back(std::move(node));
+        },
+        graph_ir_args_kwargs_function_from_callable(invocation.fun),
+        invocation.args,
+        invocation.kwargs,
+        invocation.shapeless);
+
+    OrderedJson payload = OrderedJson::object();
+    payload["ir_version"] = 1;
+    payload["shapeless"] = invocation.shapeless;
+    payload["inputs"] = std::move(graph_inputs);
+    payload["keyword_inputs"] = std::move(keyword_inputs);
+    payload["outputs"] = std::move(graph_outputs);
+    payload["constants"] = std::move(graph_constants);
+    payload["nodes"] = std::move(graph_nodes);
+
+    const std::string content = payload.dump();
+    return rb_str_new(content.data(), static_cast<long>(content.size()));
+  } catch (const std::exception& error) {
+    rb_raise(rb_eRuntimeError, "%s", error.what());
+    return Qnil;
+  }
+}
 
 static std::string std_string_from_ruby(VALUE value) {
   VALUE str = rb_obj_as_string(value);
