@@ -43,7 +43,7 @@ class Phase306ConvolutionTransposeLoweringParityTest < Minitest::Test
     payload, = conv_transpose2d_payload_with_values
     assert_equal ["Convolution"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal ["Transpose", "Transpose", "ConvTranspose", "Transpose"], onnx_nodes.map { |node| node.fetch("op_type") }
 

@@ -47,31 +47,52 @@ class MlxTestTask
     Rake::FileList[pattern].to_a
   end
 
-  def self.run_test_suite_for_devices(raw_devices)
+  def self.run_test_suite_for_devices(raw_devices, include_slow: false)
     devices = parse_test_devices_arg(raw_devices)
     devices = %w[cpu gpu] if devices.empty?
 
     devices.each do |device|
       puts "==> Running test suite with DEVICE=#{device}"
-      run_test_suite_for_device(device)
+      run_test_suite_for_device(device, include_slow: include_slow)
     end
   end
 
-  def self.run_test_suite_for_device(device = nil)
+  def self.run_test_suite_for_device(device = nil, include_slow: false)
     if device.nil?
-      run_base_test_task
+      run_base_test_task(include_slow: include_slow)
       return
     end
 
     with_forced_test_device(device) do
-      run_base_test_task
+      run_base_test_task(include_slow: include_slow)
     end
   end
 
-  def self.run_base_test_task
+  def self.run_base_test_task(include_slow: false)
     with_filtered_gem_platform_warnings do
-      Rake::Task[:test_base].reenable
-      Rake::Task[:test_base].invoke
+      with_include_slow_tests(include_slow) do
+        Rake::Task[:test_base].reenable
+        Rake::Task[:test_base].invoke
+      end
+    end
+  end
+
+  def self.with_include_slow_tests(include_slow)
+    had_value = ENV.key?("MLX_TEST_INCLUDE_SLOW")
+    previous_value = ENV["MLX_TEST_INCLUDE_SLOW"]
+
+    if include_slow
+      ENV["MLX_TEST_INCLUDE_SLOW"] = "1"
+    else
+      ENV.delete("MLX_TEST_INCLUDE_SLOW")
+    end
+
+    yield
+  ensure
+    if had_value
+      ENV["MLX_TEST_INCLUDE_SLOW"] = previous_value
+    else
+      ENV.delete("MLX_TEST_INCLUDE_SLOW")
     end
   end
 

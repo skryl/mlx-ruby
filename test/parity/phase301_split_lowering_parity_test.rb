@@ -45,7 +45,7 @@ class Phase301SplitLoweringParityTest < Minitest::Test
     payload = split_equal_payload
     assert_equal ["Split"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     split_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Split", split_node.fetch("op_type")
     assert_equal({ "axis" => 0 }, split_node.fetch("attributes"))

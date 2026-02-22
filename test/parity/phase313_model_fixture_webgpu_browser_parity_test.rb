@@ -22,6 +22,7 @@ class Phase313ModelFixtureWebgpuBrowserParityTest < Minitest::Test
     require "mlx"
     @previous_device = MLX::Core.default_device
     MLX::Core.set_default_device(MLX::Core.cpu)
+    skip "python onnx module is required for phase313 tests" unless python_module_available?("onnx")
     skip "node is required for phase313 tests" unless command_available?("node", "--version")
     skip "playwright module is required for phase313 tests" unless node_module_available?("playwright")
     skip "onnxruntime-web module is required for phase313 tests" unless node_module_available?("onnxruntime-web")
@@ -192,6 +193,14 @@ class Phase313ModelFixtureWebgpuBrowserParityTest < Minitest::Test
 
   def command_available?(*argv)
     _out, _err, status = Open3.capture3(*argv)
+    status.success?
+  rescue Errno::ENOENT
+    false
+  end
+
+  def python_module_available?(name)
+    python_bin = ENV.fetch("PYTHON", "python3")
+    _out, _err, status = Open3.capture3(python_bin, "-c", "import #{name}")
     status.success?
   rescue Errno::ENOENT
     false

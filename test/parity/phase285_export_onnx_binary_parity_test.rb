@@ -41,7 +41,8 @@ class Phase285ExportOnnxBinaryParityTest < Minitest::Test
   def test_export_onnx_supports_path_targets
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      assert_nil TestSupport.export_onnx_from_graph_ir_source(onnx_path, exported_payload, model_name: "exp_add")
+      written = TestSupport.export_onnx_from_graph_ir_source(onnx_path, exported_payload, model_name: "exp_add")
+      assert_equal onnx_path, written
 
       assert File.exist?(onnx_path)
       metadata = inspect_onnx(onnx_path)
@@ -52,11 +53,12 @@ class Phase285ExportOnnxBinaryParityTest < Minitest::Test
     end
   end
 
-  def test_export_onnx_accepts_file_like_targets
+  def test_export_onnx_rejects_file_like_targets
     io = StringIO.new
-    written = TestSupport.export_onnx_from_graph_ir_source(io, exported_payload, model_name: "exp_add")
-    assert_operator written.bytesize, :>, 0
-    assert_operator io.string.bytesize, :>, 0
+    error = assert_raises(ArgumentError) do
+      TestSupport.export_onnx_from_graph_ir_source(io, exported_payload, model_name: "exp_add")
+    end
+    assert_match("path-like target", error.message)
   end
 
   def test_export_onnx_lowers_constants_to_initializers
@@ -72,7 +74,8 @@ class Phase285ExportOnnxBinaryParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph_with_initializer.onnx")
-      assert_nil TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "add_const")
+      written = TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "add_const")
+      assert_equal onnx_path, written
       metadata = inspect_onnx(onnx_path)
       assert_equal 1, metadata.fetch("initializer_count")
       assert_equal ["c"], metadata.fetch("initializer_names")

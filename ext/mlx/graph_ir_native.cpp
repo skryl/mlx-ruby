@@ -41,6 +41,7 @@ using NameSet = std::unordered_set<std::string>;
 
 static VALUE mGraphIR;
 static VALUE mGraphIRNative;
+static VALUE eGraphIRNativeUnsupportedError = Qnil;
 
 constexpr int64_t kGraphIrVersion = 1;
 
@@ -221,6 +222,8 @@ static GraphIrExportInvocation parse_graph_ir_export_invocation(
   invocation.shapeless = shapeless;
   return invocation;
 }
+
+[[noreturn]] static void raise_graph_ir_native_exception(const std::exception& error);
 
 template <typename ValueAt>
 static OrderedJson capture_build_nested_json_array(
@@ -548,142 +551,146 @@ static OrderedJson capture_json_state_values_from_mx_states(const std::vector<mx
   return out;
 }
 
-VALUE core_native_export_graph_ir_json(int argc, VALUE* argv, VALUE) {
-  try {
-    auto invocation = parse_graph_ir_export_invocation(argc, argv, "native_export_graph_ir_json");
+static OrderedJson export_graph_ir_payload(const GraphIrExportInvocation& invocation) {
+  OrderedJson graph_inputs = OrderedJson::array();
+  OrderedJson keyword_inputs = OrderedJson::array();
+  OrderedJson graph_outputs = OrderedJson::array();
+  OrderedJson graph_constants = OrderedJson::array();
+  OrderedJson graph_nodes = OrderedJson::array();
 
-    OrderedJson graph_inputs = OrderedJson::array();
-    OrderedJson keyword_inputs = OrderedJson::array();
-    OrderedJson graph_outputs = OrderedJson::array();
-    OrderedJson graph_constants = OrderedJson::array();
-    OrderedJson graph_nodes = OrderedJson::array();
+  mx::export_function(
+      [&graph_inputs, &keyword_inputs, &graph_outputs, &graph_constants, &graph_nodes](
+          const mx::ExportCallbackInput& data) {
+        auto type_it = data.find("type");
+        if (type_it == data.end() || !std::holds_alternative<std::string>(type_it->second)) {
+          return;
+        }
+        const auto& record_type = std::get<std::string>(type_it->second);
 
-    mx::export_function(
-        [&graph_inputs, &keyword_inputs, &graph_outputs, &graph_constants, &graph_nodes](
-            const mx::ExportCallbackInput& data) {
-          auto type_it = data.find("type");
-          if (type_it == data.end() || !std::holds_alternative<std::string>(type_it->second)) {
-            return;
-          }
-          const auto& record_type = std::get<std::string>(type_it->second);
-
-          if (record_type == "inputs") {
-            auto inputs_it = data.find("inputs");
-            if (inputs_it != data.end() &&
-                std::holds_alternative<std::vector<GraphTensorInfo>>(inputs_it->second)) {
-              graph_inputs = capture_json_tensor_infos_from_graph_tensors(
-                  std::get<std::vector<GraphTensorInfo>>(inputs_it->second));
-            }
-            return;
-          }
-
-          if (record_type == "keyword_inputs") {
-            auto keywords_it = data.find("keywords");
-            if (keywords_it != data.end() &&
-                std::holds_alternative<std::vector<std::pair<std::string, std::string>>>(
-                    keywords_it->second)) {
-              keyword_inputs = OrderedJson::array();
-              const auto& keywords =
-                  std::get<std::vector<std::pair<std::string, std::string>>>(keywords_it->second);
-              for (const auto& [name, tensor] : keywords) {
-                OrderedJson entry = OrderedJson::object();
-                entry["name"] = name;
-                entry["tensor"] = tensor;
-                keyword_inputs.push_back(std::move(entry));
-              }
-            }
-            return;
-          }
-
-          if (record_type == "outputs") {
-            auto outputs_it = data.find("outputs");
-            if (outputs_it != data.end() &&
-                std::holds_alternative<std::vector<GraphTensorInfo>>(outputs_it->second)) {
-              graph_outputs = capture_json_tensor_infos_from_graph_tensors(
-                  std::get<std::vector<GraphTensorInfo>>(outputs_it->second));
-            }
-            return;
-          }
-
-          if (record_type == "constants") {
-            auto constants_it = data.find("constants");
-            if (constants_it != data.end() &&
-                std::holds_alternative<std::vector<std::pair<std::string, mx::array>>>(
-                    constants_it->second)) {
-              graph_constants = OrderedJson::array();
-              const auto& constants =
-                  std::get<std::vector<std::pair<std::string, mx::array>>>(constants_it->second);
-              for (const auto& [name, arr] : constants) {
-                OrderedJson entry = OrderedJson::object();
-                entry["name"] = name;
-                entry["shape"] = capture_json_shape_from_mx_shape(arr.shape());
-                entry["dtype"] = dtype_to_string(arr.dtype());
-                entry["values"] = capture_json_values_from_array(arr);
-                graph_constants.push_back(std::move(entry));
-              }
-            }
-            return;
-          }
-
-          if (record_type != "primitive") {
-            return;
-          }
-
-          auto name_it = data.find("name");
-          if (name_it == data.end() || !std::holds_alternative<std::string>(name_it->second)) {
-            return;
-          }
-
-          OrderedJson node = OrderedJson::object();
-          node["op"] = std::get<std::string>(name_it->second);
-
-          OrderedJson node_inputs = OrderedJson::array();
+        if (record_type == "inputs") {
           auto inputs_it = data.find("inputs");
           if (inputs_it != data.end() &&
               std::holds_alternative<std::vector<GraphTensorInfo>>(inputs_it->second)) {
-            node_inputs = capture_json_tensor_names_from_graph_tensors(
+            graph_inputs = capture_json_tensor_infos_from_graph_tensors(
                 std::get<std::vector<GraphTensorInfo>>(inputs_it->second));
           }
-          node["inputs"] = std::move(node_inputs);
+          return;
+        }
 
-          OrderedJson node_outputs = OrderedJson::array();
+        if (record_type == "keyword_inputs") {
+          auto keywords_it = data.find("keywords");
+          if (keywords_it != data.end() &&
+              std::holds_alternative<std::vector<std::pair<std::string, std::string>>>(
+                  keywords_it->second)) {
+            keyword_inputs = OrderedJson::array();
+            const auto& keywords =
+                std::get<std::vector<std::pair<std::string, std::string>>>(keywords_it->second);
+            for (const auto& [name, tensor] : keywords) {
+              OrderedJson entry = OrderedJson::object();
+              entry["name"] = name;
+              entry["tensor"] = tensor;
+              keyword_inputs.push_back(std::move(entry));
+            }
+          }
+          return;
+        }
+
+        if (record_type == "outputs") {
           auto outputs_it = data.find("outputs");
           if (outputs_it != data.end() &&
               std::holds_alternative<std::vector<GraphTensorInfo>>(outputs_it->second)) {
-            node_outputs = capture_json_tensor_names_from_graph_tensors(
+            graph_outputs = capture_json_tensor_infos_from_graph_tensors(
                 std::get<std::vector<GraphTensorInfo>>(outputs_it->second));
           }
-          node["outputs"] = std::move(node_outputs);
+          return;
+        }
 
-          OrderedJson node_arguments = OrderedJson::array();
-          auto arguments_it = data.find("arguments");
-          if (arguments_it != data.end() &&
-              std::holds_alternative<std::vector<mx::StateT>>(arguments_it->second)) {
-            node_arguments = capture_json_state_values_from_mx_states(
-                std::get<std::vector<mx::StateT>>(arguments_it->second));
+        if (record_type == "constants") {
+          auto constants_it = data.find("constants");
+          if (constants_it != data.end() &&
+              std::holds_alternative<std::vector<std::pair<std::string, mx::array>>>(
+                  constants_it->second)) {
+            graph_constants = OrderedJson::array();
+            const auto& constants =
+                std::get<std::vector<std::pair<std::string, mx::array>>>(constants_it->second);
+            for (const auto& [name, arr] : constants) {
+              OrderedJson entry = OrderedJson::object();
+              entry["name"] = name;
+              entry["shape"] = capture_json_shape_from_mx_shape(arr.shape());
+              entry["dtype"] = dtype_to_string(arr.dtype());
+              entry["values"] = capture_json_values_from_array(arr);
+              graph_constants.push_back(std::move(entry));
+            }
           }
-          node["arguments"] = std::move(node_arguments);
+          return;
+        }
 
-          graph_nodes.push_back(std::move(node));
-        },
-        graph_ir_args_kwargs_function_from_callable(invocation.fun),
-        invocation.args,
-        invocation.kwargs,
-        invocation.shapeless);
+        if (record_type != "primitive") {
+          return;
+        }
 
-    OrderedJson payload = OrderedJson::object();
-    payload["ir_version"] = 1;
-    payload["shapeless"] = invocation.shapeless;
-    payload["inputs"] = std::move(graph_inputs);
-    payload["keyword_inputs"] = std::move(keyword_inputs);
-    payload["outputs"] = std::move(graph_outputs);
-    payload["constants"] = std::move(graph_constants);
-    payload["nodes"] = std::move(graph_nodes);
+        auto name_it = data.find("name");
+        if (name_it == data.end() || !std::holds_alternative<std::string>(name_it->second)) {
+          return;
+        }
+
+        OrderedJson node = OrderedJson::object();
+        node["op"] = std::get<std::string>(name_it->second);
+
+        OrderedJson node_inputs = OrderedJson::array();
+        auto inputs_it = data.find("inputs");
+        if (inputs_it != data.end() &&
+            std::holds_alternative<std::vector<GraphTensorInfo>>(inputs_it->second)) {
+          node_inputs = capture_json_tensor_names_from_graph_tensors(
+              std::get<std::vector<GraphTensorInfo>>(inputs_it->second));
+        }
+        node["inputs"] = std::move(node_inputs);
+
+        OrderedJson node_outputs = OrderedJson::array();
+        auto outputs_it = data.find("outputs");
+        if (outputs_it != data.end() &&
+            std::holds_alternative<std::vector<GraphTensorInfo>>(outputs_it->second)) {
+          node_outputs = capture_json_tensor_names_from_graph_tensors(
+              std::get<std::vector<GraphTensorInfo>>(outputs_it->second));
+        }
+        node["outputs"] = std::move(node_outputs);
+
+        OrderedJson node_arguments = OrderedJson::array();
+        auto arguments_it = data.find("arguments");
+        if (arguments_it != data.end() &&
+            std::holds_alternative<std::vector<mx::StateT>>(arguments_it->second)) {
+          node_arguments = capture_json_state_values_from_mx_states(
+              std::get<std::vector<mx::StateT>>(arguments_it->second));
+        }
+        node["arguments"] = std::move(node_arguments);
+
+        graph_nodes.push_back(std::move(node));
+      },
+      graph_ir_args_kwargs_function_from_callable(invocation.fun),
+      invocation.args,
+      invocation.kwargs,
+      invocation.shapeless);
+
+  OrderedJson payload = OrderedJson::object();
+  payload["ir_version"] = 1;
+  payload["shapeless"] = invocation.shapeless;
+  payload["inputs"] = std::move(graph_inputs);
+  payload["keyword_inputs"] = std::move(keyword_inputs);
+  payload["outputs"] = std::move(graph_outputs);
+  payload["constants"] = std::move(graph_constants);
+  payload["nodes"] = std::move(graph_nodes);
+  return payload;
+}
+
+VALUE core_native_export_graph_ir_json(int argc, VALUE* argv, VALUE) {
+  try {
+    auto invocation = parse_graph_ir_export_invocation(argc, argv, "native_export_graph_ir_json");
+    OrderedJson payload = export_graph_ir_payload(invocation);
 
     const std::string content = payload.dump();
     return rb_str_new(content.data(), static_cast<long>(content.size()));
   } catch (const std::exception& error) {
-    rb_raise(rb_eRuntimeError, "%s", error.what());
+    raise_graph_ir_native_exception(error);
     return Qnil;
   }
 }
@@ -3935,6 +3942,22 @@ static OrderedJson graph_ir_to_onnx_json_payload(
   return out;
 }
 
+static bool graph_ir_is_unsupported_error_message(const std::string& message) {
+  return message.rfind("[graph_ir_to_onnx_stub] unsupported", 0) == 0;
+}
+
+[[noreturn]] static void raise_graph_ir_native_exception(const std::exception& error) {
+  const std::string message(error.what());
+  if (!NIL_P(eGraphIRNativeUnsupportedError) && graph_ir_is_unsupported_error_message(message)) {
+    VALUE exc = rb_exc_new_str(
+        eGraphIRNativeUnsupportedError,
+        rb_str_new(message.data(), static_cast<long>(message.size())));
+    rb_exc_raise(exc);
+  }
+
+  rb_raise(rb_eRuntimeError, "%s", message.c_str());
+}
+
 static OrderedJson parse_graph_ir_json_payload(VALUE graph_ir_json) {
   VALUE graph_ir_json_str = StringValue(graph_ir_json);
   const std::string payload_raw(
@@ -4071,7 +4094,7 @@ static VALUE graph_ir_native_graph_ir_to_onnx_json(
   try {
     return graph_ir_to_onnx_json_from_graph_ir_json(graph_ir_json, opset, model_name);
   } catch (const std::exception& error) {
-    rb_raise(rb_eRuntimeError, "%s", error.what());
+    raise_graph_ir_native_exception(error);
     return Qnil;
   }
 }
@@ -4095,26 +4118,34 @@ static VALUE graph_ir_native_export_onnx_json(
       rb_raise(rb_eTypeError, "shapeless must be true or false");
     }
 
-    std::vector<VALUE> capture_argv;
-    capture_argv.reserve(
-        static_cast<size_t>(1 + RARRAY_LEN(args_array) + (NIL_P(kwargs_hash) ? 0 : 1) + 1));
-    capture_argv.push_back(fun);
-
+    mx::Args args;
     const long args_len = RARRAY_LEN(args_array);
+    args.reserve(static_cast<size_t>(args_len));
     for (long i = 0; i < args_len; ++i) {
-      capture_argv.push_back(rb_ary_entry(args_array, i));
+      args.push_back(graph_ir_array_from_ruby(rb_ary_entry(args_array, i)));
     }
 
-    if (!NIL_P(kwargs_hash)) {
-      capture_argv.push_back(kwargs_hash);
+    mx::Kwargs kwargs = NIL_P(kwargs_hash) ? mx::Kwargs{} : graph_ir_array_map_from_ruby_hash(kwargs_hash);
+    if (args.empty() && kwargs.empty()) {
+      rb_raise(
+          rb_eArgError,
+          "[native_export_onnx_json] Inputs must include at least one positional or keyword array");
     }
-    capture_argv.push_back(shapeless);
 
-    VALUE graph_ir_json =
-        core_native_export_graph_ir_json(static_cast<int>(capture_argv.size()), capture_argv.data(), Qnil);
-    return graph_ir_to_onnx_json_from_graph_ir_json(graph_ir_json, opset, model_name);
+    GraphIrExportInvocation invocation;
+    invocation.fun = fun;
+    invocation.args = std::move(args);
+    invocation.kwargs = std::move(kwargs);
+    invocation.shapeless = RTEST(shapeless);
+
+    const auto opset_int = normalize_positive_integer(opset, "opset");
+    const auto model_name_str = non_empty_model_name(model_name);
+
+    const auto payload = export_graph_ir_payload(invocation);
+    const auto onnx_payload = graph_ir_to_onnx_json_payload(payload, opset_int, model_name_str);
+    return ruby_string_from_std(onnx_payload.dump());
   } catch (const std::exception& error) {
-    rb_raise(rb_eRuntimeError, "%s", error.what());
+    raise_graph_ir_native_exception(error);
     return Qnil;
   }
 }
@@ -4123,7 +4154,7 @@ static VALUE graph_ir_native_graph_ir_compatibility_report_json(VALUE, VALUE gra
   try {
     return graph_ir_compatibility_report_json_from_graph_ir_json(graph_ir_json);
   } catch (const std::exception& error) {
-    rb_raise(rb_eRuntimeError, "%s", error.what());
+    raise_graph_ir_native_exception(error);
     return Qnil;
   }
 }
@@ -4133,6 +4164,8 @@ static VALUE graph_ir_native_graph_ir_compatibility_report_json(VALUE, VALUE gra
 extern "C" void init_graph_ir_native_bindings(VALUE mMLX) {
   mGraphIR = rb_define_module_under(mMLX, "GraphIR");
   mGraphIRNative = rb_define_module_under(mGraphIR, "Native");
+  eGraphIRNativeUnsupportedError =
+      rb_define_class_under(mGraphIRNative, "UnsupportedError", rb_eRuntimeError);
 
   rb_define_singleton_method(
       mGraphIRNative, "export_graph_ir_json", RUBY_METHOD_FUNC(core_native_export_graph_ir_json), -1);

@@ -16,6 +16,9 @@ REPO_ROOT = File.expand_path(ENV.fetch("MLX_TEST_REPO_ROOT", default_repo_root))
 module TestSupport
   module_function
 
+  SLOW_TEST_REGISTRY_PATH = File.join(RUBY_ROOT, "test", "slow_tests.json").freeze
+  DEFAULT_SLOW_TEST_THRESHOLD_SECONDS = 30.0
+
   def build_native_extension!
     if ENV["MLX_TEST_SKIP_NATIVE_BUILD"] == "1"
       @native_built = true
@@ -171,6 +174,57 @@ module TestSupport
     end
   end
 
+  def include_slow_tests?
+    ENV["MLX_TEST_INCLUDE_SLOW"] == "1"
+  end
+
+  def slow_test_entry(test_id)
+    slow_test_registry[test_id]
+  end
+
+  def slow_test_registry
+    payload = slow_test_payload
+    tests = payload["tests"]
+    return {} unless tests.is_a?(Hash)
+
+    tests
+  end
+
+  def slow_test_threshold_seconds
+    payload = slow_test_payload
+    raw = payload["threshold_seconds"]
+    return DEFAULT_SLOW_TEST_THRESHOLD_SECONDS if raw.nil?
+
+    raw.to_f
+  rescue StandardError
+    DEFAULT_SLOW_TEST_THRESHOLD_SECONDS
+  end
+
+  def slow_test_payload
+    return @slow_test_payload if defined?(@slow_test_payload)
+
+    @slow_test_payload = load_slow_test_payload
+  end
+
+  def reset_slow_test_payload_cache!
+    remove_instance_variable(:@slow_test_payload) if instance_variable_defined?(:@slow_test_payload)
+  end
+
+  def load_slow_test_payload
+    return {} unless File.file?(SLOW_TEST_REGISTRY_PATH)
+
+    payload = JSON.parse(File.binread(SLOW_TEST_REGISTRY_PATH))
+    return payload if payload.is_a?(Hash)
+
+    {}
+  rescue JSON::ParserError => e
+    warn "failed to parse slow test registry at #{SLOW_TEST_REGISTRY_PATH}: #{e.message}"
+    {}
+  rescue StandardError => e
+    warn "failed to load slow test registry at #{SLOW_TEST_REGISTRY_PATH}: #{e.message}"
+    {}
+  end
+
   def run_cmd!(cmd, chdir)
     stdout, stderr, status = Open3.capture3(*cmd, chdir: chdir)
     return if status.success?
@@ -270,6 +324,19 @@ module TestSupport
     end
   end
 
+  def parse_onnx_stub(payload_or_source, opset: 18, model_name: "mlx_graph")
+    content = MLX::GraphIR.graph_ir_to_onnx_json(
+      payload_or_source,
+      opset: opset,
+      model_name: model_name
+    )
+    payload = JSON.parse(content)
+    unless payload.is_a?(Hash)
+      raise TypeError, "graph_ir_to_onnx_json must return a JSON object payload"
+    end
+    payload
+  end
+
   def test_tmp_dir
     @test_tmp_dir ||= begin
       path = File.join(RUBY_ROOT, "test", "tmp")
@@ -298,7 +365,13 @@ TEST_TIMEOUT_SECONDS = raw_test_timeout.positive? ? raw_test_timeout : 10
 
 module Minitest
   class Test
+    alias_method :before_setup_without_slow_test_gate, :before_setup
     alias_method :run_without_timeout, :run
+
+    def before_setup
+      maybe_skip_slow_test!
+      before_setup_without_slow_test_gate
+    end
 
     def run
       Timeout.timeout(self.class.current_test_timeout_seconds) { run_without_timeout }
@@ -309,6 +382,24 @@ module Minitest
       raw.positive? ? raw : TEST_TIMEOUT_SECONDS
     rescue StandardError
       TEST_TIMEOUT_SECONDS
+    end
+
+    private
+
+    def maybe_skip_slow_test!
+      return if TestSupport.include_slow_tests?
+
+      slow_entry = TestSupport.slow_test_entry(slow_test_identifier)
+      return if slow_entry.nil?
+
+      threshold = TestSupport.slow_test_threshold_seconds
+      max_seconds = slow_entry["max_seconds"]
+      measured = max_seconds.nil? ? "" : format(" (measured %.2fs)", max_seconds.to_f)
+      skip "slow test (>#{threshold}s#{measured}); run `rake test:all` or set MLX_TEST_INCLUDE_SLOW=1"
+    end
+
+    def slow_test_identifier
+      "#{self.class}##{name}"
     end
   end
 end

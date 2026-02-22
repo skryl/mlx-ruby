@@ -20,9 +20,7 @@ class Phase311OnnxWebgpuHarnessRealRuntimeSmokeParityTest < Minitest::Test
   end
 
   def test_smoke_test_onnx_webgpu_harness_real_wasm_runtime
-    unless ENV["MLX_TEST_WEB_SMOKE_REAL"] == "1"
-      skip "set MLX_TEST_WEB_SMOKE_REAL=1 to enable phase311 real-runtime smoke test"
-    end
+    skip "python onnx module is required for phase311 tests" unless python_module_available?("onnx")
     skip "node is required for phase311 tests" unless command_available?("node", "--version")
     skip "playwright module is required for phase311 tests" unless node_module_available?("playwright")
     skip "onnxruntime-web module is required for phase311 tests" unless node_module_available?("onnxruntime-web")
@@ -62,6 +60,14 @@ class Phase311OnnxWebgpuHarnessRealRuntimeSmokeParityTest < Minitest::Test
 
   def command_available?(*argv)
     _out, _err, status = Open3.capture3(*argv)
+    status.success?
+  rescue Errno::ENOENT
+    false
+  end
+
+  def python_module_available?(name)
+    python_bin = ENV.fetch("PYTHON", "python3")
+    _out, _err, status = Open3.capture3(python_bin, "-c", "import #{name}")
     status.success?
   rescue Errno::ENOENT
     false

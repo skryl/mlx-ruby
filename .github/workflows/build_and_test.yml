@@ -39,6 +39,12 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
       - name: Set Ruby crash report path
         run: echo "RUBY_CRASH_REPORT=${RUNNER_TEMP}/ruby-crash-report.log" >> "$GITHUB_ENV"
       - name: Install Linux build tools
@@ -58,12 +64,12 @@ jobs:
           ruby extconf.rb
           make -j2
 
-      - name: Install dependencies
-        run: bundle install
+      - name: Install all test dependencies
+        run: bundle exec rake deps
       - name: Run Ruby test suite
         env:
           RUBYOPT: -W:deprecated -W:performance
-        run: bundle exec rake test
+        run: bundle exec rake test:all
       - name: Show Ruby crash report (if present)
         if: always()
         run: |

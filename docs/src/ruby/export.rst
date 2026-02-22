@@ -67,9 +67,11 @@ Runtime/tooling requirements:
 
 - ``MLX::GraphIR.onnx_json_to_onnx`` requires ``python3`` with ``onnx``
   importable.
-- ``MLX::GraphIR.onnx_json_to_onnx`` external-data mode requires a path-like
-  target (not IO-like).
+- ``MLX::GraphIR.onnx_json_to_onnx`` requires a path-like target (not
+  IO-like).
 - Real-runtime smoke tests require Node.js + Playwright + ``onnxruntime-web``.
+- ``bundle exec rake deps:web`` installs/checks the dependencies used by real
+  WebGPU smoke tests.
 - ``MLX::GraphIR.export_onnx_webgpu_harness`` only accepts ``webgpu`` and
   ``wasm`` execution providers.
 

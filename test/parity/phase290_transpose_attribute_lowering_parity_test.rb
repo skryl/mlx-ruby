@@ -46,7 +46,7 @@ class Phase290TransposeAttributeLoweringParityTest < Minitest::Test
     assert_equal "Transpose", node.fetch("op")
     assert_equal [[1, 0]], node.fetch("arguments")
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     attrs = stub.fetch("graph").fetch("nodes").first.fetch("attributes")
     assert_equal [1, 0], attrs.fetch("perm")
   end

@@ -27,25 +27,19 @@ module MLX
       )
     end
 
-    def graph_ir_to_onnx_payload(payload_or_source, opset: 18, model_name: "mlx_graph")
-      payload = JSON.parse(
-        graph_ir_to_onnx_json(
-          payload_or_source,
-          opset: opset,
-          model_name: model_name
-        )
-      )
-      unless payload.is_a?(Hash)
-        raise TypeError, "graph_ir_to_onnx_json must return a JSON object payload"
-      end
-      payload
-    end
-
-    def export_onnx_json(fun, *extras, opset: 18, model_name: "mlx_graph", **trace_kwargs)
+    def export_onnx_json(
+      fun,
+      *extras,
+      shapeless: false,
+      opset: 18,
+      model_name: "mlx_graph",
+      **trace_kwargs
+    )
       ONNX::Exporter.export_onnx_json(
         fun,
         *extras,
         trace_kwargs: trace_kwargs,
+        shapeless: shapeless,
         opset: opset,
         model_name: model_name
       )
@@ -53,10 +47,6 @@ module MLX
 
     def compatibility_report(payload_or_source)
       ONNX::Exporter.compatibility_report(payload_or_source)
-    end
-
-    def compatibility_report_json(payload_or_source)
-      ONNX::Exporter.compatibility_report_json(payload_or_source)
     end
 
     def onnx_json_to_onnx(

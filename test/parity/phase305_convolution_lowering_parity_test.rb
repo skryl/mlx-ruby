@@ -43,7 +43,7 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
     payload, = convolution2d_payload_with_values
     assert_equal ["Convolution"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal ["Transpose", "Transpose", "Conv", "Transpose"], onnx_nodes.map { |node| node.fetch("op_type") }
 
@@ -79,7 +79,7 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
     assert_equal ["Convolution"], report.fetch("unsupported_ops")
 
     error = assert_raises(NotImplementedError) do
-      MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+      TestSupport.parse_onnx_stub(payload)
     end
     assert_match("input_dilation", error.message)
   end
@@ -87,7 +87,7 @@ class Phase305ConvolutionLoweringParityTest < Minitest::Test
   def test_flip_convolution_propagates_dtype_to_downstream_add
     payload = flip_convolution_add_int32_payload
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal ["Transpose", "Transpose", "ConvTranspose", "Transpose", "Cast", "Add"],
                  onnx_nodes.map { |node| node.fetch("op_type") }

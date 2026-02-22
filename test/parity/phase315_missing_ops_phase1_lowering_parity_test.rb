@@ -63,7 +63,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = astype_payload
     assert_equal ["AsType"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Cast", onnx_node.fetch("op_type")
     assert_equal({ "to" => "FLOAT16" }, onnx_node.fetch("attributes"))
@@ -73,7 +73,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = sin_payload
     assert_equal ["Sin"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Sin", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -83,7 +83,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = cos_payload
     assert_equal ["Cos"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Cos", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -93,7 +93,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = erf_payload
     assert_equal ["Erf"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Erf", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))
@@ -103,7 +103,7 @@ class Phase315MissingOpsPhase1LoweringParityTest < Minitest::Test
     payload = less_payload
     assert_equal ["Less"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Less", onnx_node.fetch("op_type")
     assert_equal({}, onnx_node.fetch("attributes"))

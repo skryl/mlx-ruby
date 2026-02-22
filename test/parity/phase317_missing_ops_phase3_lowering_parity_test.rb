@@ -43,7 +43,7 @@ class Phase317MissingOpsPhase3LoweringParityTest < Minitest::Test
     payload, = logsumexp_axis1_keepdims_payload_with_values
     assert_equal ["LogSumExp"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "ReduceLogSumExp", onnx_node.fetch("op_type")
     assert_equal 2, onnx_node.fetch("inputs").length
@@ -70,7 +70,7 @@ class Phase317MissingOpsPhase3LoweringParityTest < Minitest::Test
     assert_equal ["Scan"], payload.fetch("nodes").map { |node| node.fetch("op") }
     assert_equal [2, 1, false, true], payload.fetch("nodes").first.fetch("arguments")
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "CumSum", onnx_node.fetch("op_type")
     assert_equal 2, onnx_node.fetch("inputs").length
@@ -87,7 +87,7 @@ class Phase317MissingOpsPhase3LoweringParityTest < Minitest::Test
     assert_equal ["Scan"], payload.fetch("nodes").map { |node| node.fetch("op") }
     assert_equal [2, 1, true, false], payload.fetch("nodes").first.fetch("arguments")
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "CumSum", onnx_node.fetch("op_type")
     assert_equal 2, onnx_node.fetch("inputs").length

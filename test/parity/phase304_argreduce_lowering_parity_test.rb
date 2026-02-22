@@ -45,7 +45,7 @@ class Phase304ArgreduceLoweringParityTest < Minitest::Test
     payload = argmax_axis1_payload
     assert_equal %w[ArgReduce Squeeze], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     types = stub.fetch("graph").fetch("nodes").map { |node| node.fetch("op_type") }
     assert_equal %w[ArgMax Cast Squeeze], types
 

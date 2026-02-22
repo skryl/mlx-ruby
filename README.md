@@ -314,7 +314,6 @@ Architecture boundary:
 - Public API (`MLX::GraphIR`):
   - `export_graph_ir_json`
   - `validate!`
-  - `graph_ir_to_onnx_payload`
   - `compatibility_report`
   - `graph_ir_to_onnx_json`
   - `onnx_json_to_onnx`
@@ -333,8 +332,7 @@ End-to-end flow:
 1. Export Graph IR with `MLX::GraphIR.export_graph_ir_json`.
 2. Validate and gate conversion with `MLX::GraphIR.validate!` and
    `MLX::GraphIR.compatibility_report`.
-3. Generate JSON ONNX stubs with `MLX::GraphIR.graph_ir_to_onnx_payload` or
-   `MLX::GraphIR.graph_ir_to_onnx_json`.
+3. Generate JSON ONNX stubs with `MLX::GraphIR.graph_ir_to_onnx_json`.
 4. Export binary ONNX with `MLX::GraphIR.onnx_json_to_onnx`
    (`external_data` options are available for large models), and/or export
    ONNX JSON directly from trace with `MLX::GraphIR.export_onnx_json`.
@@ -359,7 +357,7 @@ fields (`run_timings_ms`, `model_load_latency_ms`,
 Operational requirements:
 
 - `onnx_json_to_onnx` requires `python3` with the `onnx` package available.
-- `onnx_json_to_onnx` external data mode requires a path-like target (not IO).
+- `onnx_json_to_onnx` requires a path-like target (not IO).
 - Browser smoke tests require Node.js + Playwright (`web/`) and optionally
   local `onnxruntime-web` assets.
 - Harness execution providers are `webgpu` and `wasm`.
@@ -535,8 +533,9 @@ make -j4
 ruby -e 'require "rbconfig"; puts RbConfig::CONFIG["host_cpu"]'
 ```
 
-- Web smoke fails due missing JS packages: from `web/`, run
-  `npm install` and `npx playwright install chromium`.
+- Web smoke fails due missing runtime dependencies: run
+  `bundle exec rake deps:web` (installs/checks `onnx`, `node`/`npm`/`npx`,
+  `playwright`, and `onnxruntime-web`).
 - If CMake configure fails intermittently, rerun `ruby extconf.rb`; the build script already includes a clean-retry path.
 
 ## Contributing

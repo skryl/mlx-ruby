@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "open3"
 require "stringio"
 require "tmpdir"
 require_relative "test_helper"
@@ -10,6 +11,7 @@ class Phase333ExportOnnxDirectParityTest < Minitest::Test
     TestSupport.build_native_extension!
     $LOAD_PATH.unshift(File.join(RUBY_ROOT, "lib"))
     require "mlx"
+    skip "python onnx module is required for phase333 tests" unless python_module_available?("onnx")
   end
 
   def teardown
@@ -27,25 +29,37 @@ class Phase333ExportOnnxDirectParityTest < Minitest::Test
       direct_path = File.join(dir, "direct.onnx")
       payload_path = File.join(dir, "payload.onnx")
 
-      assert_nil TestSupport.export_onnx_direct_from_fun(
+      direct_written = TestSupport.export_onnx_direct_from_fun(
         direct_path,
         fun,
         x,
         y: y,
         model_name: "phase333_direct"
       )
+      assert_equal direct_path, direct_written
 
       payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(fun, x, y: y))
-      assert_nil TestSupport.export_onnx_from_graph_ir_source(
+      payload_written = TestSupport.export_onnx_from_graph_ir_source(
         payload_path,
         payload,
         model_name: "phase333_direct"
       )
+      assert_equal payload_path, payload_written
 
       direct = File.binread(direct_path)
       via_payload = File.binread(payload_path)
       assert_operator direct.bytesize, :>, 0
       assert_equal via_payload, direct
     end
+  end
+
+  private
+
+  def python_module_available?(name)
+    python_bin = ENV.fetch("PYTHON", "python3")
+    _out, _err, status = Open3.capture3(python_bin, "-c", "import #{name}")
+    status.success?
+  rescue Errno::ENOENT
+    false
   end
 end

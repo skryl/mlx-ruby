@@ -20,6 +20,7 @@ class Phase310OnnxWebgpuHarnessSmokeParityTest < Minitest::Test
   end
 
   def test_smoke_test_onnx_webgpu_harness_mock_mode_emits_telemetry
+    skip "python onnx module is required for phase310 tests" unless python_module_available?("onnx")
     skip "node is required for phase310 tests" unless command_available?("node", "--version")
     skip "playwright module is required for phase310 tests" unless playwright_module_available?
 
@@ -56,6 +57,14 @@ class Phase310OnnxWebgpuHarnessSmokeParityTest < Minitest::Test
 
   def command_available?(*argv)
     _out, _err, status = Open3.capture3(*argv)
+    status.success?
+  rescue Errno::ENOENT
+    false
+  end
+
+  def python_module_available?(name)
+    python_bin = ENV.fetch("PYTHON", "python3")
+    _out, _err, status = Open3.capture3(python_bin, "-c", "import #{name}")
     status.success?
   rescue Errno::ENOENT
     false

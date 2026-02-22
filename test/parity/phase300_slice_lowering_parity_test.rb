@@ -45,7 +45,7 @@ class Phase300SliceLoweringParityTest < Minitest::Test
     payload = slice_payload
     assert_equal ["Slice"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Slice", onnx_node.fetch("op_type")
     assert_equal 5, onnx_node.fetch("inputs").length

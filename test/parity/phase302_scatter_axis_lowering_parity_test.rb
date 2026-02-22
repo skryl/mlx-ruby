@@ -63,7 +63,7 @@ class Phase302ScatterAxisLoweringParityTest < Minitest::Test
     payload = put_axis1_payload
     assert_equal ["ScatterAxis"], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "ScatterElements", onnx_node.fetch("op_type")
     assert_equal({ "axis" => 1 }, onnx_node.fetch("attributes"))

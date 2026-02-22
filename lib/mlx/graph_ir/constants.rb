@@ -134,6 +134,7 @@ module MLX
     DTYPE_PROMOTION_RANK = DTYPE_PROMOTION_ORDER.each_with_index.each_with_object({}) do |(dtype, rank), out|
       out[dtype] = rank
     end.freeze
+    FILE_READ_CHUNK_BYTES = 8 * 1024 * 1024
     GRAPH_IR_NORMALIZATION_MAX_BYTES = 2_000_000_000
   end
 end

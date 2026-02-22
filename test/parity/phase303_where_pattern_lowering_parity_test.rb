@@ -45,7 +45,7 @@ class Phase303WherePatternLoweringParityTest < Minitest::Test
     payload = where_payload
     assert_equal %w[Broadcast Greater Broadcast Full Select], payload.fetch("nodes").map { |node| node.fetch("op") }
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     types = stub.fetch("graph").fetch("nodes").map { |node| node.fetch("op_type") }
     assert_equal %w[Expand Greater Expand Identity Where], types
   end

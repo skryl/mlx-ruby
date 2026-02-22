@@ -172,10 +172,7 @@ class BenchmarkTask
       outputs = telemetry.fetch("sample_outputs")
       actual = outputs.values.first
       expected = fixture.fetch(:expected)
-      max_diff = max_abs_diff(expected, actual)
-      max_ref = max_abs_value(expected)
-      tolerance = [WEBGPU_OUTPUT_ABS_TOLERANCE, max_ref * WEBGPU_OUTPUT_REL_TOLERANCE].max
-      output_parity_ok = max_diff <= tolerance
+      parity_metrics = webgpu_parity_metrics(expected: expected, actual: actual)
 
       result = {
         "model" => model_name.to_s,
@@ -186,11 +183,11 @@ class BenchmarkTask
         "first_inference_latency_ms" => telemetry.fetch("first_inference_latency_ms"),
         "steady_state_inference_latency_ms" => telemetry.fetch("steady_state_inference_latency_ms"),
         "run_timings_ms" => telemetry.fetch("run_timings_ms"),
-        "output_parity_ok" => output_parity_ok,
-        "output_max_abs_diff" => max_diff,
-        "output_tolerance" => tolerance,
+        "output_parity_ok" => parity_metrics.fetch("ok"),
+        "output_max_abs_diff" => parity_metrics.fetch("max_diff"),
+        "output_tolerance" => parity_metrics.fetch("tolerance"),
         "skipped" => false,
-        "ok" => output_parity_ok && telemetry.fetch("selected_provider") == "webgpu" && telemetry.fetch("fallback_used") == false
+        "ok" => parity_metrics.fetch("ok") && telemetry.fetch("selected_provider") == "webgpu" && telemetry.fetch("fallback_used") == false
       }
       print_webgpu_run_summary(result) if print_summary
     end
@@ -198,6 +195,17 @@ class BenchmarkTask
     raise "WebGPU benchmark parity failed for #{model_name}" if require_webgpu && result && result.fetch("ok") != true
 
     result
+  end
+
+  def webgpu_parity_metrics(expected:, actual:)
+    max_diff = max_abs_diff(expected, actual)
+    max_ref = max_abs_value(expected)
+    tolerance = [WEBGPU_OUTPUT_ABS_TOLERANCE, max_ref * WEBGPU_OUTPUT_REL_TOLERANCE].max
+    {
+      "max_diff" => max_diff,
+      "tolerance" => tolerance,
+      "ok" => max_diff <= tolerance
+    }
   end
 
   private
@@ -1152,11 +1160,21 @@ class BenchmarkTask
     Rake::Task["benchmark:all"].invoke(models_argument)
   end
 
-  def self.install_dependencies!
+  def self.install_dependencies!(python_bin: self.python_bin)
     requirements = requirements_path
     raise "Missing requirements file: #{requirements}" unless File.exist?(requirements)
 
-    run_command!([python_bin, "-m", "pip", "install", "-r", requirements], chdir: REPO_ROOT)
+    commands = [
+      [python_bin, "-m", "pip", "install", "-r", requirements],
+      [python_bin, "-m", "pip", "install", "--break-system-packages", "-r", requirements],
+      [python_bin, "-m", "pip", "install", "--user", "--break-system-packages", "-r", requirements]
+    ]
+
+    commands.each do |command|
+      return if system(*command, chdir: REPO_ROOT)
+    end
+
+    raise "command failed: #{commands.last.join(' ')} (cwd: #{REPO_ROOT})"
   end
 
   def self.run_graph_ir_coverage!

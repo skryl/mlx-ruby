@@ -39,7 +39,7 @@ jobs:
       - name: Run test suite
         env:
           RUBYOPT: -W:deprecated -W:performance
-        run: bundle exec rake test
+        run: bundle exec rake test:all
       - name: Show Ruby crash report (if present)
         if: always()
         run: |

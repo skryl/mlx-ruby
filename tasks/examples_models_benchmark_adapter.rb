@@ -188,6 +188,24 @@ class ExamplesModelsBenchmarkAdapter
     raise "Examples webgpu benchmark failures: #{failures.join(', ')}"
   end
 
+  def output_map_parity_metrics(output_names:, expected_outputs:, sample_outputs:)
+    resolved_pairs = output_names.each_with_index.map do |name, index|
+      actual = sample_outputs["output_#{index}"] || sample_outputs[name]
+      raise KeyError, "missing sample output for #{name}" if actual.nil?
+
+      [expected_outputs.fetch(name), actual]
+    end
+
+    max_diff = resolved_pairs.map { |expected, actual| max_abs_diff(expected, actual) }.max || 0.0
+    max_ref = resolved_pairs.map { |expected, _actual| max_abs_value(expected) }.max || 0.0
+    tolerance = [WEBGPU_OUTPUT_ABS_TOLERANCE, max_ref * WEBGPU_OUTPUT_REL_TOLERANCE].max
+    {
+      "max_diff" => max_diff,
+      "tolerance" => tolerance,
+      "ok" => max_diff <= tolerance
+    }
+  end
+
   private
 
   def normalize_device(raw)

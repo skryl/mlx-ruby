@@ -28,7 +28,7 @@ class Phase295ConcatenateFlattenUnsupportedParityTest < Minitest::Test
     assert_equal 0, report.fetch("unsupported_nodes")
     assert_equal [], report.fetch("unsupported_ops")
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_nodes = stub.fetch("graph").fetch("nodes")
     assert_equal %w[Add Reshape], onnx_nodes.map { |node| node.fetch("op_type") }
   end

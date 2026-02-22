@@ -77,4 +77,6 @@ Notes
 - Smoke tests require Node.js.
 - Real runtime checks require Playwright + ``onnxruntime-web`` in the harness
   environment.
+- ``bundle exec rake deps:web`` installs/checks ``onnx`` and the web runtime
+  dependencies used by real-runtime smoke checks.
 - Harness export only accepts ``webgpu`` and ``wasm`` execution providers.

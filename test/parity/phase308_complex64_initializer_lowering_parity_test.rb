@@ -43,7 +43,8 @@ class Phase308Complex64InitializerLoweringParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "complex_init.onnx")
-      assert_nil TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "complex_init_case")
+      written = TestSupport.export_onnx_from_graph_ir_source(onnx_path, payload, model_name: "complex_init_case")
+      assert_equal onnx_path, written
       metadata = inspect_complex_initializer(onnx_path)
 
       assert_equal "c", metadata.fetch("name")
@@ -73,7 +74,8 @@ class Phase308Complex64InitializerLoweringParityTest < Minitest::Test
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "complex_marker_init.onnx")
       source = JSON.generate(payload)
-      assert_nil TestSupport.export_onnx_from_graph_ir_source(onnx_path, source, model_name: "complex_marker_init_case")
+      written = TestSupport.export_onnx_from_graph_ir_source(onnx_path, source, model_name: "complex_marker_init_case")
+      assert_equal onnx_path, written
       metadata = inspect_complex_initializer(onnx_path)
       assert_equal [1.0, 2.0, -3.5, 0.25], metadata.fetch("float_data")
     end
@@ -89,7 +91,8 @@ class Phase308Complex64InitializerLoweringParityTest < Minitest::Test
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "complex_string_init.onnx")
       source = JSON.generate(payload)
-      assert_nil TestSupport.export_onnx_from_graph_ir_source(onnx_path, source, model_name: "complex_string_init_case")
+      written = TestSupport.export_onnx_from_graph_ir_source(onnx_path, source, model_name: "complex_string_init_case")
+      assert_equal onnx_path, written
       metadata = inspect_complex_initializer(onnx_path)
       assert_equal [1.0, 2.0, -3.5, 0.25], metadata.fetch("float_data")
     end

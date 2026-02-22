@@ -19,7 +19,7 @@ class Phase282GraphIrOnnxStubParityTest < Minitest::Test
   end
 
   def test_graph_ir_to_onnx_stub_maps_core_ops
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(exported_payload, opset: 18, model_name: "exp_add")
+    stub = TestSupport.parse_onnx_stub(exported_payload, opset: 18, model_name: "exp_add")
 
     assert_equal "onnx_stub_v1", stub.fetch("format")
     assert_equal 18, stub.fetch("opset")
@@ -35,7 +35,7 @@ class Phase282GraphIrOnnxStubParityTest < Minitest::Test
     payload["nodes"][0]["op"] = "UnknownCustomOp"
 
     error = assert_raises(NotImplementedError) do
-      MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+      TestSupport.parse_onnx_stub(payload)
     end
     assert_match(/UnknownCustomOp/, error.message)
   end

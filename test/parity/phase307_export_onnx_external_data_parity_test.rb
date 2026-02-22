@@ -40,13 +40,14 @@ class Phase307ExportOnnxExternalDataParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "graph.onnx")
-      assert_nil TestSupport.export_onnx_from_graph_ir_source(
+      written = TestSupport.export_onnx_from_graph_ir_source(
         onnx_path,
         payload,
         model_name: "ext_data_case",
         external_data: true,
         external_data_size_threshold: 0
       )
+      assert_equal onnx_path, written
 
       external_path = File.join(dir, "graph.data")
       assert File.exist?(onnx_path)
@@ -64,7 +65,7 @@ class Phase307ExportOnnxExternalDataParityTest < Minitest::Test
 
     Dir.mktmpdir do |dir|
       onnx_path = File.join(dir, "custom_name.onnx")
-      assert_nil TestSupport.export_onnx_from_graph_ir_source(
+      written = TestSupport.export_onnx_from_graph_ir_source(
         onnx_path,
         payload,
         model_name: "ext_data_custom",
@@ -72,6 +73,7 @@ class Phase307ExportOnnxExternalDataParityTest < Minitest::Test
         external_data_size_threshold: 0,
         external_data_file: "weights.bin"
       )
+      assert_equal onnx_path, written
 
       external_path = File.join(dir, "weights.bin")
       assert File.exist?(onnx_path)
@@ -89,6 +91,19 @@ class Phase307ExportOnnxExternalDataParityTest < Minitest::Test
         payload,
         model_name: "ext_data_io",
         external_data: true
+      )
+    end
+    assert_match("path-like target", error.message)
+  end
+
+  def test_export_onnx_rejects_io_targets_even_without_external_data
+    payload = constant_payload
+    error = assert_raises(ArgumentError) do
+      TestSupport.export_onnx_from_graph_ir_source(
+        StringIO.new,
+        payload,
+        model_name: "path_only_case",
+        external_data: false
       )
     end
     assert_match("path-like target", error.message)

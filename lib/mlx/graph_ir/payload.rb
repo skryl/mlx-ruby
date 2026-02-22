@@ -10,7 +10,7 @@ module MLX
         deep_copy_hash(payload_or_source)
       when String
         if File.file?(payload_or_source)
-          parse_json_payload(File.binread(payload_or_source), "graph ir file")
+          parse_json_payload(read_json_source_file(payload_or_source), "graph ir file")
         else
           parse_json_payload(payload_or_source, "graph ir string")
         end
@@ -23,10 +23,12 @@ module MLX
       end
       normalize_hash_keys(payload)
     end
+    private_class_method :load_payload
 
     def dump_json(hash, pretty: true)
       pretty ? JSON.pretty_generate(hash) : JSON.generate(hash)
     end
+    private_class_method :dump_json
 
     def onnx_json_compatible_value(value)
       case value
@@ -50,6 +52,7 @@ module MLX
         value
       end
     end
+    private_class_method :onnx_json_compatible_value
 
     def normalize_hash_keys(value)
       case value
@@ -99,5 +102,26 @@ module MLX
       raise ArgumentError, "failed to parse #{label}: #{e.message}"
     end
     private_class_method :parse_json_payload
+
+    def read_json_source_file(path)
+      File.binread(path)
+    rescue Errno::EINVAL
+      read_json_source_file_chunked(path)
+    end
+    private_class_method :read_json_source_file
+
+    def read_json_source_file_chunked(path)
+      raw = +""
+      File.open(path, "rb") do |io|
+        while (chunk = io.read(FILE_READ_CHUNK_BYTES))
+          raw << chunk
+          if raw.bytesize > GRAPH_IR_NORMALIZATION_MAX_BYTES
+            raise ArgumentError, "graph ir file exceeds #{GRAPH_IR_NORMALIZATION_MAX_BYTES} bytes"
+          end
+        end
+      end
+      raw
+    end
+    private_class_method :read_json_source_file_chunked
   end
 end

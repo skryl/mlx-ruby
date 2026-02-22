@@ -1,0 +1,32 @@
+{
+  "format": "mlx_slow_tests_v1",
+  "generated_at": "2026-02-22T01:03:20Z",
+  "threshold_seconds": 30.0,
+  "tests": {
+    "Phase313ModelFixtureWebgpuBrowserParityTest#test_cnn_webgpu_benchmark_model_runtime_parity_without_wasm_fallback": {
+      "cpu_seconds": 39.44,
+      "gpu_seconds": 39.32,
+      "max_seconds": 39.44
+    },
+    "Phase314BenchmarkModelOnnxRuntimeParityTest#test_cnn_benchmark_model_onnx_runtime_parity": {
+      "cpu_seconds": 37.56,
+      "gpu_seconds": 36.58,
+      "max_seconds": 37.56
+    },
+    "Phase319GraphIrWebgpuCoverageArtifactTest#test_graph_ir_webgpu_coverage_artifact_is_deterministic": {
+      "cpu_seconds": 34.82,
+      "gpu_seconds": 34.79,
+      "max_seconds": 34.82
+    },
+    "Phase323ExamplesSubmoduleFullExportParityTest#test_all_submodule_models_are_webgpu_export_compatible": {
+      "cpu_seconds": 150.99,
+      "gpu_seconds": 149.38,
+      "max_seconds": 150.99
+    },
+    "Phase324ExamplesSubmoduleOnnxRuntimeParityTest#test_all_examples_submodule_models_export_and_run_in_onnxruntime": {
+      "cpu_seconds": 269.05,
+      "gpu_seconds": 269.63,
+      "max_seconds": 269.63
+    }
+  }
+}

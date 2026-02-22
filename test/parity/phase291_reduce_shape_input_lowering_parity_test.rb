@@ -43,7 +43,7 @@ class Phase291ReduceShapeInputLoweringParityTest < Minitest::Test
 
   def test_mean_axis1_stub_lowers_reduce_squeeze_broadcast_with_shape_initializers
     payload = mean_axis1_payload
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     nodes = stub.fetch("graph").fetch("nodes")
 
     assert_equal %w[ReduceSum Squeeze Expand Mul], nodes.map { |node| node.fetch("op_type") }

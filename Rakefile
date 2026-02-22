@@ -6,6 +6,7 @@ require "rake/testtask"
 
 require_relative "tasks/benchmark_task"
 require_relative "tasks/build_task"
+require_relative "tasks/deps_task"
 require_relative "tasks/docs_task"
 require_relative "tasks/gem_task"
 require_relative "tasks/test_task"
@@ -26,20 +27,40 @@ else
   end
 end
 
-desc "Run test suite on cpu+gpu by default. Override devices: rake \"test[cpu]\" or rake \"test[gpu]\"."
+desc "Run fast test suite on cpu+gpu by default (excludes slow tests). Override devices: rake \"test[cpu]\" or rake \"test[gpu]\"."
 task :test, [:devices] do |_task, args|
-  MlxTestTask.run_test_suite_for_devices(args[:devices])
+  MlxTestTask.run_test_suite_for_devices(args[:devices], include_slow: false)
 end
 
 namespace :test do
-  desc "Run the full test suite with DEVICE=cpu."
-  task :cpu do
-    MlxTestTask.run_test_suite_for_device(:cpu)
+  desc "Run fast test suite on cpu+gpu (excludes slow tests)."
+  task :fast, [:devices] do |_task, args|
+    MlxTestTask.run_test_suite_for_devices(args[:devices], include_slow: false)
   end
 
-  desc "Run the full test suite with DEVICE=gpu."
+  desc "Run full test suite on cpu+gpu including slow tests."
+  task :all, [:devices] do |_task, args|
+    MlxTestTask.run_test_suite_for_devices(args[:devices], include_slow: true)
+  end
+
+  desc "Run the fast test suite with DEVICE=cpu (excludes slow tests)."
+  task :cpu do
+    MlxTestTask.run_test_suite_for_device(:cpu, include_slow: false)
+  end
+
+  desc "Run the fast test suite with DEVICE=gpu (excludes slow tests)."
   task :gpu do
-    MlxTestTask.run_test_suite_for_device(:gpu)
+    MlxTestTask.run_test_suite_for_device(:gpu, include_slow: false)
+  end
+
+  desc "Run full test suite with DEVICE=cpu including slow tests."
+  task :cpu_all do
+    MlxTestTask.run_test_suite_for_device(:cpu, include_slow: true)
+  end
+
+  desc "Run full test suite with DEVICE=gpu including slow tests."
+  task :gpu_all do
+    MlxTestTask.run_test_suite_for_device(:gpu, include_slow: true)
   end
 
   desc "Build, install, and run tests against the installed gem artifact."
@@ -47,6 +68,31 @@ namespace :test do
     MlxTestTask.run_installed_gem_test_suite!
   end
 end
+
+namespace :deps do
+  desc "Install Ruby dependencies (bundle install)."
+  task :ruby do
+    DepsTask.install_ruby_dependencies!
+  end
+
+  desc "Install Python dependencies from requirements.txt."
+  task :python do
+    DepsTask.install_python_dependencies!
+  end
+
+  desc "Install web smoke dependencies (python onnx + node/npm/npx checks + playwright + onnxruntime-web)."
+  task :web do
+    DepsTask.install_web_dependencies!
+  end
+
+  desc "Install all dependencies needed for full local/CI test coverage."
+  task :all do
+    DepsTask.install_all!
+  end
+end
+
+desc "Install all project dependencies (Ruby + Python + web)."
+task deps: "deps:all"
 
 desc "Build native extension."
 task :build do

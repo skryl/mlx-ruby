@@ -47,7 +47,7 @@ class Phase294ConcatenateLoweringParityTest < Minitest::Test
     assert_equal "Concatenate", node.fetch("op")
     assert_equal [1], node.fetch("arguments")
 
-    stub = MLX::GraphIR.graph_ir_to_onnx_payload(payload)
+    stub = TestSupport.parse_onnx_stub(payload)
     onnx_node = stub.fetch("graph").fetch("nodes").first
     assert_equal "Concat", onnx_node.fetch("op_type")
     assert_equal({ "axis" => 1 }, onnx_node.fetch("attributes"))

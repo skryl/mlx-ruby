@@ -8,7 +8,6 @@ Ownership boundary
 
 Use ``MLX::GraphIR`` as the public API:
 
-- ``MLX::GraphIR.graph_ir_to_onnx_payload``
 - ``MLX::GraphIR.graph_ir_to_onnx_json``
 - ``MLX::GraphIR.export_onnx_json``
 - ``MLX::GraphIR.onnx_json_to_onnx``
@@ -62,8 +61,7 @@ Use ``onnx_json_to_onnx`` for ``.onnx`` output.
 
 ``MLX::GraphIR.onnx_json_to_onnx`` behavior:
 
-- IO-like target: returns ``.onnx`` bytes and writes to the IO.
-- Path-like target: writes the file and returns ``nil``.
+- Path-like target only: writes the file and returns the written path.
 
 External data mode
 ------------------
@@ -84,7 +82,7 @@ This writes ``model.onnx`` plus ``model.data`` in the target directory.
 
 External-data notes:
 
-- ``external_data: true`` requires a path-like ``target`` (not IO-like).
+- ``onnx_json_to_onnx`` requires a path-like ``target`` (not IO-like).
 - ``external_data_size_threshold`` must be a non-negative integer.
 - If ``external_data_file`` is omitted, the default is
   ``<target_basename>.data``.
