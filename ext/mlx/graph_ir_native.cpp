@@ -47,6 +47,10 @@ using OrderedJson = nlohmann::ordered_json;
 
 namespace {
 
+// ============================================================================
+// Section: Shared Types, Constants, and Lookup Tables
+// ============================================================================
+
 using Shape = std::vector<int64_t>;
 using ShapeMap = std::map<std::string, Shape>;
 using DtypeMap = std::map<std::string, std::string>;
@@ -222,6 +226,10 @@ struct OnnxBinaryArtifact {
   bool has_external_data = false;
 };
 
+// ============================================================================
+// Section: Timing and Diagnostics Helpers
+// ============================================================================
+
 static bool graph_ir_native_timing_enabled() {
   const char* raw = std::getenv("MLX_GRAPH_IR_NATIVE_TIMING");
   if (raw == nullptr) {
@@ -311,6 +319,10 @@ static std::string dtype_to_string(mx::Dtype dtype) {
 static void ruby_hash_set_cstr(VALUE hash, const char* key, VALUE value) {
   rb_hash_aset(hash, rb_str_new_cstr(key), value);
 }
+
+// ============================================================================
+// Section: GraphIR Export Capture and Trace Conversion
+// ============================================================================
 
 static GraphIrExportInvocation parse_graph_ir_export_invocation(
     int argc,
@@ -859,6 +871,10 @@ VALUE core_native_export_graph_ir_json(int argc, VALUE* argv, VALUE) {
   }
 }
 
+// ============================================================================
+// Section: Ruby <-> OrderedJson Conversion and Source Parsing
+// ============================================================================
+
 static std::string std_string_from_ruby(VALUE value) {
   VALUE str = rb_obj_as_string(value);
   return std::string(RSTRING_PTR(str), static_cast<size_t>(RSTRING_LEN(str)));
@@ -1093,6 +1109,10 @@ static std::string ruby_path_string(VALUE value, const char* label) {
   }
   return path;
 }
+
+// ============================================================================
+// Section: ONNX Lowering Utilities and Shape/Dtype Inference
+// ============================================================================
 
 static bool json_is_numeric(const OrderedJson& value) {
   return value.is_number_integer() || value.is_number_unsigned() || value.is_number_float();
@@ -3100,6 +3120,235 @@ static std::optional<std::string> onnx_op_type_for_node(
   throw std::runtime_error(out.str());
 }
 
+static std::vector<OrderedJson> lower_onnx_arange_node(
+    const std::vector<std::string>& outputs,
+    const OrderedJson& arguments,
+    OrderedJson& initializers,
+    ShapeMap& known_shapes,
+    DtypeMap& known_dtypes) {
+  const auto parsed = arange_arguments(arguments);
+  const auto values = arange_values(parsed);
+
+  OrderedJson tensor = OrderedJson::object();
+  tensor["name"] = outputs.at(0);
+  tensor["shape"] = json_from_int_vector({static_cast<int64_t>(values.size())});
+  tensor["dtype"] = parsed.dtype;
+  tensor["values"] = values;
+
+  initializers.push_back(onnx_initializer_info(tensor));
+  known_shapes[outputs.at(0)] = {static_cast<int64_t>(values.size())};
+  known_dtypes[outputs.at(0)] = parsed.dtype;
+  return {};
+}
+
+static std::vector<OrderedJson> lower_onnx_convolution_node(
+    size_t node_index,
+    const std::vector<std::string>& inputs,
+    const std::vector<std::string>& outputs,
+    const OrderedJson& arguments,
+    NameSet& used_tensor_names,
+    ShapeMap& known_shapes,
+    DtypeMap& known_dtypes) {
+  const auto convolution = convolution_attributes_from_arguments(arguments, true).value();
+
+  if (convolution.flip) {
+    const auto spatial_rank = convolution.spatial_rank;
+    const auto [input_perm, output_perm] = convolution_data_permutations(spatial_rank);
+    const auto weight_perm = convolution_transpose_weight_permutation(spatial_rank);
+
+    const auto input_shape = known_shape_for(known_shapes, inputs[0]);
+    const auto weight_shape = known_shape_for(known_shapes, inputs[1]);
+    if (!weight_shape.has_value()) {
+      throw std::runtime_error(
+          "[graph_ir_to_onnx_stub] unsupported Convolution flip=true without known static weight shape");
+    }
+
+    const auto transposed_input = unique_aux_tensor_name(used_tensor_names, node_index, "conv_transpose_input_ncx");
+    const auto transposed_weight = unique_aux_tensor_name(used_tensor_names, node_index, "conv_transpose_weight_icx");
+    const auto conv_output = unique_aux_tensor_name(used_tensor_names, node_index, "conv_transpose_output_ncx");
+
+    if (input_shape.has_value()) {
+      known_shapes[transposed_input] = permute_shape(
+          input_shape.value(),
+          input_perm,
+          "ConvolutionTranspose input permutation");
+    }
+    known_shapes[transposed_weight] = permute_shape(
+        weight_shape.value(),
+        weight_perm,
+        "ConvolutionTranspose weight permutation");
+
+    const auto conv_transpose = convtranspose_attributes_from_convolution(convolution, weight_shape.value());
+    auto inferred_output_shape = infer_convolution_transpose_output_shape(
+        input_shape,
+        weight_shape,
+        conv_transpose.strides,
+        conv_transpose.pads_begin,
+        conv_transpose.pads_end,
+        conv_transpose.dilations,
+        conv_transpose.output_padding,
+        convolution.groups);
+    if (inferred_output_shape.has_value()) {
+      known_shapes[conv_output] = permute_shape(
+          inferred_output_shape.value(),
+          input_perm,
+          "ConvolutionTranspose output permutation");
+      for (const auto& name : outputs) {
+        known_shapes[name] = inferred_output_shape.value();
+      }
+    }
+
+    OrderedJson conv_transpose_attributes = OrderedJson::object();
+    conv_transpose_attributes["strides"] = json_from_int_vector(conv_transpose.strides);
+    conv_transpose_attributes["pads"] = json_from_int_vector(conv_transpose.pads);
+    conv_transpose_attributes["dilations"] = json_from_int_vector(conv_transpose.dilations);
+    conv_transpose_attributes["group"] = convolution.groups;
+    conv_transpose_attributes["output_padding"] = json_from_int_vector(conv_transpose.output_padding);
+
+    const auto input_dtype = known_dtype_for(known_dtypes, inputs[0]);
+    const auto weight_dtype = known_dtype_for(known_dtypes, inputs[1]);
+    auto conv_output_dtype = promote_binary_dtype(input_dtype, weight_dtype);
+    if (!conv_output_dtype.has_value()) {
+      conv_output_dtype = input_dtype.has_value() ? input_dtype : weight_dtype;
+    }
+
+    if (input_dtype.has_value()) {
+      known_dtypes[transposed_input] = input_dtype.value();
+    }
+    if (weight_dtype.has_value()) {
+      known_dtypes[transposed_weight] = weight_dtype.value();
+    }
+    if (conv_output_dtype.has_value()) {
+      known_dtypes[conv_output] = conv_output_dtype.value();
+      for (const auto& name : outputs) {
+        known_dtypes[name] = conv_output_dtype.value();
+      }
+    }
+
+    return {
+        build_onnx_node_spec(
+            "node_" + std::to_string(node_index) + "_InputTranspose",
+            "Transpose",
+            {inputs[0]},
+            {transposed_input},
+            OrderedJson::object({{"perm", json_from_int_vector(input_perm)}})),
+        build_onnx_node_spec(
+            "node_" + std::to_string(node_index) + "_WeightTranspose",
+            "Transpose",
+            {inputs[1]},
+            {transposed_weight},
+            OrderedJson::object({{"perm", json_from_int_vector(weight_perm)}})),
+        build_onnx_node_spec(
+            "node_" + std::to_string(node_index) + "_ConvTranspose",
+            "ConvTranspose",
+            {transposed_input, transposed_weight},
+            {conv_output},
+            conv_transpose_attributes),
+        build_onnx_node_spec(
+            "node_" + std::to_string(node_index) + "_OutputTranspose",
+            "Transpose",
+            {conv_output},
+            outputs,
+            OrderedJson::object({{"perm", json_from_int_vector(output_perm)}}))};
+  }
+
+  if (std::any_of(convolution.input_dilation.begin(), convolution.input_dilation.end(), [](int64_t value) { return value != 1; })) {
+    std::ostringstream out;
+    out << "[graph_ir_to_onnx_stub] unsupported Convolution input_dilation "
+        << json_from_int_vector(convolution.input_dilation).dump()
+        << "; only all-ones input_dilation is supported for flip=false";
+    throw std::runtime_error(out.str());
+  }
+
+  const auto spatial_rank = convolution.spatial_rank;
+  const auto [input_perm, output_perm] = convolution_data_permutations(spatial_rank);
+  const auto weight_perm = convolution_weight_permutation(spatial_rank);
+
+  const auto input_shape = known_shape_for(known_shapes, inputs[0]);
+  const auto weight_shape = known_shape_for(known_shapes, inputs[1]);
+  const size_t input_rank = spatial_rank + 2;
+
+  if (input_shape.has_value() && input_shape->size() != input_rank) {
+    std::ostringstream out;
+    out << "[graph_ir_to_onnx_stub] Convolution input rank mismatch: expected "
+        << input_rank << ", got " << input_shape->size();
+    throw std::invalid_argument(out.str());
+  }
+  if (weight_shape.has_value() && weight_shape->size() != input_rank) {
+    std::ostringstream out;
+    out << "[graph_ir_to_onnx_stub] Convolution weight rank mismatch: expected "
+        << input_rank << ", got " << weight_shape->size();
+    throw std::invalid_argument(out.str());
+  }
+
+  const auto transposed_input = unique_aux_tensor_name(used_tensor_names, node_index, "conv_input_ncx");
+  const auto transposed_weight = unique_aux_tensor_name(used_tensor_names, node_index, "conv_weight_ocx");
+  const auto conv_output = unique_aux_tensor_name(used_tensor_names, node_index, "conv_output_ncx");
+
+  if (input_shape.has_value()) {
+    known_shapes[transposed_input] = permute_shape(
+        input_shape.value(),
+        input_perm,
+        "Convolution input permutation");
+  }
+  if (weight_shape.has_value()) {
+    known_shapes[transposed_weight] = permute_shape(
+        weight_shape.value(),
+        weight_perm,
+        "Convolution weight permutation");
+  }
+
+  auto inferred_output_shape = infer_convolution_output_shape(
+      input_shape,
+      weight_shape,
+      convolution.strides,
+      convolution.padding_low,
+      convolution.padding_high,
+      convolution.kernel_dilation,
+      convolution.groups);
+  if (inferred_output_shape.has_value()) {
+    known_shapes[conv_output] = permute_shape(
+        inferred_output_shape.value(),
+        input_perm,
+        "Convolution output permutation");
+    for (const auto& name : outputs) {
+      known_shapes[name] = inferred_output_shape.value();
+    }
+  }
+
+  OrderedJson conv_attributes = OrderedJson::object();
+  conv_attributes["strides"] = json_from_int_vector(convolution.strides);
+  conv_attributes["pads"] = json_from_int_vector(convolution.pads);
+  conv_attributes["dilations"] = json_from_int_vector(convolution.kernel_dilation);
+  conv_attributes["group"] = convolution.groups;
+
+  return {
+      build_onnx_node_spec(
+          "node_" + std::to_string(node_index) + "_InputTranspose",
+          "Transpose",
+          {inputs[0]},
+          {transposed_input},
+          OrderedJson::object({{"perm", json_from_int_vector(input_perm)}})),
+      build_onnx_node_spec(
+          "node_" + std::to_string(node_index) + "_WeightTranspose",
+          "Transpose",
+          {inputs[1]},
+          {transposed_weight},
+          OrderedJson::object({{"perm", json_from_int_vector(weight_perm)}})),
+      build_onnx_node_spec(
+          "node_" + std::to_string(node_index) + "_Conv",
+          "Conv",
+          {transposed_input, transposed_weight},
+          {conv_output},
+          conv_attributes),
+      build_onnx_node_spec(
+          "node_" + std::to_string(node_index) + "_OutputTranspose",
+          "Transpose",
+          {conv_output},
+          outputs,
+          OrderedJson::object({{"perm", json_from_int_vector(output_perm)}}))};
+}
+
 static std::vector<OrderedJson> lower_onnx_node_default(
     const OrderedJson& node,
     size_t node_index,
@@ -3119,19 +3368,7 @@ static std::vector<OrderedJson> lower_onnx_node_default(
   std::optional<std::string> inferred_output_dtype;
 
   if (op == "Arange") {
-    const auto parsed = arange_arguments(arguments);
-    const auto values = arange_values(parsed);
-
-    OrderedJson tensor = OrderedJson::object();
-    tensor["name"] = outputs.at(0);
-    tensor["shape"] = json_from_int_vector({static_cast<int64_t>(values.size())});
-    tensor["dtype"] = parsed.dtype;
-    tensor["values"] = values;
-
-    initializers.push_back(onnx_initializer_info(tensor));
-    known_shapes[outputs.at(0)] = {static_cast<int64_t>(values.size())};
-    known_dtypes[outputs.at(0)] = parsed.dtype;
-    return {};
+    return lower_onnx_arange_node(outputs, arguments, initializers, known_shapes, known_dtypes);
   }
 
   if (op == "Transpose") {
@@ -3154,204 +3391,14 @@ static std::vector<OrderedJson> lower_onnx_node_default(
   }
 
   if (op == "Convolution") {
-    const auto convolution = convolution_attributes_from_arguments(arguments, true).value();
-
-    if (convolution.flip) {
-      const auto spatial_rank = convolution.spatial_rank;
-      const auto [input_perm, output_perm] = convolution_data_permutations(spatial_rank);
-      const auto weight_perm = convolution_transpose_weight_permutation(spatial_rank);
-
-      const auto input_shape = known_shape_for(known_shapes, inputs[0]);
-      const auto weight_shape = known_shape_for(known_shapes, inputs[1]);
-      if (!weight_shape.has_value()) {
-        throw std::runtime_error(
-            "[graph_ir_to_onnx_stub] unsupported Convolution flip=true without known static weight shape");
-      }
-
-      const auto transposed_input = unique_aux_tensor_name(used_tensor_names, node_index, "conv_transpose_input_ncx");
-      const auto transposed_weight = unique_aux_tensor_name(used_tensor_names, node_index, "conv_transpose_weight_icx");
-      const auto conv_output = unique_aux_tensor_name(used_tensor_names, node_index, "conv_transpose_output_ncx");
-
-      if (input_shape.has_value()) {
-        known_shapes[transposed_input] = permute_shape(
-            input_shape.value(),
-            input_perm,
-            "ConvolutionTranspose input permutation");
-      }
-      known_shapes[transposed_weight] = permute_shape(
-          weight_shape.value(),
-          weight_perm,
-          "ConvolutionTranspose weight permutation");
-
-      const auto conv_transpose = convtranspose_attributes_from_convolution(convolution, weight_shape.value());
-      inferred_output_shape = infer_convolution_transpose_output_shape(
-          input_shape,
-          weight_shape,
-          conv_transpose.strides,
-          conv_transpose.pads_begin,
-          conv_transpose.pads_end,
-          conv_transpose.dilations,
-          conv_transpose.output_padding,
-          convolution.groups);
-      if (inferred_output_shape.has_value()) {
-        known_shapes[conv_output] = permute_shape(
-            inferred_output_shape.value(),
-            input_perm,
-            "ConvolutionTranspose output permutation");
-        for (const auto& name : outputs) {
-          known_shapes[name] = inferred_output_shape.value();
-        }
-      }
-
-      OrderedJson conv_transpose_attributes = OrderedJson::object();
-      conv_transpose_attributes["strides"] = json_from_int_vector(conv_transpose.strides);
-      conv_transpose_attributes["pads"] = json_from_int_vector(conv_transpose.pads);
-      conv_transpose_attributes["dilations"] = json_from_int_vector(conv_transpose.dilations);
-      conv_transpose_attributes["group"] = convolution.groups;
-      conv_transpose_attributes["output_padding"] = json_from_int_vector(conv_transpose.output_padding);
-
-      const auto input_dtype = known_dtype_for(known_dtypes, inputs[0]);
-      const auto weight_dtype = known_dtype_for(known_dtypes, inputs[1]);
-      auto conv_output_dtype = promote_binary_dtype(input_dtype, weight_dtype);
-      if (!conv_output_dtype.has_value()) {
-        conv_output_dtype = input_dtype.has_value() ? input_dtype : weight_dtype;
-      }
-
-      if (input_dtype.has_value()) {
-        known_dtypes[transposed_input] = input_dtype.value();
-      }
-      if (weight_dtype.has_value()) {
-        known_dtypes[transposed_weight] = weight_dtype.value();
-      }
-      if (conv_output_dtype.has_value()) {
-        known_dtypes[conv_output] = conv_output_dtype.value();
-        for (const auto& name : outputs) {
-          known_dtypes[name] = conv_output_dtype.value();
-        }
-      }
-
-      return {
-          build_onnx_node_spec(
-              "node_" + std::to_string(node_index) + "_InputTranspose",
-              "Transpose",
-              {inputs[0]},
-              {transposed_input},
-              OrderedJson::object({{"perm", json_from_int_vector(input_perm)}})),
-          build_onnx_node_spec(
-              "node_" + std::to_string(node_index) + "_WeightTranspose",
-              "Transpose",
-              {inputs[1]},
-              {transposed_weight},
-              OrderedJson::object({{"perm", json_from_int_vector(weight_perm)}})),
-          build_onnx_node_spec(
-              "node_" + std::to_string(node_index) + "_ConvTranspose",
-              "ConvTranspose",
-              {transposed_input, transposed_weight},
-              {conv_output},
-              conv_transpose_attributes),
-          build_onnx_node_spec(
-              "node_" + std::to_string(node_index) + "_OutputTranspose",
-              "Transpose",
-              {conv_output},
-              outputs,
-              OrderedJson::object({{"perm", json_from_int_vector(output_perm)}}))};
-    }
-
-    if (std::any_of(convolution.input_dilation.begin(), convolution.input_dilation.end(), [](int64_t value) { return value != 1; })) {
-      std::ostringstream out;
-      out << "[graph_ir_to_onnx_stub] unsupported Convolution input_dilation "
-          << json_from_int_vector(convolution.input_dilation).dump()
-          << "; only all-ones input_dilation is supported for flip=false";
-      throw std::runtime_error(out.str());
-    }
-
-    const auto spatial_rank = convolution.spatial_rank;
-    const auto [input_perm, output_perm] = convolution_data_permutations(spatial_rank);
-    const auto weight_perm = convolution_weight_permutation(spatial_rank);
-
-    const auto input_shape = known_shape_for(known_shapes, inputs[0]);
-    const auto weight_shape = known_shape_for(known_shapes, inputs[1]);
-    const size_t input_rank = spatial_rank + 2;
-
-    if (input_shape.has_value() && input_shape->size() != input_rank) {
-      std::ostringstream out;
-      out << "[graph_ir_to_onnx_stub] Convolution input rank mismatch: expected "
-          << input_rank << ", got " << input_shape->size();
-      throw std::invalid_argument(out.str());
-    }
-    if (weight_shape.has_value() && weight_shape->size() != input_rank) {
-      std::ostringstream out;
-      out << "[graph_ir_to_onnx_stub] Convolution weight rank mismatch: expected "
-          << input_rank << ", got " << weight_shape->size();
-      throw std::invalid_argument(out.str());
-    }
-
-    const auto transposed_input = unique_aux_tensor_name(used_tensor_names, node_index, "conv_input_ncx");
-    const auto transposed_weight = unique_aux_tensor_name(used_tensor_names, node_index, "conv_weight_ocx");
-    const auto conv_output = unique_aux_tensor_name(used_tensor_names, node_index, "conv_output_ncx");
-
-    if (input_shape.has_value()) {
-      known_shapes[transposed_input] = permute_shape(
-          input_shape.value(),
-          input_perm,
-          "Convolution input permutation");
-    }
-    if (weight_shape.has_value()) {
-      known_shapes[transposed_weight] = permute_shape(
-          weight_shape.value(),
-          weight_perm,
-          "Convolution weight permutation");
-    }
-
-    inferred_output_shape = infer_convolution_output_shape(
-        input_shape,
-        weight_shape,
-        convolution.strides,
-        convolution.padding_low,
-        convolution.padding_high,
-        convolution.kernel_dilation,
-        convolution.groups);
-    if (inferred_output_shape.has_value()) {
-      known_shapes[conv_output] = permute_shape(
-          inferred_output_shape.value(),
-          input_perm,
-          "Convolution output permutation");
-      for (const auto& name : outputs) {
-        known_shapes[name] = inferred_output_shape.value();
-      }
-    }
-
-    OrderedJson conv_attributes = OrderedJson::object();
-    conv_attributes["strides"] = json_from_int_vector(convolution.strides);
-    conv_attributes["pads"] = json_from_int_vector(convolution.pads);
-    conv_attributes["dilations"] = json_from_int_vector(convolution.kernel_dilation);
-    conv_attributes["group"] = convolution.groups;
-
-    return {
-        build_onnx_node_spec(
-            "node_" + std::to_string(node_index) + "_InputTranspose",
-            "Transpose",
-            {inputs[0]},
-            {transposed_input},
-            OrderedJson::object({{"perm", json_from_int_vector(input_perm)}})),
-        build_onnx_node_spec(
-            "node_" + std::to_string(node_index) + "_WeightTranspose",
-            "Transpose",
-            {inputs[1]},
-            {transposed_weight},
-            OrderedJson::object({{"perm", json_from_int_vector(weight_perm)}})),
-        build_onnx_node_spec(
-            "node_" + std::to_string(node_index) + "_Conv",
-            "Conv",
-            {transposed_input, transposed_weight},
-            {conv_output},
-            conv_attributes),
-        build_onnx_node_spec(
-            "node_" + std::to_string(node_index) + "_OutputTranspose",
-            "Transpose",
-            {conv_output},
-            outputs,
-            OrderedJson::object({{"perm", json_from_int_vector(output_perm)}}))};
+    return lower_onnx_convolution_node(
+        node_index,
+        inputs,
+        outputs,
+        arguments,
+        used_tensor_names,
+        known_shapes,
+        known_dtypes);
   }
 
   if (op == "Reduce") {
@@ -4347,6 +4394,10 @@ static OrderedJson graph_ir_to_onnx_json_payload(
   return out;
 }
 
+// ============================================================================
+// Section: ONNX Protobuf Encoding
+// ============================================================================
+
 enum class PbWireType : uint8_t {
   kVarint = 0,
   kFixed64 = 1,
@@ -4636,6 +4687,89 @@ static std::pair<float, float> complex64_pair_from_json(const OrderedJson& value
   throw std::invalid_argument(out.str());
 }
 
+template <typename IntegerType>
+static std::string tensor_raw_integer_initializer(
+    const std::vector<const OrderedJson*>& leaves,
+    size_t expected,
+    const std::string& label) {
+  std::string raw;
+  raw.reserve(expected * sizeof(IntegerType));
+  for (const auto* item : leaves) {
+    append_le_bytes<IntegerType>(raw, static_cast<IntegerType>(normalized_integer_scalar(*item, label)));
+  }
+  return raw;
+}
+
+static double numeric_initializer_leaf(const OrderedJson& value, const std::string& numeric_error_message) {
+  if (!json_is_numeric(value)) {
+    throw std::invalid_argument(numeric_error_message);
+  }
+  return value.get<double>();
+}
+
+template <typename FloatType>
+static std::string tensor_raw_float_initializer(
+    const std::vector<const OrderedJson*>& leaves,
+    size_t expected,
+    const std::string& numeric_error_message) {
+  std::string raw;
+  raw.reserve(expected * sizeof(FloatType));
+  for (const auto* item : leaves) {
+    append_le_bytes<FloatType>(raw, static_cast<FloatType>(numeric_initializer_leaf(*item, numeric_error_message)));
+  }
+  return raw;
+}
+
+static std::string tensor_raw_bool_initializer(const std::vector<const OrderedJson*>& leaves, size_t expected) {
+  std::string raw;
+  raw.reserve(expected);
+  for (const auto* item : leaves) {
+    uint8_t value = 0;
+    if (item->is_boolean()) {
+      value = item->get<bool>() ? 1 : 0;
+    } else if (json_integer_like(*item)) {
+      value = normalized_integer_scalar(*item, "bool initializer leaf") == 0 ? 0 : 1;
+    } else if (item->is_number_float()) {
+      value = item->get<double>() == 0.0 ? 0 : 1;
+    } else {
+      throw std::invalid_argument("bool initializer values must be numeric/boolean");
+    }
+    raw.push_back(static_cast<char>(value));
+  }
+  return raw;
+}
+
+static std::string tensor_raw_float16_initializer(const std::vector<const OrderedJson*>& leaves, size_t expected) {
+  std::string raw;
+  raw.reserve(expected * sizeof(uint16_t));
+  for (const auto* item : leaves) {
+    const float value = static_cast<float>(numeric_initializer_leaf(*item, "float16 initializer values must be numeric"));
+    append_le_bytes<uint16_t>(raw, float32_to_float16_bits(value));
+  }
+  return raw;
+}
+
+static std::string tensor_raw_bfloat16_initializer(const std::vector<const OrderedJson*>& leaves, size_t expected) {
+  std::string raw;
+  raw.reserve(expected * sizeof(uint16_t));
+  for (const auto* item : leaves) {
+    const float value = static_cast<float>(numeric_initializer_leaf(*item, "bfloat16 initializer values must be numeric"));
+    append_le_bytes<uint16_t>(raw, float32_to_bfloat16_bits(value));
+  }
+  return raw;
+}
+
+static std::string tensor_raw_complex64_initializer(const std::vector<const OrderedJson*>& leaves, size_t expected) {
+  std::string raw;
+  raw.reserve(expected * sizeof(float) * 2);
+  for (const auto* item : leaves) {
+    auto [real, imag] = complex64_pair_from_json(*item, "complex64 initializer leaf");
+    append_le_bytes<float>(raw, real);
+    append_le_bytes<float>(raw, imag);
+  }
+  return raw;
+}
+
 static std::string tensor_raw_bytes_from_initializer(const OrderedJson& initializer) {
   const std::string dtype = initializer.at("dtype").get<std::string>();
   const auto dims = shape_vector_from_json(initializer.at("shape"), "initializer");
@@ -4650,134 +4784,48 @@ static std::string tensor_raw_bytes_from_initializer(const OrderedJson& initiali
     throw std::invalid_argument(out.str());
   }
 
-  std::string raw;
   if (dtype == "bool" || dtype == "bool_") {
-    raw.reserve(expected);
-    for (const auto* item : leaves) {
-      uint8_t v = 0;
-      if (item->is_boolean()) {
-        v = item->get<bool>() ? 1 : 0;
-      } else if (json_integer_like(*item)) {
-        v = normalized_integer_scalar(*item, "bool initializer leaf") == 0 ? 0 : 1;
-      } else if (item->is_number_float()) {
-        v = item->get<double>() == 0.0 ? 0 : 1;
-      } else {
-        throw std::invalid_argument("bool initializer values must be numeric/boolean");
-      }
-      raw.push_back(static_cast<char>(v));
-    }
-    return raw;
+    return tensor_raw_bool_initializer(leaves, expected);
   }
 
   if (dtype == "uint8") {
-    raw.reserve(expected * sizeof(uint8_t));
-    for (const auto* item : leaves) {
-      append_le_bytes<uint8_t>(raw, static_cast<uint8_t>(normalized_integer_scalar(*item, "uint8 initializer leaf")));
-    }
-    return raw;
+    return tensor_raw_integer_initializer<uint8_t>(leaves, expected, "uint8 initializer leaf");
   }
   if (dtype == "uint16") {
-    raw.reserve(expected * sizeof(uint16_t));
-    for (const auto* item : leaves) {
-      append_le_bytes<uint16_t>(
-          raw, static_cast<uint16_t>(normalized_integer_scalar(*item, "uint16 initializer leaf")));
-    }
-    return raw;
+    return tensor_raw_integer_initializer<uint16_t>(leaves, expected, "uint16 initializer leaf");
   }
   if (dtype == "uint32") {
-    raw.reserve(expected * sizeof(uint32_t));
-    for (const auto* item : leaves) {
-      append_le_bytes<uint32_t>(
-          raw, static_cast<uint32_t>(normalized_integer_scalar(*item, "uint32 initializer leaf")));
-    }
-    return raw;
+    return tensor_raw_integer_initializer<uint32_t>(leaves, expected, "uint32 initializer leaf");
   }
   if (dtype == "uint64") {
-    raw.reserve(expected * sizeof(uint64_t));
-    for (const auto* item : leaves) {
-      append_le_bytes<uint64_t>(
-          raw, static_cast<uint64_t>(normalized_integer_scalar(*item, "uint64 initializer leaf")));
-    }
-    return raw;
+    return tensor_raw_integer_initializer<uint64_t>(leaves, expected, "uint64 initializer leaf");
   }
   if (dtype == "int8") {
-    raw.reserve(expected * sizeof(int8_t));
-    for (const auto* item : leaves) {
-      append_le_bytes<int8_t>(raw, static_cast<int8_t>(normalized_integer_scalar(*item, "int8 initializer leaf")));
-    }
-    return raw;
+    return tensor_raw_integer_initializer<int8_t>(leaves, expected, "int8 initializer leaf");
   }
   if (dtype == "int16") {
-    raw.reserve(expected * sizeof(int16_t));
-    for (const auto* item : leaves) {
-      append_le_bytes<int16_t>(raw, static_cast<int16_t>(normalized_integer_scalar(*item, "int16 initializer leaf")));
-    }
-    return raw;
+    return tensor_raw_integer_initializer<int16_t>(leaves, expected, "int16 initializer leaf");
   }
   if (dtype == "int32") {
-    raw.reserve(expected * sizeof(int32_t));
-    for (const auto* item : leaves) {
-      append_le_bytes<int32_t>(raw, static_cast<int32_t>(normalized_integer_scalar(*item, "int32 initializer leaf")));
-    }
-    return raw;
+    return tensor_raw_integer_initializer<int32_t>(leaves, expected, "int32 initializer leaf");
   }
   if (dtype == "int64") {
-    raw.reserve(expected * sizeof(int64_t));
-    for (const auto* item : leaves) {
-      append_le_bytes<int64_t>(raw, normalized_integer_scalar(*item, "int64 initializer leaf"));
-    }
-    return raw;
+    return tensor_raw_integer_initializer<int64_t>(leaves, expected, "int64 initializer leaf");
   }
   if (dtype == "float16") {
-    raw.reserve(expected * sizeof(uint16_t));
-    for (const auto* item : leaves) {
-      if (!json_is_numeric(*item)) {
-        throw std::invalid_argument("float16 initializer values must be numeric");
-      }
-      const float value = static_cast<float>(item->get<double>());
-      append_le_bytes<uint16_t>(raw, float32_to_float16_bits(value));
-    }
-    return raw;
+    return tensor_raw_float16_initializer(leaves, expected);
   }
   if (dtype == "bfloat16") {
-    raw.reserve(expected * sizeof(uint16_t));
-    for (const auto* item : leaves) {
-      if (!json_is_numeric(*item)) {
-        throw std::invalid_argument("bfloat16 initializer values must be numeric");
-      }
-      const float value = static_cast<float>(item->get<double>());
-      append_le_bytes<uint16_t>(raw, float32_to_bfloat16_bits(value));
-    }
-    return raw;
+    return tensor_raw_bfloat16_initializer(leaves, expected);
   }
   if (dtype == "float32") {
-    raw.reserve(expected * sizeof(float));
-    for (const auto* item : leaves) {
-      if (!json_is_numeric(*item)) {
-        throw std::invalid_argument("float32 initializer values must be numeric");
-      }
-      append_le_bytes<float>(raw, static_cast<float>(item->get<double>()));
-    }
-    return raw;
+    return tensor_raw_float_initializer<float>(leaves, expected, "float32 initializer values must be numeric");
   }
   if (dtype == "float64") {
-    raw.reserve(expected * sizeof(double));
-    for (const auto* item : leaves) {
-      if (!json_is_numeric(*item)) {
-        throw std::invalid_argument("float64 initializer values must be numeric");
-      }
-      append_le_bytes<double>(raw, item->get<double>());
-    }
-    return raw;
+    return tensor_raw_float_initializer<double>(leaves, expected, "float64 initializer values must be numeric");
   }
   if (dtype == "complex64") {
-    raw.reserve(expected * sizeof(float) * 2);
-    for (const auto* item : leaves) {
-      auto [real, imag] = complex64_pair_from_json(*item, "complex64 initializer leaf");
-      append_le_bytes<float>(raw, real);
-      append_le_bytes<float>(raw, imag);
-    }
-    return raw;
+    return tensor_raw_complex64_initializer(leaves, expected);
   }
 
   std::ostringstream out;
@@ -4921,6 +4969,66 @@ static std::string pb_encode_node(const OrderedJson& node) {
   return out;
 }
 
+static void pb_encode_tensor_header(
+    std::string& out,
+    const std::vector<int64_t>& shape,
+    int elem_type,
+    const std::string& name) {
+  for (const auto dim : shape) {
+    pb_write_int64_field(out, 1, dim);
+  }
+  pb_write_varint_field(out, 2, static_cast<uint64_t>(elem_type));
+  pb_write_string_field(out, 8, name);
+}
+
+static uint32_t raw_bytes_u32_le_at(const std::string& raw, size_t offset) {
+  const auto b0 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 0]));
+  const auto b1 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 1]));
+  const auto b2 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 2]));
+  const auto b3 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 3]));
+  return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+}
+
+static void pb_encode_tensor_inline_complex64_data(std::string& out, const std::string& raw) {
+  if ((raw.size() % sizeof(float)) != 0) {
+    throw std::invalid_argument("complex64 initializer raw byte count must be divisible by 4");
+  }
+  for (size_t offset = 0; offset < raw.size(); offset += sizeof(float)) {
+    pb_write_fixed32_field(out, 4, raw_bytes_u32_le_at(raw, offset));
+  }
+}
+
+static void pb_encode_tensor_inline_data(std::string& out, const std::string& dtype, const std::string& raw) {
+  if (dtype == "complex64") {
+    pb_encode_tensor_inline_complex64_data(out, raw);
+    return;
+  }
+  pb_write_bytes_field(out, 9, raw);
+}
+
+static void pb_encode_tensor_external_data_entries(
+    std::string& out,
+    const std::string& external_data_file,
+    uint64_t external_offset,
+    size_t raw_size) {
+  pb_write_message_field(out, 13, pb_encode_string_string_entry("location", external_data_file));
+  pb_write_message_field(out, 13, pb_encode_string_string_entry("offset", std::to_string(external_offset)));
+  pb_write_message_field(out, 13, pb_encode_string_string_entry("length", std::to_string(raw_size)));
+  pb_write_varint_field(out, 14, 1);
+}
+
+static void append_tensor_external_data(std::string& external_data, uint64_t& external_offset, const std::string& raw) {
+  external_data.append(raw);
+  external_offset += static_cast<uint64_t>(raw.size());
+}
+
+static bool should_externalize_tensor_raw_bytes(
+    const OnnxBinaryWriteOptions& options,
+    const std::string& raw) {
+  return options.external_data &&
+      static_cast<int64_t>(raw.size()) >= options.external_data_size_threshold;
+}
+
 static std::string pb_encode_tensor(
     const OrderedJson& tensor,
     const OnnxBinaryWriteOptions& options,
@@ -4934,42 +5042,18 @@ static std::string pb_encode_tensor(
   const std::string raw = tensor_raw_bytes_from_initializer(tensor);
 
   std::string out;
-  for (const auto dim : shape) {
-    pb_write_int64_field(out, 1, dim);
-  }
-  pb_write_varint_field(out, 2, static_cast<uint64_t>(elem_type));
-  pb_write_string_field(out, 8, name);
+  pb_encode_tensor_header(out, shape, elem_type, name);
 
-  const bool externalize = options.external_data &&
-      static_cast<int64_t>(raw.size()) >= options.external_data_size_threshold;
+  const bool externalize = should_externalize_tensor_raw_bytes(options, raw);
 
   if (!externalize) {
-    if (dtype == "complex64") {
-      if ((raw.size() % sizeof(float)) != 0) {
-        throw std::invalid_argument("complex64 initializer raw byte count must be divisible by 4");
-      }
-      for (size_t offset = 0; offset < raw.size(); offset += sizeof(float)) {
-        const auto b0 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 0]));
-        const auto b1 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 1]));
-        const auto b2 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 2]));
-        const auto b3 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 3]));
-        const uint32_t bits = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
-        pb_write_fixed32_field(out, 4, bits);
-      }
-      return out;
-    }
-    pb_write_bytes_field(out, 9, raw);
+    pb_encode_tensor_inline_data(out, dtype, raw);
     return out;
   }
 
   has_external_data = true;
-  pb_write_message_field(out, 13, pb_encode_string_string_entry("location", options.external_data_file));
-  pb_write_message_field(out, 13, pb_encode_string_string_entry("offset", std::to_string(external_offset)));
-  pb_write_message_field(out, 13, pb_encode_string_string_entry("length", std::to_string(raw.size())));
-  pb_write_varint_field(out, 14, 1);
-
-  external_data.append(raw);
-  external_offset += static_cast<uint64_t>(raw.size());
+  pb_encode_tensor_external_data_entries(out, options.external_data_file, external_offset, raw.size());
+  append_tensor_external_data(external_data, external_offset, raw);
   return out;
 }
 
@@ -5039,6 +5123,10 @@ static OnnxBinaryArtifact build_onnx_binary_artifact_from_stub(
   artifact.has_external_data = has_external_data;
   return artifact;
 }
+
+// ============================================================================
+// Section: Binary Artifact IO and Error Translation
+// ============================================================================
 
 static void write_binary_file(const std::filesystem::path& path, const std::string& bytes) {
   std::ofstream output(path, std::ios::binary);
@@ -5240,6 +5328,10 @@ static OrderedJson graph_ir_compatibility_report_payload(const OrderedJson& payl
   return report;
 }
 
+// ============================================================================
+// Section: Ruby-Callable Native Entry Helpers
+// ============================================================================
+
 static VALUE graph_ir_to_onnx_json_from_source(VALUE graph_ir_source, VALUE opset, VALUE model_name) {
   const bool timing_enabled = graph_ir_native_timing_enabled();
   const auto started_at = std::chrono::steady_clock::now();
@@ -5317,6 +5409,10 @@ static GraphIrExportInvocation parse_graph_ir_export_invocation_from_structured_
   invocation.shapeless = RTEST(shapeless);
   return invocation;
 }
+
+// ============================================================================
+// Section: Ruby Singleton Method Entry Points
+// ============================================================================
 
 static VALUE graph_ir_native_export_graph_ir(
     VALUE,
@@ -5520,6 +5616,10 @@ static VALUE graph_ir_native_graph_ir_compatibility_report_json(VALUE, VALUE gra
     return Qnil;
   }
 }
+
+// ============================================================================
+// Section: Ruby Method Binding Registration
+// ============================================================================
 
 } // namespace
 
