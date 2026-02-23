@@ -307,11 +307,11 @@ MLX_DEFAULT_DEVICE=gpu bundle exec ruby your_script.rb
 
 ## Onnx/WebGPU Support
 
-MLX Ruby exposes Graph IR/ONNX/WebGPU entrypoints on `MLX::GraphIR`.
+MLX Ruby exposes Graph IR/ONNX/WebGPU entrypoints on `MLX::ONNX`.
 
 Architecture boundary:
 
-- Public API (`MLX::GraphIR`):
+- Public API (`MLX::ONNX`):
   - `export_onnx`
   - `export_onnx_json`
   - `export_onnx_compatibility_report`
@@ -320,28 +320,28 @@ Architecture boundary:
   - `graph_ir_to_onnx`
   - `graph_ir_to_onnx_json`
 - Internal implementation modules:
-  - `MLX::GraphIR`
-  - `MLX::GraphIR::Native`
-  - `MLX::GraphIR::WebGPUHarness`
+  - `MLX::ONNX`
+  - `MLX::ONNX::Native`
+  - `MLX::ONNX::WebGPUHarness`
 
 End-to-end flow:
 
-1. Export Graph IR hash with `MLX::GraphIR.export_graph_ir` (or JSON debug
-   payload with `MLX::GraphIR.export_graph_ir_json`).
-2. Generate ONNX JSON debug stubs with `MLX::GraphIR.graph_ir_to_onnx_json`
-   or directly with `MLX::GraphIR.export_onnx_json`.
+1. Export Graph IR hash with `MLX::ONNX.export_graph_ir` (or JSON debug
+   payload with `MLX::ONNX.export_graph_ir_json`).
+2. Generate ONNX JSON debug stubs with `MLX::ONNX.graph_ir_to_onnx_json`
+   or directly with `MLX::ONNX.export_onnx_json`.
 3. Run ONNX export readiness diagnostics with
-   `MLX::GraphIR.export_onnx_compatibility_report` and inspect
+   `MLX::ONNX.export_onnx_compatibility_report` and inspect
    `unsupported_ops`.
-4. Export binary ONNX with `MLX::GraphIR.graph_ir_to_onnx` or directly with
-   `MLX::GraphIR.export_onnx` (`external_data` options are available for large
+4. Export binary ONNX with `MLX::ONNX.graph_ir_to_onnx` or directly with
+   `MLX::ONNX.export_onnx` (`external_data` options are available for large
    models).
 5. Package browser harness assets with
-   `MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness`.
+   `MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness`.
 6. Verify runtime behavior with
-   `MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness`.
+   `MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness`.
 
-Harness artifacts from `MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness`:
+Harness artifacts from `MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness`:
 
 - `model.onnx`
 - `harness.manifest.json`
@@ -350,7 +350,7 @@ Harness artifacts from `MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness`:
 - `harness.js`
 - optional external data file (for example `model.data`)
 
-Smoke telemetry from `MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness` uses
+Smoke telemetry from `MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness` uses
 `onnx_webgpu_telemetry_v1` and reports provider selection/fallback details
 (`selected_provider`, `requested_providers`, `fallback_used`) plus timing
 fields (`run_timings_ms`, `model_load_latency_ms`,
@@ -358,7 +358,7 @@ fields (`run_timings_ms`, `model_load_latency_ms`,
 
 Operational requirements:
 
-- `MLX::GraphIR.export_onnx` and `MLX::GraphIR.graph_ir_to_onnx` require a
+- `MLX::ONNX.export_onnx` and `MLX::ONNX.graph_ir_to_onnx` require a
   path-like target (not IO).
 - Browser smoke tests require Node.js + Playwright (`web/`) and optionally
   local `onnxruntime-web` assets.
@@ -505,9 +505,9 @@ The repo’s Pages workflow builds docs together with the web demo for deploymen
 
 - `lib/`: Ruby API surface (`core`, `nn`, `optimizers`, `dsl`, distributed
   utilities), with Graph IR/ONNX implementation modules under
-  `lib/mlx/graph_ir/**`.
+  `lib/mlx-onnx/**`.
 - `ext/mlx/`: native extension build bridge (`extconf.rb`, C++ binding entry).
-- `mlx/`: upstream MLX submodule.
+- `submodules/mlx/`: upstream MLX submodule.
 - `examples/web/`: web demo model/export helpers (GPT-2, nanoGPT, Stable Diffusion).
 - `tasks/`: rake task implementations (`build`, `test`, `docs`, `benchmark`,
   `web`, training/assets exporters).
@@ -528,7 +528,7 @@ make -j4
 ```
 
 - ONNX binary export fails checker/runtime loading: regenerate with
-  `MLX::GraphIR.export_onnx` / `MLX::GraphIR.graph_ir_to_onnx` and validate
+  `MLX::ONNX.export_onnx` / `MLX::ONNX.graph_ir_to_onnx` and validate
   with local `onnx.checker` tooling.
 - On Apple silicon, verify native architecture:
 
@@ -551,4 +551,4 @@ CI currently runs on `ubuntu-22.04` and `macos-14` with Ruby `3.4` and `4.0`.
 
 ## License
 
-`mlx` gem is distributed under the MIT license (see `LICENSE`).
+`mlx` gem is distributed under the `MIT` license.

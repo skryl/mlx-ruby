@@ -48,6 +48,13 @@ class SlowTestGateTest < Minitest::Test
     assert_nil probe.before_setup
   end
 
+  def test_forced_slow_onnx_web_integration_tests_are_always_marked_slow
+    entry = TestSupport.slow_test_entry(
+      "Phase313ModelFixtureWebgpuBrowserParityTest#test_transformer_webgpu_benchmark_model_runtime_parity_without_wasm_fallback"
+    )
+    refute_nil entry
+  end
+
   private
 
   def stub_singleton_method(name, &block)

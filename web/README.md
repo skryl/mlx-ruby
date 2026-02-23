@@ -8,9 +8,9 @@ Current contents:
   - `index.html`: browser UI for running an exported ONNX model.
   - `harness.js`: ONNX Runtime Web + WebGPU/wasm fallback harness logic.
   - `browser_smoke.mjs`: Playwright-based smoke runner used by
-    `MLX::GraphIR.smoke_test_onnx_webgpu_harness`.
+    `MLX::ONNX.smoke_test_onnx_webgpu_harness`.
 
-The Ruby API `MLX::GraphIR.export_onnx_webgpu_harness` copies these assets into an
+The Ruby API `MLX::ONNX.export_onnx_webgpu_harness` copies these assets into an
 output directory alongside `model.onnx` and harness metadata files.
 
 For local smoke testing from this directory:

@@ -7,7 +7,7 @@ class Phase325ExamplesAdapterBooleanDiffParityTest < Minitest::Test
   def setup
     @adapter = ExamplesModelsBenchmarkAdapter.new(
       repo_root: RUBY_ROOT,
-      submodule_root: File.join(RUBY_ROOT, "mlx-ruby-examples"),
+      submodule_root: File.join(RUBY_ROOT, "submodules", "mlx-ruby-examples"),
       device: :cpu,
       runs: 1,
       warmup: 0,

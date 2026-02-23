@@ -17,22 +17,22 @@ Minimal script example
    y = mx.array([[0.5, 0.25]], mx.float32)
 
    trace = ->(lhs, rhs) { MLX::Core.add(lhs, rhs) }
-   payload = MLX::GraphIR.export_graph_ir(trace, x, y)
-   onnx_json = MLX::GraphIR.graph_ir_to_onnx_json(payload, model_name: "minimal_add")
+   payload = MLX::ONNX.export_graph_ir(trace, x, y)
+   onnx_json = MLX::ONNX.graph_ir_to_onnx_json(payload, model_name: "minimal_add")
 
    report = JSON.parse(
-     MLX::GraphIR::Native.graph_ir_compatibility_report_json(payload)
+     MLX::ONNX::Native.ir_compatibility_report_json(payload)
    )
    abort("unsupported ops: #{report.fetch('unsupported_ops').inspect}") unless report.fetch("unsupported_nodes").zero?
 
-   MLX::GraphIR.graph_ir_to_onnx("artifacts/model.onnx", payload, model_name: "minimal_add")
-   MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness(
+   MLX::ONNX.graph_ir_to_onnx("artifacts/model.onnx", payload, model_name: "minimal_add")
+   MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness(
      "artifacts/web_harness",
      payload,
      model_name: "minimal_add"
    )
 
-   telemetry = MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness(
+   telemetry = MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness(
      "artifacts/web_harness",
      mock_ort: true
    )
@@ -73,6 +73,6 @@ Parity and harness checks
 
 Useful parity coverage examples:
 
-- ``test/graph_ir/export_onnx_webgpu_harness_test.rb``
-- ``test/graph_ir/onnx_webgpu_harness_smoke_test.rb``
-- ``test/graph_ir/onnx_webgpu_harness_real_runtime_smoke_test.rb``
+- ``test/onnx/export_onnx_webgpu_harness_test.rb``
+- ``test/onnx/onnx_webgpu_harness_smoke_test.rb``
+- ``test/onnx/onnx_webgpu_harness_real_runtime_smoke_test.rb``

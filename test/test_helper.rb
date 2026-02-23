@@ -18,6 +18,11 @@ module TestSupport
 
   SLOW_TEST_REGISTRY_PATH = File.join(RUBY_ROOT, "test", "slow_tests.json").freeze
   DEFAULT_SLOW_TEST_THRESHOLD_SECONDS = 30.0
+  FORCED_SLOW_TEST_PREFIXES = [
+    "Phase310OnnxWebgpuHarnessSmokeParityTest#",
+    "Phase311OnnxWebgpuHarnessRealRuntimeSmokeParityTest#",
+    "Phase313ModelFixtureWebgpuBrowserParityTest#"
+  ].freeze
 
   def build_native_extension!
     if ENV["MLX_TEST_SKIP_NATIVE_BUILD"] == "1"
@@ -127,14 +132,15 @@ module TestSupport
   end
 
   def native_rebuild_sources_available?
-    File.exist?(File.join(REPO_ROOT, "mlx", "CMakeLists.txt"))
+    File.exist?(File.join(REPO_ROOT, "submodules", "mlx", "CMakeLists.txt"))
   end
 
   def newest_native_input_mtime
     roots = [
       File.join(RUBY_ROOT, "ext", "mlx"),
+      File.join(RUBY_ROOT, "ext", "mlx-onnx"),
       File.join(RUBY_ROOT, "lib", "mlx", "version.rb"),
-      File.join(REPO_ROOT, "mlx"),
+      File.join(REPO_ROOT, "submodules", "mlx"),
       File.join(REPO_ROOT, "cmake"),
       File.join(REPO_ROOT, "CMakeLists.txt")
     ]
@@ -165,8 +171,8 @@ module TestSupport
     roots = [
       File.join(REPO_ROOT, "python", "src"),
       File.join(REPO_ROOT, "python", "mlx"),
-      File.join(REPO_ROOT, "mlx", "python", "src"),
-      File.join(REPO_ROOT, "mlx", "python", "mlx")
+      File.join(REPO_ROOT, "submodules", "mlx", "python", "src"),
+      File.join(REPO_ROOT, "submodules", "mlx", "python", "mlx")
     ]
 
     roots.any? do |root|
@@ -178,7 +184,13 @@ module TestSupport
     ENV["MLX_TEST_INCLUDE_SLOW"] == "1"
   end
 
+  def forced_slow_test?(test_id)
+    FORCED_SLOW_TEST_PREFIXES.any? { |prefix| test_id.start_with?(prefix) }
+  end
+
   def slow_test_entry(test_id)
+    return {"forced" => true} if forced_slow_test?(test_id)
+
     slow_test_registry[test_id]
   end
 
@@ -240,7 +252,7 @@ module TestSupport
   end
 
   def export_graph_ir_to_target(target, fun, *extras, **trace_kwargs)
-    content = MLX::GraphIR.export_graph_ir_json(fun, *extras, **trace_kwargs)
+    content = MLX::ONNX.export_graph_ir_json(fun, *extras, **trace_kwargs)
     if target.respond_to?(:write)
       target.write(content)
       target.rewind if target.respond_to?(:rewind)
@@ -261,7 +273,7 @@ module TestSupport
     external_data_size_threshold: 1024,
     external_data_file: nil
   )
-    MLX::GraphIR.graph_ir_to_onnx(
+    MLX::ONNX.graph_ir_to_onnx(
       target,
       payload_or_source,
       opset: opset,
@@ -283,7 +295,7 @@ module TestSupport
     external_data_file: nil,
     **trace_kwargs
   )
-    MLX::GraphIR.export_onnx(
+    MLX::ONNX.export_onnx(
       target,
       fun,
       *extras,
@@ -298,7 +310,7 @@ module TestSupport
   end
 
   def export_onnx_json_dump(target, payload_or_source, opset: 18, model_name: "mlx_graph", pretty: true)
-    onnx_json = MLX::GraphIR.graph_ir_to_onnx_json(
+    onnx_json = MLX::ONNX.graph_ir_to_onnx_json(
       payload_or_source,
       opset: opset,
       model_name: model_name
@@ -316,7 +328,7 @@ module TestSupport
   end
 
   def parse_onnx_stub(payload_or_source, opset: 18, model_name: "mlx_graph")
-    content = MLX::GraphIR.graph_ir_to_onnx_json(
+    content = MLX::ONNX.graph_ir_to_onnx_json(
       payload_or_source,
       opset: opset,
       model_name: model_name

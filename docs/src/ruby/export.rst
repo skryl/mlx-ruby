@@ -15,39 +15,39 @@ Export Functions
 
 Graph IR schema reference:
 
-- ``docs/src/ruby/mlxir_v1.schema.json``
+- ``docs/src/ruby/mlxonnx_v1.schema.json``
 
 For a step-by-step workflow guide, see :doc:`../onnx_webgpu/index`.
 
 Onnx/WebGPU Support
 -------------------
 
-Use ``MLX::GraphIR.*`` as the user-facing Graph IR/ONNX API and
-``MLX::GraphIR::WebGPUHarness`` for browser harness packaging/smoke checks.
+Use ``MLX::ONNX.*`` as the user-facing Graph IR/ONNX API and
+``MLX::ONNX::WebGPUHarness`` for browser harness packaging/smoke checks.
 Implementation is split across:
 
-- ``MLX::GraphIR`` (native-backed public facade)
-- ``MLX::GraphIR::Native`` (native Graph IR/ONNX runtime implementation)
-- ``MLX::GraphIR::WebGPUHarness`` (browser harness packaging + smoke runner)
+- ``MLX::ONNX`` (native-backed public facade)
+- ``MLX::ONNX::Native`` (native Graph IR/ONNX runtime implementation)
+- ``MLX::ONNX::WebGPUHarness`` (browser harness packaging + smoke runner)
 
 MLX Ruby supports an end-to-end browser export path:
 
-1. Trace and export Graph IR hash via ``MLX::GraphIR.export_graph_ir`` (or JSON
-   debug payload via ``MLX::GraphIR.export_graph_ir_json``).
-2. Convert Graph IR to ONNX binary via ``MLX::GraphIR.graph_ir_to_onnx`` (or
-   ONNX JSON debug payload via ``MLX::GraphIR.graph_ir_to_onnx_json``).
+1. Trace and export Graph IR hash via ``MLX::ONNX.export_graph_ir`` (or JSON
+   debug payload via ``MLX::ONNX.export_graph_ir_json``).
+2. Convert Graph IR to ONNX binary via ``MLX::ONNX.graph_ir_to_onnx`` (or
+   ONNX JSON debug payload via ``MLX::ONNX.graph_ir_to_onnx_json``).
 3. Check ONNX export readiness from traced models via
-   ``MLX::GraphIR.export_onnx_compatibility_report`` and inspect
+   ``MLX::ONNX.export_onnx_compatibility_report`` and inspect
    ``unsupported_ops``.
-4. Export ONNX directly from trace via ``MLX::GraphIR.export_onnx`` (or JSON
-   debug payload via ``MLX::GraphIR.export_onnx_json``).
+4. Export ONNX directly from trace via ``MLX::ONNX.export_onnx`` (or JSON
+   debug payload via ``MLX::ONNX.export_onnx_json``).
 5. Package browser harness assets via
-   ``MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness``.
+   ``MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness``.
 6. Run browser smoke verification via
-   ``MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness``.
+   ``MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness``.
 
 Harness artifact output from
-``MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness``:
+``MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness``:
 
 - ``model.onnx``
 - ``harness.manifest.json``
@@ -62,12 +62,12 @@ uses ``onnx_webgpu_telemetry_v1`` and includes provider selection/fallback and
 
 Runtime/tooling requirements:
 
-- ``MLX::GraphIR.export_onnx`` and ``MLX::GraphIR.graph_ir_to_onnx`` require
+- ``MLX::ONNX.export_onnx`` and ``MLX::ONNX.graph_ir_to_onnx`` require
   path-like targets (not IO-like).
 - Real-runtime smoke tests require Node.js + Playwright + ``onnxruntime-web``.
 - ``bundle exec rake deps:web`` installs/checks the dependencies used by real
   WebGPU smoke tests.
-- ``MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness`` only accepts
+- ``MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness`` only accepts
   ``webgpu`` and
   ``wasm`` execution providers.
 
@@ -84,7 +84,7 @@ Examples coverage/parity status:
 - Current coverage/parity gates validate full examples export and ORT runtime
   parity across the benchmark model set.
 
-Current ``MLX::GraphIR.graph_ir_to_onnx_json`` / ``MLX::GraphIR.export_onnx_json`` scope:
+Current ``MLX::ONNX.graph_ir_to_onnx_json`` / ``MLX::ONNX.export_onnx_json`` scope:
 
 - Elementwise ops: ``Add``, ``Subtract``, ``Multiply``, ``Divide``, ``Maximum``,
   ``Minimum``, ``Power``.

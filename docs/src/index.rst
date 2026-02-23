@@ -52,9 +52,9 @@ are the CPU and GPU.
    :maxdepth: 1
 
    onnx_webgpu/index
-   onnx_webgpu/mlx_to_graph_ir
+   onnx_webgpu/mlx_to_onnx
    onnx_webgpu/validation_and_compatibility
-   onnx_webgpu/graph_ir_to_onnx
+   onnx_webgpu/onnx_to_onnx
    onnx_webgpu/webgpu_harness_and_smoke
    onnx_webgpu/end_to_end_examples
 

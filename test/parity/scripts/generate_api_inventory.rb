@@ -7,9 +7,9 @@ require "time"
 
 REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
 PARITY_REPORTS_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
-PYTHON_ROOT = REPO_ROOT.join("python").freeze
-PYTHON_MLX_ROOT = PYTHON_ROOT.join("mlx").freeze
-PYTHON_SRC_ROOT = PYTHON_ROOT.join("src").freeze
+PYTHON_ROOT = [REPO_ROOT.join("python"), REPO_ROOT.join("submodules", "mlx", "python")].find(&:directory?)
+PYTHON_MLX_ROOT = PYTHON_ROOT&.join("mlx")
+PYTHON_SRC_ROOT = PYTHON_ROOT&.join("src")
 RUBY_LIB_ROOT = REPO_ROOT.join("lib").freeze
 RUBY_NATIVE_CPP = REPO_ROOT.join("ext", "mlx", "native.cpp").freeze
 OUT_FILE = PARITY_REPORTS_ROOT.join("api_inventory.json").freeze
@@ -24,7 +24,7 @@ end
 def python_top_level_modules
   modules = ["mlx", "mlx.core"]
 
-  return modules unless PYTHON_MLX_ROOT.directory?
+  return modules unless PYTHON_MLX_ROOT&.directory?
 
   Dir.children(PYTHON_MLX_ROOT).sort.each do |entry|
     full = PYTHON_MLX_ROOT.join(entry)
@@ -68,6 +68,8 @@ def ruby_modules_as_python_names(modules)
 end
 
 def python_core_singleton_methods
+  return [] unless PYTHON_SRC_ROOT&.directory?
+
   Dir.glob(PYTHON_SRC_ROOT.join("*.cpp")).flat_map do |path|
     scan_regex(path, /m\.def\(\s*(?:\n\s*)*"([^"]+)"/m)
   end.uniq.sort
@@ -76,7 +78,7 @@ end
 def ruby_core_singleton_methods
   scan_regex(
     RUBY_NATIVE_CPP,
-    /rb_define_singleton_method\(mCore,\s*"([^"]+)"/
+    /rb_define_singleton_method\(\s*mCore,\s*"([^"]+)"/m
   )
 end
 
@@ -98,6 +100,8 @@ ensure
 end
 
 def python_array_instance_methods
+  return [] unless PYTHON_SRC_ROOT
+
   path = PYTHON_SRC_ROOT.join("array.cpp")
   return [] unless path.exist?
 

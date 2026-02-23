@@ -147,9 +147,9 @@ namespace :benchmark do
     BenchmarkTask.run_webgpu_task(args)
   end
 
-  desc "Generate GraphIR WebGPU compatibility coverage artifact for benchmark fixtures."
-  task :graph_ir_coverage do
-    BenchmarkTask.run_graph_ir_coverage!
+  desc "Generate IR WebGPU compatibility coverage artifact for benchmark fixtures."
+  task :ir_coverage do
+    BenchmarkTask.run_ir_coverage!
   end
 
   desc "Run selected models on cpu, gpu, and webgpu. Usage: rake 'benchmark:all[local,examples]' or rake 'benchmark:all[model_a,model_b]'."

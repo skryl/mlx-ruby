@@ -40,7 +40,7 @@
 #include "mlx/transforms.h"
 #include "mlx/utils.h"
 #include "mlx/version.h"
-#include "graph_ir_native.hpp"
+#include "../mlx-onnx/native.hpp"
 
 namespace mx = mlx::core;
 namespace mxfft = mlx::core::fft;
@@ -1504,20 +1504,20 @@ args_kwargs_function_from_callable(VALUE callable) {
   };
 }
 
-mx::array graph_ir_array_from_ruby(VALUE value) {
+mx::array onnx_array_from_ruby(VALUE value) {
   return array_from_ruby(value, std::nullopt);
 }
 
-std::vector<mx::array> graph_ir_array_vector_from_ruby(VALUE value) {
+std::vector<mx::array> onnx_array_vector_from_ruby(VALUE value) {
   return array_vector_from_ruby(value);
 }
 
-std::unordered_map<std::string, mx::array> graph_ir_array_map_from_ruby_hash(VALUE value) {
+std::unordered_map<std::string, mx::array> onnx_array_map_from_ruby_hash(VALUE value) {
   return array_map_from_ruby_hash(value);
 }
 
 std::function<std::vector<mx::array>(const mx::Args&, const mx::Kwargs&)>
-graph_ir_args_kwargs_function_from_callable(VALUE callable) {
+onnx_args_kwargs_function_from_callable(VALUE callable) {
   return args_kwargs_function_from_callable(callable);
 }
 
@@ -6479,6 +6479,30 @@ static VALUE core_identity(int argc, VALUE* argv, VALUE) {
   }
 }
 
+static VALUE core_hanning(int argc, VALUE* argv, VALUE) {
+  try {
+    VALUE m;
+    VALUE stream;
+    rb_scan_args(argc, argv, "11", &m, &stream);
+    return array_wrap(mx::hanning(NUM2INT(m), stream_or_device_from_value(stream)));
+  } catch (const std::exception& error) {
+    raise_std_exception(error);
+    return Qnil;
+  }
+}
+
+static VALUE core_hamming(int argc, VALUE* argv, VALUE) {
+  try {
+    VALUE m;
+    VALUE stream;
+    rb_scan_args(argc, argv, "11", &m, &stream);
+    return array_wrap(mx::hamming(NUM2INT(m), stream_or_device_from_value(stream)));
+  } catch (const std::exception& error) {
+    raise_std_exception(error);
+    return Qnil;
+  }
+}
+
 static VALUE core_tri(int argc, VALUE* argv, VALUE) {
   try {
     if (argc < 1 || argc > 4) {
@@ -7642,7 +7666,7 @@ extern "C" void Init_native(void) {
   rb_define_singleton_method(mNative, "loaded?", RUBY_METHOD_FUNC(native_loaded_p), 0);
 
   mCore = rb_define_module_under(mMLX, "Core");
-  init_graph_ir_native_bindings(mMLX);
+  init_onnx_native_bindings(mMLX);
   rb_define_singleton_method(mCore, "version", RUBY_METHOD_FUNC(core_version), 0);
 
   rb_define_singleton_method(mCore, "get_active_memory", RUBY_METHOD_FUNC(core_get_active_memory), 0);
@@ -7920,6 +7944,8 @@ extern "C" void Init_native(void) {
   rb_define_singleton_method(mCore, "ones_like", RUBY_METHOD_FUNC(core_ones_like), 1);
   rb_define_singleton_method(mCore, "eye", RUBY_METHOD_FUNC(core_eye), -1);
   rb_define_singleton_method(mCore, "identity", RUBY_METHOD_FUNC(core_identity), -1);
+  rb_define_singleton_method(mCore, "hanning", RUBY_METHOD_FUNC(core_hanning), -1);
+  rb_define_singleton_method(mCore, "hamming", RUBY_METHOD_FUNC(core_hamming), -1);
   rb_define_singleton_method(mCore, "tri", RUBY_METHOD_FUNC(core_tri), -1);
   rb_define_singleton_method(mCore, "tril", RUBY_METHOD_FUNC(core_tril), -1);
   rb_define_singleton_method(mCore, "triu", RUBY_METHOD_FUNC(core_triu), -1);

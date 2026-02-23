@@ -9,11 +9,11 @@ If you want API-by-API reference details, see :doc:`../ruby/export`.
 Architecture boundary (post-refactor)
 -------------------------------------
 
-Use ``MLX::GraphIR.*`` methods as the public API. The implementation is split across:
+Use ``MLX::ONNX.*`` methods as the public API. The implementation is split across:
 
-- ``MLX::GraphIR``
-- ``MLX::GraphIR::Native``
-- ``MLX::GraphIR::WebGPUHarness``
+- ``MLX::ONNX``
+- ``MLX::ONNX::Native``
+- ``MLX::ONNX::WebGPUHarness``
 
 Pipeline stages
 ---------------
@@ -26,8 +26,8 @@ Pipeline stages
 
 Pages in this section:
 
-- :doc:`mlx_to_graph_ir`
+- :doc:`mlx_to_onnx`
 - :doc:`validation_and_compatibility`
-- :doc:`graph_ir_to_onnx`
+- :doc:`onnx_to_onnx`
 - :doc:`webgpu_harness_and_smoke`
 - :doc:`end_to_end_examples`

@@ -28,7 +28,7 @@ class RakeTasksSmokeTest < Minitest::Test
     ["benchmark:cpu"],
     ["benchmark:gpu"],
     ["benchmark:webgpu"],
-    ["benchmark:graph_ir_coverage"],
+    ["benchmark:ir_coverage"],
     ["benchmark:all"],
     ["benchmark"],
     ["web:assets"],
@@ -95,7 +95,7 @@ class RakeTasksSmokeTest < Minitest::Test
     stub_singleton_method(BenchmarkTask, :run_cpu_task) { |*args, **kwargs| nil }
     stub_singleton_method(BenchmarkTask, :run_gpu_task) { |*args, **kwargs| nil }
     stub_singleton_method(BenchmarkTask, :run_webgpu_task) { |*args, **kwargs| nil }
-    stub_singleton_method(BenchmarkTask, :run_graph_ir_coverage!) { |*args, **kwargs| nil }
+    stub_singleton_method(BenchmarkTask, :run_ir_coverage!) { |*args, **kwargs| nil }
     stub_singleton_method(BenchmarkTask, :run_all_task) { |*args, **kwargs| nil }
     stub_singleton_method(BenchmarkTask, :run_top_level_task) { |*args, **kwargs| nil }
 

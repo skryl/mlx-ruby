@@ -45,6 +45,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - name: Verify submodule checkout
+        run: |
+          set -euo pipefail
+          git submodule status --recursive
+          for path in submodules/mlx submodules/mlx-onnx submodules/mlx-ruby-examples; do
+            git submodule status -- "$path" >/dev/null
+          done
       - name: Set Ruby crash report path
         run: echo "RUBY_CRASH_REPORT=${RUNNER_TEMP}/ruby-crash-report.log" >> "$GITHUB_ENV"
       - name: Install Linux build tools
@@ -66,6 +73,11 @@ jobs:
 
       - name: Install all test dependencies
         run: bundle exec rake deps
+      - name: Run ONNX native smoke gates
+        run: |
+          bundle exec ruby -Itest test/onnx/extconf_compatibility_guard_test.rb
+          bundle exec ruby -Itest test/onnx/onnx_validation_test.rb
+          bundle exec ruby -Itest test/onnx/onnx_export_contract_boundary_test.rb
       - name: Run Ruby test suite
         env:
           RUBYOPT: -W:deprecated -W:performance

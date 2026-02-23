@@ -122,14 +122,14 @@ module ExamplesModelsOnnxCaptureHook
 
   def build_capture(outputs)
     candidate = select_candidate(outputs)
-    raise "Failed to capture GraphIR payload from benchmark eval outputs" if candidate.nil?
+    raise "Failed to capture IR payload from benchmark eval outputs" if candidate.nil?
 
     payload = candidate.fetch(:payload)
     node_count = candidate_node_count(candidate)
-    raise "Captured GraphIR payload has zero nodes" if node_count <= 0
+    raise "Captured IR payload has zero nodes" if node_count <= 0
 
     tensor_outputs = candidate.fetch(:tensors)
-    raise "Captured GraphIR payload has no tensor outputs" if tensor_outputs.empty?
+    raise "Captured IR payload has no tensor outputs" if tensor_outputs.empty?
 
     output_names = resolve_output_names(payload, tensor_outputs.length)
     expected_outputs = output_names.each_with_index.each_with_object({}) do |(name, index), out|
@@ -172,7 +172,7 @@ module ExamplesModelsOnnxCaptureHook
 
     trace_output = tensor_outputs.length == 1 ? tensor_outputs.first : tensor_outputs
     seed = MLX::Core.array([0.0], MLX::Core.float32)
-    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(->(_seed) { trace_output }, seed))
+    payload = JSON.parse(MLX::ONNX.export_graph_ir_json(->(_seed) { trace_output }, seed))
     {
       payload: payload,
       tensors: tensor_outputs

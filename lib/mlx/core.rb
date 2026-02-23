@@ -2,7 +2,7 @@
 
 require "open3"
 require "tmpdir"
-require_relative "graph_ir"
+require_relative "onnx"
 
 module MLX
   module Core

@@ -74,7 +74,7 @@ module NanoGptWebAssets
 
     onnx_path = File.join(OUTPUT_DIR, "model.onnx")
     benchmark_step(timings, "export_onnx_binary") do
-      MLX::GraphIR.export_onnx(
+      MLX::ONNX.export_onnx(
         onnx_path,
         ->(tokens) { model.call(tokens) },
         input_seed,

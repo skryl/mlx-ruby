@@ -17,17 +17,21 @@ Gem::Specification.new do |spec|
 
   spec.files = Dir.chdir(__dir__) do
     include_globs = [
-      "lib/**/*",
-      "ext/mlx/extconf.rb",
-      "ext/mlx/native.cpp",
-      "mlx/CMakeLists.txt",
-      "mlx/mlx.pc.in",
-      "mlx/cmake/**/*",
-      "mlx/mlx/**/*"
+      "lib/*.rb",
+      "lib/mlx/**/*",
+      "lib/mlx-onnx/**/*",
+      "ext/mlx/**/*.{rb,c,cc,cpp,cxx,h,hpp,hh}",
+      "ext/mlx-onnx/**/*.{rb,c,cc,cpp,cxx,h,hpp,hh}",
+      "submodules/mlx/CMakeLists.txt",
+      "submodules/mlx/mlx.pc.in",
+      "submodules/mlx/cmake/**/*",
+      "submodules/mlx/mlx/**/*"
     ]
 
     Dir.glob(include_globs, File::FNM_DOTMATCH)
       .reject { |path| File.directory?(path) }
+      .reject { |path| path.start_with?("ext/mlx/build/") }
+      .reject { |path| path.end_with?(".o", ".bundle") }
       .uniq
       .sort
   end

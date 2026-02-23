@@ -78,7 +78,7 @@ module Gpt2WebAssets
     seed_tokens = Array.new(context_size, eos_token_id)
     input_seed = MLX::Core.array([seed_tokens], MLX::Core.int32)
     benchmark_step(timings, "export_onnx_binary") do
-      MLX::GraphIR.export_onnx(
+      MLX::ONNX.export_onnx(
         File.join(OUTPUT_DIR, "model.onnx"),
         ->(input_ids) { model.call(input_ids) },
         input_seed,

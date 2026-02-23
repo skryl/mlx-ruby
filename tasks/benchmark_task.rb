@@ -34,7 +34,7 @@ class BenchmarkTask
   LOCAL_MODELS = %w[transformer cnn mlp rnn karpathy_gpt2].freeze
   LOCAL_MODEL_SET = LOCAL_MODELS.each_with_object({}) { |name, out| out[name] = true }.freeze
   LOCAL_MODEL_SYMBOLS = LOCAL_MODELS.map(&:to_sym).freeze
-  EXAMPLES_SUBMODULE = File.join(REPO_ROOT, "mlx-ruby-examples").freeze
+  EXAMPLES_SUBMODULE = File.join(REPO_ROOT, "submodules", "mlx-ruby-examples").freeze
 
   def initialize(
     iterations: DEFAULT_ITERATIONS,
@@ -125,7 +125,7 @@ class BenchmarkTask
 
     fixture = build_webgpu_fixture(model_name)
     compatibility = JSON.parse(
-      MLX::GraphIR::Native.graph_ir_compatibility_report_json(fixture.fetch(:payload))
+      MLX::ONNX::Native.ir_compatibility_report_json(fixture.fetch(:payload))
     )
     unless compatibility.fetch("unsupported_nodes").zero?
       unsupported = compatibility.fetch("unsupported_ops")
@@ -135,7 +135,7 @@ class BenchmarkTask
     result = nil
     Dir.mktmpdir("mlx-ruby-webgpu-benchmark-") do |dir|
       harness_dir = File.join(dir, "#{model_name}_webgpu")
-      MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness(
+      MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness(
         harness_dir,
         fixture.fetch(:payload),
         model_name: "benchmark_#{model_name}",
@@ -149,7 +149,7 @@ class BenchmarkTask
       )
 
       telemetry = begin
-        MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness(
+        MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness(
           harness_dir,
           timeout_seconds: timeout_seconds,
           mock_ort: false,
@@ -276,7 +276,7 @@ class BenchmarkTask
       raise "Unknown benchmark model: #{model_name}"
     end
 
-    payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(trace, seed))
+    payload = JSON.parse(MLX::ONNX.export_graph_ir_json(trace, seed))
     input_name = payload.fetch("inputs").first.fetch("name")
 
     {
@@ -886,7 +886,7 @@ class BenchmarkTask
 
     raise <<~MSG
       Missing examples benchmark runner at #{runner}.
-      Run: git submodule update --init --recursive mlx-ruby-examples
+      Run: git submodule update --init --recursive submodules/mlx-ruby-examples
     MSG
   end
 
@@ -1178,8 +1178,8 @@ class BenchmarkTask
     raise "command failed: #{commands.last.join(' ')} (cwd: #{REPO_ROOT})"
   end
 
-  def self.run_graph_ir_coverage!
-    script = File.join(REPO_ROOT, "test", "parity", "scripts", "generate_graph_ir_webgpu_coverage_report.rb")
+  def self.run_ir_coverage!
+    script = File.join(REPO_ROOT, "test", "parity", "scripts", "generate_onnx_webgpu_coverage_report.rb")
     run_command!([RbConfig.ruby, script], chdir: REPO_ROOT)
   end
 

@@ -7,7 +7,7 @@ require "time"
 
 REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
 PARITY_REPORTS_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
-PYTHON_SRC_ROOT = REPO_ROOT.join("python", "src").freeze
+PYTHON_SRC_ROOT = [REPO_ROOT.join("python", "src"), REPO_ROOT.join("submodules", "mlx", "python", "src")].find(&:directory?)
 RUBY_NATIVE_CPP = REPO_ROOT.join("ext", "mlx", "native.cpp").freeze
 OUT_FILE = PARITY_REPORTS_ROOT.join("core_signature_inventory.json").freeze
 
@@ -26,7 +26,7 @@ ruby_source.scan(
 end
 
 python_methods = {}
-if PYTHON_SRC_ROOT.directory?
+if PYTHON_SRC_ROOT&.directory?
   Dir.glob(PYTHON_SRC_ROOT.join("*.cpp")).sort.each do |path|
     source = File.read(path)
 

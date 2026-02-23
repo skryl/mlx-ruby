@@ -129,7 +129,7 @@ class ExamplesModelsBenchmarkAdapter
       capture = capture_onnx_fixture(spec)
       payload = capture.fetch("payload")
       compatibility = JSON.parse(
-        MLX::GraphIR::Native.graph_ir_compatibility_report_json(payload)
+        MLX::ONNX::Native.ir_compatibility_report_json(payload)
       )
 
       if compatibility.fetch("unsupported_nodes").to_i > 0
@@ -461,7 +461,7 @@ class ExamplesModelsBenchmarkAdapter
 
     Dir.mktmpdir("examples-webgpu-#{model_id.tr('/', '_')}-") do |dir|
       harness_dir = File.join(dir, "harness")
-      MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness(
+      MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness(
         harness_dir,
         payload,
         model_name: "examples_#{model_id.tr('/', '_')}",
@@ -475,7 +475,7 @@ class ExamplesModelsBenchmarkAdapter
       )
 
       telemetry = begin
-        MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness(
+        MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness(
           harness_dir,
           timeout_seconds: timeout_seconds,
           mock_ort: false,

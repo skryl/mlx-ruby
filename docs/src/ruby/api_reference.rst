@@ -118,14 +118,14 @@ Core entry points in ``MLX::Core``:
 - ``save`` / ``load``
 - ``savez`` / ``savez_compressed``
 
-Graph IR / ONNX / WebGPU entry points in ``MLX::GraphIR``:
+Graph IR / ONNX / WebGPU entry points in ``MLX::ONNX``:
 
 - ``export_graph_ir`` / ``export_graph_ir_json``
 - ``graph_ir_to_onnx`` / ``graph_ir_to_onnx_json``
 - ``export_onnx`` / ``export_onnx_json``
 - ``export_onnx_compatibility_report``
-- ``MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness``
-- ``MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness``
+- ``MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness``
+- ``MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness``
 
 .. _distributed:
 

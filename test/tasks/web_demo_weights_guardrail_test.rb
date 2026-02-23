@@ -53,18 +53,18 @@ class WebDemoWeightsGuardrailTest < Minitest::Test
 
   def test_gpt2_exporter_uses_direct_native_onnx_binary_export_flow
     source = File.read(GPT2_EXPORTER)
-    assert_includes source, "MLX::GraphIR.export_onnx"
-    refute_includes source, "MLX::GraphIR.export_graph_ir_json"
-    refute_includes source, "graph_ir_path"
+    assert_includes source, "MLX::ONNX.export_onnx"
+    refute_includes source, "MLX::ONNX.export_graph_ir_json"
+    refute_includes source, "ir_path"
     refute_includes source, "Open3.capture3"
     refute_includes source, "python"
   end
 
   def test_nanogpt_exporter_uses_direct_native_onnx_binary_export_flow
     source = File.read(NANOGPT_EXPORTER)
-    assert_includes source, "MLX::GraphIR.export_onnx"
-    refute_includes source, "MLX::GraphIR.export_graph_ir_json"
-    refute_includes source, "graph_ir.json"
+    assert_includes source, "MLX::ONNX.export_onnx"
+    refute_includes source, "MLX::ONNX.export_graph_ir_json"
+    refute_includes source, "ir.json"
     refute_includes source, "Open3.capture3"
     refute_includes source, "python"
   end
@@ -76,7 +76,7 @@ class WebDemoWeightsGuardrailTest < Minitest::Test
     assert_includes exporter_source, "StableDiffusionExample.load_text_encoder_from_hf_directory"
     assert_includes exporter_source, "StableDiffusionExample.load_unet_from_hf_directory"
     assert_includes exporter_source, "StableDiffusionExample.load_autoencoder_from_hf_directory"
-    assert_includes exporter_source, "MLX::GraphIR.export_onnx"
+    assert_includes exporter_source, "MLX::ONNX.export_onnx"
     assert_includes exporter_source, "text_encoder.onnx"
     assert_includes exporter_source, "unet.onnx"
     assert_includes exporter_source, "vae_decoder.onnx"
@@ -87,8 +87,8 @@ class WebDemoWeightsGuardrailTest < Minitest::Test
     refute_includes exporter_source, "torch.onnx.export"
     refute_includes exporter_source, "Open3.capture3"
     refute_includes exporter_source, "python"
-    refute_includes exporter_source, "graph_ir.json"
-    refute_includes exporter_source, ".graph_ir.json"
+    refute_includes exporter_source, "ir.json"
+    refute_includes exporter_source, ".ir.json"
   end
 
   def test_stable_diffusion_defaults_to_larger_pretrained_checkpoint

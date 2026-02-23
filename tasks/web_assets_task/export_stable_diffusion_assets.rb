@@ -155,7 +155,7 @@ module StableDiffusionWebAssets
     end
 
     benchmark_step(timings, "export_text_encoder_binary") do
-      MLX::GraphIR.export_onnx(
+      MLX::ONNX.export_onnx(
         File.join(OUTPUT_DIR, "text_encoder.onnx"),
         text_encoder_fn,
         input_ids_seed,
@@ -164,7 +164,7 @@ module StableDiffusionWebAssets
     end
 
     benchmark_step(timings, "export_unet_binary") do
-      MLX::GraphIR.export_onnx(
+      MLX::ONNX.export_onnx(
         File.join(OUTPUT_DIR, "unet.onnx"),
         unet_fn,
         sample_seed,
@@ -175,7 +175,7 @@ module StableDiffusionWebAssets
     end
 
     benchmark_step(timings, "export_vae_decoder_binary") do
-      MLX::GraphIR.export_onnx(
+      MLX::ONNX.export_onnx(
         File.join(OUTPUT_DIR, "vae_decoder.onnx"),
         vae_decoder_fn,
         vae_seed,
@@ -249,7 +249,7 @@ module StableDiffusionWebAssets
         "vae_dtype" => dtype_name(vae_model_dtype),
         "trained" => true,
         "onnx_origin" => "mlx_native_export",
-        "notes" => "ONNX generated locally via MLX::GraphIR.export_onnx (no Python export path)."
+        "notes" => "ONNX generated locally via MLX::ONNX.export_onnx (no Python export path)."
       }
     }
 

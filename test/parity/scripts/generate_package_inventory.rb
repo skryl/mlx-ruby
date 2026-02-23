@@ -8,11 +8,11 @@ require "time"
 REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
 RUBY_MLX_ROOT = REPO_ROOT.join("lib", "mlx").freeze
 PARITY_REPORTS_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
-PYTHON_MLX_ROOT = [REPO_ROOT.join("python", "mlx"), REPO_ROOT.join("mlx", "python", "mlx")].find(&:directory?)
+PYTHON_MLX_ROOT = [REPO_ROOT.join("python", "mlx"), REPO_ROOT.join("submodules", "mlx", "python", "mlx")].find(&:directory?)
 OUT_FILE = PARITY_REPORTS_ROOT.join("package_inventory.json").freeze
 
 unless PYTHON_MLX_ROOT
-  abort "Python MLX sources not found at python/mlx or mlx/python/mlx"
+  abort "Python MLX sources not found at python/mlx or submodules/mlx/python/mlx"
 end
 
 def list_python_files
