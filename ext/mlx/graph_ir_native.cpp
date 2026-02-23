@@ -3120,12 +3120,112 @@ static std::optional<std::string> onnx_op_type_for_node(
   throw std::runtime_error(out.str());
 }
 
+struct LoweringContext {
+  OrderedJson& initializers;
+  NameSet& used_tensor_names;
+  ShapeMap& known_shapes;
+  DtypeMap& known_dtypes;
+};
+
+struct ParsedLoweringNode {
+  std::string op;
+  std::string op_type;
+  std::vector<std::string> inputs;
+  std::vector<std::string> outputs;
+  OrderedJson attributes;
+  OrderedJson arguments;
+};
+
+static ParsedLoweringNode parse_lowering_node(
+    const OrderedJson& node,
+    const ShapeMap& known_shapes) {
+  ParsedLoweringNode parsed;
+  parsed.op = node.at("op").get<std::string>();
+  parsed.op_type = onnx_op_type_for_node(node, true, &known_shapes).value();
+  parsed.inputs = json_string_vector(node.at("inputs"), "node inputs");
+  parsed.outputs = json_string_vector(node.at("outputs"), "node outputs");
+  parsed.attributes = onnx_node_attributes(node);
+  parsed.arguments = node.contains("arguments") ? node.at("arguments") : OrderedJson::array();
+  return parsed;
+}
+
+static void assign_known_shape_if_present(
+    ShapeMap& known_shapes,
+    const std::vector<std::string>& names,
+    const std::optional<Shape>& shape) {
+  if (!shape.has_value()) {
+    return;
+  }
+  for (const auto& name : names) {
+    known_shapes[name] = shape.value();
+  }
+}
+
+static void assign_known_dtype_if_present(
+    DtypeMap& known_dtypes,
+    const std::vector<std::string>& names,
+    const std::optional<std::string>& dtype) {
+  if (!dtype.has_value()) {
+    return;
+  }
+  for (const auto& name : names) {
+    known_dtypes[name] = dtype.value();
+  }
+}
+
+static std::optional<std::vector<OrderedJson>> maybe_lower_with_promoted_cast(
+    size_t node_index,
+    const std::string& op,
+    const std::string& op_type,
+    std::vector<std::string>& inputs,
+    const std::vector<std::string>& outputs,
+    const OrderedJson& attributes,
+    const std::optional<std::string>& promoted_dtype,
+    const std::optional<std::vector<size_t>>& cast_indices,
+    size_t lhs_input_index,
+    size_t rhs_input_index,
+    const std::optional<std::string>& output_dtype_override,
+    LoweringContext& lowering) {
+  if (!promoted_dtype.has_value()) {
+    return std::nullopt;
+  }
+
+  auto [casted_inputs, cast_nodes] = cast_inputs_to_dtype(
+      node_index,
+      op,
+      inputs,
+      promoted_dtype.value(),
+      lowering.known_shapes,
+      lowering.known_dtypes,
+      lowering.used_tensor_names,
+      cast_indices);
+  if (cast_nodes.empty()) {
+    return std::nullopt;
+  }
+
+  inputs = casted_inputs;
+  const auto inferred_output_shape = infer_elementwise_output_shape(
+      known_shape_for(lowering.known_shapes, inputs.at(lhs_input_index)),
+      known_shape_for(lowering.known_shapes, inputs.at(rhs_input_index)));
+  const auto inferred_output_dtype = output_dtype_override.has_value()
+      ? output_dtype_override
+      : promoted_dtype;
+  assign_known_shape_if_present(lowering.known_shapes, outputs, inferred_output_shape);
+  assign_known_dtype_if_present(lowering.known_dtypes, outputs, inferred_output_dtype);
+
+  cast_nodes.push_back(build_onnx_node_spec(
+      "node_" + std::to_string(node_index) + "_" + op_type,
+      op_type,
+      inputs,
+      outputs,
+      attributes));
+  return cast_nodes;
+}
+
 static std::vector<OrderedJson> lower_onnx_arange_node(
     const std::vector<std::string>& outputs,
     const OrderedJson& arguments,
-    OrderedJson& initializers,
-    ShapeMap& known_shapes,
-    DtypeMap& known_dtypes) {
+    LoweringContext& lowering) {
   const auto parsed = arange_arguments(arguments);
   const auto values = arange_values(parsed);
 
@@ -3135,9 +3235,9 @@ static std::vector<OrderedJson> lower_onnx_arange_node(
   tensor["dtype"] = parsed.dtype;
   tensor["values"] = values;
 
-  initializers.push_back(onnx_initializer_info(tensor));
-  known_shapes[outputs.at(0)] = {static_cast<int64_t>(values.size())};
-  known_dtypes[outputs.at(0)] = parsed.dtype;
+  lowering.initializers.push_back(onnx_initializer_info(tensor));
+  lowering.known_shapes[outputs.at(0)] = {static_cast<int64_t>(values.size())};
+  lowering.known_dtypes[outputs.at(0)] = parsed.dtype;
   return {};
 }
 
@@ -3146,9 +3246,10 @@ static std::vector<OrderedJson> lower_onnx_convolution_node(
     const std::vector<std::string>& inputs,
     const std::vector<std::string>& outputs,
     const OrderedJson& arguments,
-    NameSet& used_tensor_names,
-    ShapeMap& known_shapes,
-    DtypeMap& known_dtypes) {
+    LoweringContext& lowering) {
+  auto& used_tensor_names = lowering.used_tensor_names;
+  auto& known_shapes = lowering.known_shapes;
+  auto& known_dtypes = lowering.known_dtypes;
   const auto convolution = convolution_attributes_from_arguments(arguments, true).value();
 
   if (convolution.flip) {
@@ -3352,23 +3453,25 @@ static std::vector<OrderedJson> lower_onnx_convolution_node(
 static std::vector<OrderedJson> lower_onnx_node_default(
     const OrderedJson& node,
     size_t node_index,
-    OrderedJson& initializers,
-    NameSet& used_tensor_names,
-    ShapeMap& known_shapes,
-    DtypeMap& known_dtypes) {
-  const auto op = node.at("op").get<std::string>();
-  const auto op_type = onnx_op_type_for_node(node, true, &known_shapes).value();
+    LoweringContext& lowering) {
+  auto& initializers = lowering.initializers;
+  auto& used_tensor_names = lowering.used_tensor_names;
+  auto& known_shapes = lowering.known_shapes;
+  auto& known_dtypes = lowering.known_dtypes;
 
-  auto inputs = json_string_vector(node.at("inputs"), "node inputs");
-  auto outputs = json_string_vector(node.at("outputs"), "node outputs");
-  OrderedJson attributes = onnx_node_attributes(node);
-  const OrderedJson arguments = node.contains("arguments") ? node.at("arguments") : OrderedJson::array();
+  auto parsed_node = parse_lowering_node(node, known_shapes);
+  const auto op = std::move(parsed_node.op);
+  const auto op_type = std::move(parsed_node.op_type);
+  auto inputs = std::move(parsed_node.inputs);
+  auto outputs = std::move(parsed_node.outputs);
+  OrderedJson attributes = std::move(parsed_node.attributes);
+  const OrderedJson arguments = std::move(parsed_node.arguments);
 
   std::optional<Shape> inferred_output_shape;
   std::optional<std::string> inferred_output_dtype;
 
   if (op == "Arange") {
-    return lower_onnx_arange_node(outputs, arguments, initializers, known_shapes, known_dtypes);
+    return lower_onnx_arange_node(outputs, arguments, lowering);
   }
 
   if (op == "Transpose") {
@@ -3396,9 +3499,7 @@ static std::vector<OrderedJson> lower_onnx_node_default(
         inputs,
         outputs,
         arguments,
-        used_tensor_names,
-        known_shapes,
-        known_dtypes);
+        lowering);
   }
 
   if (op == "Reduce") {
@@ -3480,37 +3581,21 @@ static std::vector<OrderedJson> lower_onnx_node_default(
     const auto rhs_dtype = known_dtype_for(known_dtypes, inputs[1]);
     const auto promoted_dtype = promote_binary_dtype(lhs_dtype, rhs_dtype);
 
-    if (promoted_dtype.has_value()) {
-      auto [casted_inputs, cast_nodes] = cast_inputs_to_dtype(
-          node_index,
-          op,
-          inputs,
-          promoted_dtype.value(),
-          known_shapes,
-          known_dtypes,
-          used_tensor_names);
-      if (!cast_nodes.empty()) {
-        inputs = casted_inputs;
-        inferred_output_shape = infer_elementwise_output_shape(
-            known_shape_for(known_shapes, inputs[0]),
-            known_shape_for(known_shapes, inputs[1]));
-        inferred_output_dtype = promoted_dtype;
-        if (inferred_output_shape.has_value()) {
-          for (const auto& name : outputs) {
-            known_shapes[name] = inferred_output_shape.value();
-          }
-        }
-        for (const auto& name : outputs) {
-          known_dtypes[name] = inferred_output_dtype.value();
-        }
-        cast_nodes.push_back(build_onnx_node_spec(
-            "node_" + std::to_string(node_index) + "_" + op_type,
+    if (const auto lowered = maybe_lower_with_promoted_cast(
+            node_index,
+            op,
             op_type,
             inputs,
             outputs,
-            attributes));
-        return cast_nodes;
-      }
+            attributes,
+            promoted_dtype,
+            std::nullopt,
+            0,
+            1,
+            std::nullopt,
+            lowering);
+        lowered.has_value()) {
+      return lowered.value();
     }
 
     inferred_output_shape = infer_elementwise_output_shape(
@@ -4066,37 +4151,21 @@ static std::vector<OrderedJson> lower_onnx_node_default(
     const auto lhs_dtype = known_dtype_for(known_dtypes, inputs[0]);
     const auto rhs_dtype = known_dtype_for(known_dtypes, inputs[1]);
     const auto promoted_dtype = promote_binary_dtype(lhs_dtype, rhs_dtype);
-    if (promoted_dtype.has_value()) {
-      auto [casted_inputs, cast_nodes] = cast_inputs_to_dtype(
-          node_index,
-          op,
-          inputs,
-          promoted_dtype.value(),
-          known_shapes,
-          known_dtypes,
-          used_tensor_names);
-      if (!cast_nodes.empty()) {
-        inputs = casted_inputs;
-        inferred_output_shape = infer_elementwise_output_shape(
-            known_shape_for(known_shapes, inputs[0]),
-            known_shape_for(known_shapes, inputs[1]));
-        inferred_output_dtype = "bool";
-        if (inferred_output_shape.has_value()) {
-          for (const auto& name : outputs) {
-            known_shapes[name] = inferred_output_shape.value();
-          }
-        }
-        for (const auto& name : outputs) {
-          known_dtypes[name] = inferred_output_dtype.value();
-        }
-        cast_nodes.push_back(build_onnx_node_spec(
-            "node_" + std::to_string(node_index) + "_" + op_type,
+    if (const auto lowered = maybe_lower_with_promoted_cast(
+            node_index,
+            op,
             op_type,
             inputs,
             outputs,
-            attributes));
-        return cast_nodes;
-      }
+            attributes,
+            promoted_dtype,
+            std::nullopt,
+            0,
+            1,
+            std::optional<std::string>("bool"),
+            lowering);
+        lowered.has_value()) {
+      return lowered.value();
     }
 
     inferred_output_shape = infer_elementwise_output_shape(
@@ -4115,37 +4184,21 @@ static std::vector<OrderedJson> lower_onnx_node_default(
     const auto rhs_dtype = known_dtype_for(known_dtypes, inputs[1]);
     const auto promoted_dtype = promote_binary_dtype(lhs_dtype, rhs_dtype);
 
-    if (promoted_dtype.has_value()) {
-      auto [casted_inputs, cast_nodes] = cast_inputs_to_dtype(
-          node_index,
-          op,
-          inputs,
-          promoted_dtype.value(),
-          known_shapes,
-          known_dtypes,
-          used_tensor_names);
-      if (!cast_nodes.empty()) {
-        inputs = casted_inputs;
-        inferred_output_shape = infer_elementwise_output_shape(
-            known_shape_for(known_shapes, inputs[0]),
-            known_shape_for(known_shapes, inputs[1]));
-        inferred_output_dtype = "bool";
-        if (inferred_output_shape.has_value()) {
-          for (const auto& name : outputs) {
-            known_shapes[name] = inferred_output_shape.value();
-          }
-        }
-        for (const auto& name : outputs) {
-          known_dtypes[name] = inferred_output_dtype.value();
-        }
-        cast_nodes.push_back(build_onnx_node_spec(
-            "node_" + std::to_string(node_index) + "_" + op_type,
+    if (const auto lowered = maybe_lower_with_promoted_cast(
+            node_index,
+            op,
             op_type,
             inputs,
             outputs,
-            attributes));
-        return cast_nodes;
-      }
+            attributes,
+            promoted_dtype,
+            std::nullopt,
+            0,
+            1,
+            std::optional<std::string>("bool"),
+            lowering);
+        lowered.has_value()) {
+      return lowered.value();
     }
 
     inferred_output_shape = infer_elementwise_output_shape(
@@ -4159,42 +4212,21 @@ static std::vector<OrderedJson> lower_onnx_node_default(
     const auto rhs_dtype = known_dtype_for(known_dtypes, inputs[2]);
     const auto promoted_dtype = promote_binary_dtype(lhs_dtype, rhs_dtype);
 
-    if (promoted_dtype.has_value()) {
-      auto [casted_inputs, cast_nodes] = cast_inputs_to_dtype(
-          node_index,
-          op,
-          inputs,
-          promoted_dtype.value(),
-          known_shapes,
-          known_dtypes,
-          used_tensor_names,
-          std::optional<std::vector<size_t>>{{1, 2}});
-      if (!cast_nodes.empty()) {
-        inputs = casted_inputs;
-        inferred_output_shape = infer_elementwise_output_shape(
-            known_shape_for(known_shapes, inputs[1]),
-            known_shape_for(known_shapes, inputs[2]));
-        inferred_output_dtype = promoted_dtype;
-
-        if (inferred_output_shape.has_value()) {
-          for (const auto& name : outputs) {
-            known_shapes[name] = inferred_output_shape.value();
-          }
-        }
-        if (inferred_output_dtype.has_value()) {
-          for (const auto& name : outputs) {
-            known_dtypes[name] = inferred_output_dtype.value();
-          }
-        }
-
-        cast_nodes.push_back(build_onnx_node_spec(
-            "node_" + std::to_string(node_index) + "_" + op_type,
+    if (const auto lowered = maybe_lower_with_promoted_cast(
+            node_index,
+            op,
             op_type,
             inputs,
             outputs,
-            attributes));
-        return cast_nodes;
-      }
+            attributes,
+            promoted_dtype,
+            std::optional<std::vector<size_t>>{{1, 2}},
+            1,
+            2,
+            std::nullopt,
+            lowering);
+        lowered.has_value()) {
+      return lowered.value();
     }
 
     inferred_output_shape = infer_elementwise_output_shape(
@@ -4319,16 +4351,8 @@ static std::vector<OrderedJson> lower_onnx_node_default(
     inferred_output_dtype = known_dtype_for(known_dtypes, inputs[0]);
   }
 
-  if (inferred_output_shape.has_value()) {
-    for (const auto& name : outputs) {
-      known_shapes[name] = inferred_output_shape.value();
-    }
-  }
-  if (inferred_output_dtype.has_value()) {
-    for (const auto& name : outputs) {
-      known_dtypes[name] = inferred_output_dtype.value();
-    }
-  }
+  assign_known_shape_if_present(known_shapes, outputs, inferred_output_shape);
+  assign_known_dtype_if_present(known_dtypes, outputs, inferred_output_dtype);
 
   return {
       build_onnx_node_spec(
@@ -4351,6 +4375,11 @@ static OrderedJson graph_ir_to_onnx_json_payload(
   auto used_tensor_names = collect_payload_tensor_names(payload);
   auto known_shapes = collect_known_tensor_shapes(payload);
   auto known_dtypes = collect_known_tensor_dtypes(payload);
+  LoweringContext lowering{
+      initializers,
+      used_tensor_names,
+      known_shapes,
+      known_dtypes};
 
   OrderedJson nodes = OrderedJson::array();
   const auto& source_nodes = payload.at("nodes");
@@ -4358,10 +4387,7 @@ static OrderedJson graph_ir_to_onnx_json_payload(
     auto lowered = lower_onnx_node_default(
         source_nodes.at(index),
         index,
-        initializers,
-        used_tensor_names,
-        known_shapes,
-        known_dtypes);
+        lowering);
     for (auto& lowered_node : lowered) {
       nodes.push_back(std::move(lowered_node));
     }
@@ -5254,14 +5280,16 @@ static OrderedJson graph_ir_compatibility_report_payload(const OrderedJson& payl
       auto trial_used_tensor_names = probe_used_tensor_names;
       auto trial_known_shapes = probe_known_shapes;
       auto trial_known_dtypes = probe_known_dtypes;
+      LoweringContext trial_lowering{
+          trial_initializers,
+          trial_used_tensor_names,
+          trial_known_shapes,
+          trial_known_dtypes};
 
       auto lowered = lower_onnx_node_default(
           node,
           index,
-          trial_initializers,
-          trial_used_tensor_names,
-          trial_known_shapes,
-          trial_known_dtypes);
+          trial_lowering);
       if (!lowered.empty() && lowered.front().contains("op_type") && lowered.front().at("op_type").is_string()) {
         mapped = lowered.front().at("op_type").get<std::string>();
       } else {
