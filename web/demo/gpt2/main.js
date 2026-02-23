@@ -1,19 +1,24 @@
-import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.mjs";
-
 const ASSET_ROOT = "../../assets/gpt2";
 const MODEL_PATH = `${ASSET_ROOT}/model.onnx`;
 const META_PATH = `${ASSET_ROOT}/meta.json`;
 const PRESETS_PATH = `${ASSET_ROOT}/prompt.presets.json`;
 const VOCAB_PATH = `${ASSET_ROOT}/vocab.json`;
 const MERGES_PATH = `${ASSET_ROOT}/merges.txt`;
+const ORT_MODULE_CANDIDATES = [
+  "../../node_modules/onnxruntime-web/dist/ort.all.min.mjs",
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.mjs"
+];
 
 const weightsBadge = document.getElementById("badge-weights");
 const providerBadge = document.getElementById("badge-provider");
+const onnxSizeBadge = document.getElementById("badge-onnx-size");
+const parametersBadge = document.getElementById("badge-parameters");
 const timingBadge = document.getElementById("badge-timing");
 const modelStatus = document.getElementById("status-model");
 const shapeStatus = document.getElementById("status-shape");
 const tokenizerStatus = document.getElementById("status-tokenizer");
 const contextStatus = document.getElementById("status-context");
+const onnxSizeStatus = document.getElementById("status-onnx-size");
 const errorBox = document.getElementById("error-box");
 
 const presetSelect = document.getElementById("preset");
@@ -36,6 +41,7 @@ let promptPresets = {};
 let tokenizer = null;
 let running = false;
 let inputTypeByName = {};
+let ort = null;
 
 generateButton.disabled = true;
 setGenerationEnabled(false);
@@ -57,6 +63,75 @@ function toNumber(value, fallback = 0) {
 
 function setGenerationEnabled(enabled) {
   generateButton.disabled = !enabled;
+}
+
+function setOnnxSizeText(text) {
+  onnxSizeStatus.textContent = text;
+  if (onnxSizeBadge) {
+    onnxSizeBadge.textContent = text;
+  }
+}
+
+function formatParameterCount(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return "unknown";
+  }
+  return Math.trunc(numeric).toLocaleString("en-US");
+}
+
+function setParameterText(value) {
+  if (!parametersBadge) {
+    return;
+  }
+  parametersBadge.textContent = `Parameters: ${formatParameterCount(value)}`;
+}
+
+function formatByteSize(bytes) {
+  const numeric = Number(bytes);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return "unknown";
+  }
+  if (numeric < 1024) {
+    return `${Math.trunc(numeric)} B`;
+  }
+
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = numeric;
+  let unitIndex = -1;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+async function onnxSizeBytes(path) {
+  try {
+    const response = await fetch(path, { method: "HEAD", cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    const contentLength = response.headers.get("content-length");
+    const parsed = Number.parseInt(contentLength || "", 10);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return null;
+    }
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function updateOnnxSizeStatus() {
+  const bytes = await onnxSizeBytes(MODEL_PATH);
+  if (bytes === null) {
+    setOnnxSizeText("ONNX Size: unavailable");
+    return;
+  }
+  setOnnxSizeText(`ONNX Size: ${formatByteSize(bytes)}`);
 }
 
 async function assetExists(path) {
@@ -111,6 +186,24 @@ function loadText(path) {
     }
     return response.text();
   });
+}
+
+async function loadOrtModule() {
+  const errors = [];
+  for (const source of ORT_MODULE_CANDIDATES) {
+    try {
+      const mod = await import(source);
+      if (mod && mod.InferenceSession && mod.Tensor) {
+        return mod;
+      }
+      errors.push(`${source}: missing expected exports`);
+    } catch (error) {
+      errors.push(`${source}: ${String(error)}`);
+    }
+  }
+  throw new Error(
+    `failed to load ONNX Runtime Web module:\n${errors.map((entry) => `- ${entry}`).join("\n")}`
+  );
 }
 
 async function createSessionWithFallback() {
@@ -604,6 +697,10 @@ function installUi() {
 async function boot() {
   try {
     setGenerationEnabled(false);
+    setOnnxSizeText("ONNX Size: probing...");
+    const onnxSizeProbe = updateOnnxSizeStatus();
+    modelStatus.textContent = "Runtime: loading ONNX Runtime Web...";
+    ort = await loadOrtModule();
     modelStatus.textContent = "Model: loading metadata...";
     const [meta, presets, vocab, merges] = await Promise.all([
       loadJson(META_PATH),
@@ -611,10 +708,12 @@ async function boot() {
       loadJson(VOCAB_PATH),
       loadText(MERGES_PATH)
     ]);
+    await onnxSizeProbe;
 
     modelMeta = meta;
     promptPresets = presets;
     tokenizer = new Gpt2BpeTokenizer(vocab, merges);
+    setParameterText(modelMeta?.parameters?.total ?? modelMeta?.parameter_count);
     inputTypeByName = {};
     (modelMeta.inputs || []).forEach((entry) => {
       if (entry && entry.name) {
@@ -671,6 +770,7 @@ async function boot() {
     showError(String(error));
     setMissingWeightsState("unavailable");
     providerBadge.textContent = "Provider: unavailable";
+    setParameterText(null);
     modelStatus.textContent = "Model: failed to load";
     setGenerationEnabled(false);
   }

@@ -50,7 +50,7 @@ This repository packages:
     libopenblas-dev liblapacke-dev`)
 - ONNX export / benchmark helpers:
   - Python 3 with packages from `requirements.txt`
-  - `onnx` package available to the interpreter used by `MLX::GraphIR.onnx_json_to_onnx`
+  - `onnx` package available for parity/check utilities in tests and tooling
 - Web smoke/harness workflows:
   - Node.js + `npm` (for `playwright` and `onnxruntime-web`)
 - Docs build:
@@ -312,34 +312,36 @@ MLX Ruby exposes Graph IR/ONNX/WebGPU entrypoints on `MLX::GraphIR`.
 Architecture boundary:
 
 - Public API (`MLX::GraphIR`):
-  - `export_graph_ir_json`
-  - `validate!`
-  - `compatibility_report`
-  - `graph_ir_to_onnx_json`
-  - `onnx_json_to_onnx`
+  - `export_onnx`
   - `export_onnx_json`
-  - `export_onnx_webgpu_harness`
-  - `smoke_test_onnx_webgpu_harness`
+  - `export_onnx_compatibility_report`
+  - `export_graph_ir`
+  - `export_graph_ir_json`
+  - `graph_ir_to_onnx`
+  - `graph_ir_to_onnx_json`
 - Internal implementation modules:
   - `MLX::GraphIR`
-  - `MLX::GraphIR::Exporter`
-  - `MLX::GraphIR::ONNX::Exporter`
-  - `MLX::GraphIR::ONNX::PythonBuilder`
+  - `MLX::GraphIR::Native`
   - `MLX::GraphIR::WebGPUHarness`
 
 End-to-end flow:
 
-1. Export Graph IR with `MLX::GraphIR.export_graph_ir_json`.
-2. Validate and gate conversion with `MLX::GraphIR.validate!` and
-   `MLX::GraphIR.compatibility_report`.
-3. Generate JSON ONNX stubs with `MLX::GraphIR.graph_ir_to_onnx_json`.
-4. Export binary ONNX with `MLX::GraphIR.onnx_json_to_onnx`
-   (`external_data` options are available for large models), and/or export
-   ONNX JSON directly from trace with `MLX::GraphIR.export_onnx_json`.
-5. Package browser harness assets with `MLX::GraphIR.export_onnx_webgpu_harness`.
-6. Verify runtime behavior with `MLX::GraphIR.smoke_test_onnx_webgpu_harness`.
+1. Export Graph IR hash with `MLX::GraphIR.export_graph_ir` (or JSON debug
+   payload with `MLX::GraphIR.export_graph_ir_json`).
+2. Generate ONNX JSON debug stubs with `MLX::GraphIR.graph_ir_to_onnx_json`
+   or directly with `MLX::GraphIR.export_onnx_json`.
+3. Run ONNX export readiness diagnostics with
+   `MLX::GraphIR.export_onnx_compatibility_report` and inspect
+   `unsupported_ops`.
+4. Export binary ONNX with `MLX::GraphIR.graph_ir_to_onnx` or directly with
+   `MLX::GraphIR.export_onnx` (`external_data` options are available for large
+   models).
+5. Package browser harness assets with
+   `MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness`.
+6. Verify runtime behavior with
+   `MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness`.
 
-Harness artifacts from `export_onnx_webgpu_harness`:
+Harness artifacts from `MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness`:
 
 - `model.onnx`
 - `harness.manifest.json`
@@ -348,7 +350,7 @@ Harness artifacts from `export_onnx_webgpu_harness`:
 - `harness.js`
 - optional external data file (for example `model.data`)
 
-Smoke telemetry from `smoke_test_onnx_webgpu_harness` uses
+Smoke telemetry from `MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness` uses
 `onnx_webgpu_telemetry_v1` and reports provider selection/fallback details
 (`selected_provider`, `requested_providers`, `fallback_used`) plus timing
 fields (`run_timings_ms`, `model_load_latency_ms`,
@@ -356,24 +358,24 @@ fields (`run_timings_ms`, `model_load_latency_ms`,
 
 Operational requirements:
 
-- `onnx_json_to_onnx` requires `python3` with the `onnx` package available.
-- `onnx_json_to_onnx` requires a path-like target (not IO).
+- `MLX::GraphIR.export_onnx` and `MLX::GraphIR.graph_ir_to_onnx` require a
+  path-like target (not IO).
 - Browser smoke tests require Node.js + Playwright (`web/`) and optionally
   local `onnxruntime-web` assets.
 - Harness execution providers are `webgpu` and `wasm`.
-- `web:assets` exports GPT-2 and Stable Diffusion assets each run; nanoGPT ONNX
-  export is skipped unless trained nanoGPT artifacts already exist.
+- `web:assets` exports GPT-2, nanoGPT Shakespeare, and Stable Diffusion assets
+  each run via Hugging Face checkpoints.
 
 Demo asset workflows:
 
 - Generate browser assets: `bundle exec rake web:assets`
-- Start local demo server: `bundle exec rake web:start`
+- Start local demo server: `bundle exec rake web:start` (or `bundle exec rake web:serve`)
 
 Web Demo quickstart:
 
 ```bash
 bundle exec rake web:assets
-bundle exec rake web:start
+bundle exec rake web:serve
 ```
 
 Then open:
@@ -525,8 +527,9 @@ ruby extconf.rb
 make -j4
 ```
 
-- `onnx_json_to_onnx` fails with Python import errors: ensure `onnx` is installed in
-  the Python selected by `PYTHON`/`python3`.
+- ONNX binary export fails checker/runtime loading: regenerate with
+  `MLX::GraphIR.export_onnx` / `MLX::GraphIR.graph_ir_to_onnx` and validate
+  with local `onnx.checker` tooling.
 - On Apple silicon, verify native architecture:
 
 ```bash

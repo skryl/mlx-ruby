@@ -1,5 +1,13 @@
 # frozen_string_literal: true
 
+# Rakefile-level warning suppression for task runtime noise.
+# Note: Bundler/RubyGems bootstrap warnings can be emitted before this file is loaded.
+unless ENV.fetch("RUBYOPT", "").split.include?("-W0")
+  ENV["RUBYOPT"] = [ENV["RUBYOPT"], "-W0"].compact.reject(&:empty?).join(" ")
+end
+$VERBOSE = nil
+Warning[:deprecated] = false if Warning.respond_to?(:[]=)
+
 require "rake"
 require "rake/clean"
 require "rake/testtask"
@@ -170,6 +178,9 @@ namespace :web do
   task :start do
     WebTask.start!
   end
+
+  desc "Alias for web:start."
+  task serve: :start
 end
 
 task default: :test

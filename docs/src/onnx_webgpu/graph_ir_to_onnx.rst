@@ -1,21 +1,22 @@
 Graph IR To ONNX
 ================
 
-MLX Ruby supports JSON ONNX export plus binary ONNX model assembly.
+MLX Ruby supports native JSON ONNX export for debugging plus native binary ONNX
+model assembly.
 
 Ownership boundary
 ------------------
 
 Use ``MLX::GraphIR`` as the public API:
 
+- ``MLX::GraphIR.graph_ir_to_onnx``
 - ``MLX::GraphIR.graph_ir_to_onnx_json``
+- ``MLX::GraphIR.export_onnx``
 - ``MLX::GraphIR.export_onnx_json``
-- ``MLX::GraphIR.onnx_json_to_onnx``
 
 Implementation modules:
 
-- ``MLX::GraphIR::ONNX::Exporter`` handles JSON and binary export bridging.
-- ``MLX::GraphIR::ONNX::PythonBuilder`` builds binary ONNX via Python ``onnx``.
+- ``MLX::GraphIR::Native`` owns Graph IR/ONNX export and conversion runtime logic.
 
 Generate ONNX JSON from Graph IR payload
 ----------------------------------------
@@ -53,15 +54,25 @@ Use ``export_onnx_json`` to capture Graph IR + lower to ONNX JSON in one call.
 Export binary ONNX
 ------------------
 
-Use ``onnx_json_to_onnx`` for ``.onnx`` output.
+Use ``graph_ir_to_onnx`` when you already have Graph IR payload/source, or
+``export_onnx`` for direct trace -> ONNX binary export.
 
 .. code-block:: ruby
 
-   MLX::GraphIR.onnx_json_to_onnx("artifacts/model.onnx", onnx_json)
+   MLX::GraphIR.graph_ir_to_onnx("artifacts/model.onnx", payload)
 
-``MLX::GraphIR.onnx_json_to_onnx`` behavior:
+.. code-block:: ruby
 
-- Path-like target only: writes the file and returns the written path.
+   MLX::GraphIR.export_onnx(
+     "artifacts/model.onnx",
+     trace,
+     x,
+     y,
+     opset: 18,
+     model_name: "demo_graph"
+   )
+
+Both methods require a path-like target and return the written path.
 
 External data mode
 ------------------
@@ -70,9 +81,9 @@ For large models, enable external initializer data:
 
 .. code-block:: ruby
 
-   MLX::GraphIR.onnx_json_to_onnx(
+   MLX::GraphIR.graph_ir_to_onnx(
      "artifacts/model.onnx",
-     onnx_json,
+     payload,
      external_data: true,
      external_data_size_threshold: 1024,
      external_data_file: "model.data"
@@ -82,7 +93,8 @@ This writes ``model.onnx`` plus ``model.data`` in the target directory.
 
 External-data notes:
 
-- ``onnx_json_to_onnx`` requires a path-like ``target`` (not IO-like).
+- ``graph_ir_to_onnx`` and ``export_onnx`` require a path-like ``target``
+  (not IO-like).
 - ``external_data_size_threshold`` must be a non-negative integer.
 - If ``external_data_file`` is omitted, the default is
   ``<target_basename>.data``.

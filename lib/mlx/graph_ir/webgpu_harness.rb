@@ -42,9 +42,11 @@ module MLX
           opset: opset,
           model_name: model_name
         )
-        ONNX::Exporter.onnx_json_to_onnx(
+        MLX::GraphIR.graph_ir_to_onnx(
           model_path,
-          onnx_json,
+          payload_or_source,
+          opset: opset,
+          model_name: model_name,
           external_data: external_data,
           external_data_size_threshold: external_data_size_threshold,
           external_data_file: external_data_file

@@ -12,18 +12,15 @@ Architecture boundary (post-refactor)
 Use ``MLX::GraphIR.*`` methods as the public API. The implementation is split across:
 
 - ``MLX::GraphIR``
-- ``MLX::GraphIR::Exporter``
-- ``MLX::GraphIR::ONNX::Exporter``
-- ``MLX::GraphIR::ONNX::PythonBuilder``
+- ``MLX::GraphIR::Native``
 - ``MLX::GraphIR::WebGPUHarness``
 
 Pipeline stages
 ---------------
 
 1. Capture MLX execution as Graph IR.
-2. Validate Graph IR schema/topology.
-3. Run WebGPU/ONNX compatibility preflight.
-4. Convert Graph IR to ONNX (JSON stub and/or binary model).
+2. Convert Graph IR to ONNX (JSON stub and/or binary model).
+3. Run optional compatibility diagnostics (native report).
 5. Package browser harness assets.
 6. Run smoke validation in Node/browser runtime.
 

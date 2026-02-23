@@ -1,37 +1,42 @@
 Validation And Compatibility
 ============================
 
-After exporting Graph IR, run schema validation and ONNX/WebGPU preflight
-before conversion.
+After exporting Graph IR, use ONNX conversion readiness checks before conversion.
 
 Ownership boundary
 ------------------
 
-- Public API: ``MLX::GraphIR.validate!`` and
-  ``MLX::GraphIR.compatibility_report``.
-- Implementation ownership: ``MLX::GraphIR`` validation + ONNX compatibility
-  resolver/lowering modules.
+- Public API: ``MLX::GraphIR.export_onnx_compatibility_report``,
+  ``MLX::GraphIR.graph_ir_to_onnx_json``, and ``MLX::GraphIR.graph_ir_to_onnx``.
+- Internal diagnostic API: ``MLX::GraphIR::Native.graph_ir_compatibility_report_json``.
+- Runtime ownership: ``MLX::GraphIR::Native``.
 
-Schema and topology validation
-------------------------------
+Schema/topology errors surface during conversion
+------------------------------------------------
 
-``MLX::GraphIR.validate!`` raises if required fields or topology are
-invalid.
-
-.. code-block:: ruby
-
-   payload = JSON.parse(File.binread("artifacts/graph_ir.json"))
-   MLX::GraphIR.validate!(payload)
+``graph_ir_to_onnx_json`` and ``graph_ir_to_onnx`` raise on malformed Graph IR
+payloads.
 
 WebGPU/ONNX preflight
 ---------------------
 
-``MLX::GraphIR.compatibility_report`` summarizes conversion
-readiness and unsupported operations.
+``MLX::GraphIR.export_onnx_compatibility_report`` checks traced models directly
+and returns ``unsupported_ops`` without requiring intermediate Graph IR handling
+in Ruby.
 
 .. code-block:: ruby
 
-   report = MLX::GraphIR.compatibility_report(payload)
+   report = MLX::GraphIR.export_onnx_compatibility_report(fun, *args, **kwargs)
+   abort("unsupported ops: #{report.fetch('unsupported_ops').inspect}") unless report.fetch("unsupported_nodes").zero?
+
+``MLX::GraphIR::Native.graph_ir_compatibility_report_json`` summarizes
+conversion readiness and unsupported operations.
+
+.. code-block:: ruby
+
+   report = JSON.parse(
+     MLX::GraphIR::Native.graph_ir_compatibility_report_json(payload)
+   )
 
    puts "format=#{report.fetch('format')}" # => "webgpu_compat_report_v1"
    puts "total_nodes=#{report.fetch('total_nodes')}"
@@ -45,8 +50,8 @@ readiness and unsupported operations.
 Current MLX -> ONNX mapped ops
 ------------------------------
 
-The compatibility preflight and lowering path use these current mappings from
-``lib/mlx/graph_ir/constants.rb`` and ``lib/mlx/graph_ir/onnx/*``.
+The compatibility preflight and lowering path use native GraphIR/ONNX mapping
+tables in ``ext/mlx/graph_ir_native.cpp``.
 
 Direct op mapping table
 ^^^^^^^^^^^^^^^^^^^^^^^

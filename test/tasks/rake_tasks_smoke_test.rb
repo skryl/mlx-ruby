@@ -33,7 +33,8 @@ class RakeTasksSmokeTest < Minitest::Test
     ["benchmark"],
     ["web:assets"],
     ["web:train"],
-    ["web:start"]
+    ["web:start"],
+    ["web:serve"]
   ].freeze
 
   def setup

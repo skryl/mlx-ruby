@@ -7,8 +7,8 @@ Ownership boundary
 ------------------
 
 - Public facade API:
-  ``MLX::GraphIR.export_onnx_webgpu_harness`` and
-  ``MLX::GraphIR.smoke_test_onnx_webgpu_harness``.
+  ``MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness`` and
+  ``MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness``.
 - Implementation module: ``MLX::GraphIR::WebGPUHarness``.
 
 Package harness assets
@@ -18,7 +18,7 @@ Use ``export_onnx_webgpu_harness`` to emit browser-ready files.
 
 .. code-block:: ruby
 
-   manifest = MLX::GraphIR.export_onnx_webgpu_harness(
+   manifest = MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness(
      "artifacts/web_harness",
      payload,
      model_name: "demo_graph",
@@ -57,7 +57,7 @@ selection.
 
 .. code-block:: ruby
 
-   telemetry = MLX::GraphIR.smoke_test_onnx_webgpu_harness(
+   telemetry = MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness(
      "artifacts/web_harness",
      timeout_seconds: 30,
      mock_ort: false,

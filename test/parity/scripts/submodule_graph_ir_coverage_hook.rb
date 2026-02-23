@@ -123,7 +123,7 @@ module SubmoduleGraphIrCoverageHook
       warn "[graph-ir-hook] dot graph had no op labels:\n#{dot_graph}"
     end
     graph_payload = dot_to_graph_ir_payload(dot_graph)
-    [MLX::GraphIR.compatibility_report(graph_payload), nil]
+    [JSON.parse(MLX::GraphIR::Native.graph_ir_compatibility_report_json(graph_payload)), nil]
   rescue StandardError => e
     [nil, "#{e.class}: #{e.message}"]
   end

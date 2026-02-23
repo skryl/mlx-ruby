@@ -30,13 +30,23 @@ class WebTask
   def self.required_assets
     [
       File.join(WEB_ROOT, "assets", "gpt2", "model.onnx"),
+      File.join(WEB_ROOT, "assets", "gpt2", "meta.json"),
+      File.join(WEB_ROOT, "assets", "gpt2", "vocab.json"),
+      File.join(WEB_ROOT, "assets", "gpt2", "merges.txt"),
+      File.join(WEB_ROOT, "assets", "gpt2", "prompt.presets.json"),
       File.join(WEB_ROOT, "assets", "nanogpt", "model.onnx"),
+      File.join(WEB_ROOT, "assets", "nanogpt", "meta.json"),
+      File.join(WEB_ROOT, "assets", "nanogpt", "tokenizer.json"),
+      File.join(WEB_ROOT, "assets", "nanogpt", "prompt.presets.json"),
       File.join(WEB_ROOT, "assets", "stable_diffusion", "model.onnx"),
       File.join(WEB_ROOT, "assets", "stable_diffusion", "text_encoder.onnx"),
       File.join(WEB_ROOT, "assets", "stable_diffusion", "unet.onnx"),
       File.join(WEB_ROOT, "assets", "stable_diffusion", "vae_decoder.onnx"),
       File.join(WEB_ROOT, "assets", "stable_diffusion", "vocab.json"),
-      File.join(WEB_ROOT, "assets", "stable_diffusion", "merges.txt")
+      File.join(WEB_ROOT, "assets", "stable_diffusion", "merges.txt"),
+      File.join(WEB_ROOT, "assets", "stable_diffusion", "meta.json"),
+      File.join(WEB_ROOT, "assets", "stable_diffusion", "prompt.presets.json"),
+      File.join(WEB_ROOT, "assets", "stable_diffusion", "scheduler_config.json")
     ]
   end
 end

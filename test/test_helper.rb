@@ -259,21 +259,16 @@ module TestSupport
     model_name: "mlx_graph",
     external_data: false,
     external_data_size_threshold: 1024,
-    external_data_file: nil,
-    python_bin: ENV.fetch("PYTHON", "python3")
+    external_data_file: nil
   )
-    onnx_json = MLX::GraphIR.graph_ir_to_onnx_json(
+    MLX::GraphIR.graph_ir_to_onnx(
+      target,
       payload_or_source,
       opset: opset,
-      model_name: model_name
-    )
-    MLX::GraphIR.onnx_json_to_onnx(
-      target,
-      onnx_json,
+      model_name: model_name,
       external_data: external_data,
       external_data_size_threshold: external_data_size_threshold,
-      external_data_file: external_data_file,
-      python_bin: python_bin
+      external_data_file: external_data_file
     )
   end
 
@@ -286,23 +281,19 @@ module TestSupport
     external_data: false,
     external_data_size_threshold: 1024,
     external_data_file: nil,
-    python_bin: ENV.fetch("PYTHON", "python3"),
     **trace_kwargs
   )
-    onnx_json = MLX::GraphIR.export_onnx_json(
+    MLX::GraphIR.export_onnx(
+      target,
       fun,
       *extras,
+      shapeless: false,
       opset: opset,
       model_name: model_name,
-      **trace_kwargs
-    )
-    MLX::GraphIR.onnx_json_to_onnx(
-      target,
-      onnx_json,
       external_data: external_data,
       external_data_size_threshold: external_data_size_threshold,
       external_data_file: external_data_file,
-      python_bin: python_bin
+      **trace_kwargs
     )
   end
 

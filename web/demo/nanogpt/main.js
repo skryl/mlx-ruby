@@ -1,18 +1,23 @@
-import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.mjs";
-
 const ASSET_ROOT = "../../assets/nanogpt";
 const MODEL_PATH = `${ASSET_ROOT}/model.onnx`;
 const META_PATH = `${ASSET_ROOT}/meta.json`;
 const PRESETS_PATH = `${ASSET_ROOT}/prompt.presets.json`;
 const TOKENIZER_PATH = `${ASSET_ROOT}/tokenizer.json`;
+const ORT_MODULE_CANDIDATES = [
+  "../../node_modules/onnxruntime-web/dist/ort.all.min.mjs",
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.mjs"
+];
 
 const weightsBadge = document.getElementById("badge-weights");
 const providerBadge = document.getElementById("badge-provider");
+const onnxSizeBadge = document.getElementById("badge-onnx-size");
+const parametersBadge = document.getElementById("badge-parameters");
 const timingBadge = document.getElementById("badge-timing");
 const modelStatus = document.getElementById("status-model");
 const shapeStatus = document.getElementById("status-shape");
 const tokenizerStatus = document.getElementById("status-tokenizer");
 const contextStatus = document.getElementById("status-context");
+const onnxSizeStatus = document.getElementById("status-onnx-size");
 const errorBox = document.getElementById("error-box");
 
 const presetSelect = document.getElementById("preset");
@@ -35,6 +40,7 @@ let modelMeta = null;
 let promptPresets = {};
 let tokenizerConfig = null;
 let running = false;
+let ort = null;
 
 generateButton.disabled = true;
 setGenerationEnabled(false);
@@ -56,6 +62,75 @@ function toNumber(value, fallback = 0) {
 
 function setGenerationEnabled(enabled) {
   generateButton.disabled = !enabled;
+}
+
+function setOnnxSizeText(text) {
+  onnxSizeStatus.textContent = text;
+  if (onnxSizeBadge) {
+    onnxSizeBadge.textContent = text;
+  }
+}
+
+function formatParameterCount(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return "unknown";
+  }
+  return Math.trunc(numeric).toLocaleString("en-US");
+}
+
+function setParameterText(value) {
+  if (!parametersBadge) {
+    return;
+  }
+  parametersBadge.textContent = `Parameters: ${formatParameterCount(value)}`;
+}
+
+function formatByteSize(bytes) {
+  const numeric = Number(bytes);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return "unknown";
+  }
+  if (numeric < 1024) {
+    return `${Math.trunc(numeric)} B`;
+  }
+
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = numeric;
+  let unitIndex = -1;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+async function onnxSizeBytes(path) {
+  try {
+    const response = await fetch(path, { method: "HEAD", cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    const contentLength = response.headers.get("content-length");
+    const parsed = Number.parseInt(contentLength || "", 10);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return null;
+    }
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function updateOnnxSizeStatus() {
+  const bytes = await onnxSizeBytes(MODEL_PATH);
+  if (bytes === null) {
+    setOnnxSizeText("ONNX Size: unavailable");
+    return;
+  }
+  setOnnxSizeText(`ONNX Size: ${formatByteSize(bytes)}`);
 }
 
 async function assetExists(path) {
@@ -97,6 +172,24 @@ function loadJson(path) {
     }
     return response.json();
   });
+}
+
+async function loadOrtModule() {
+  const errors = [];
+  for (const source of ORT_MODULE_CANDIDATES) {
+    try {
+      const mod = await import(source);
+      if (mod && mod.InferenceSession && mod.Tensor) {
+        return mod;
+      }
+      errors.push(`${source}: missing expected exports`);
+    } catch (error) {
+      errors.push(`${source}: ${String(error)}`);
+    }
+  }
+  throw new Error(
+    `failed to load ONNX Runtime Web module:\n${errors.map((entry) => `- ${entry}`).join("\n")}`
+  );
 }
 
 async function createSessionWithFallback() {
@@ -180,10 +273,49 @@ function buildContext(promptIds) {
   return truncated;
 }
 
+function normalizeInputShape(shape, tokenCount) {
+  if (!Array.isArray(shape) || shape.length === 0) {
+    return [1, tokenCount];
+  }
+
+  return shape.map((entry, index) => {
+    const value = Number(entry);
+    if (Number.isFinite(value) && value > 0) {
+      return Math.trunc(value);
+    }
+    if (index === shape.length - 1) {
+      return tokenCount;
+    }
+    return 1;
+  });
+}
+
+function inputTensorType(rawType) {
+  const normalized = String(rawType || "").toLowerCase();
+  return normalized.includes("64") ? "int64" : "int32";
+}
+
 function createFeeds(tokens) {
-  const inputSpec = modelMeta.input;
+  const inputName = (session?.inputNames || [])[0] || modelMeta?.input?.name || "input";
+  const sessionInputMeta = session?.inputMetadata?.[inputName] || {};
+  const inputShape = normalizeInputShape(
+    sessionInputMeta.dimensions || modelMeta?.input?.shape,
+    tokens.length
+  );
+  const tensorType = inputTensorType(sessionInputMeta.type || modelMeta?.input?.type);
+
+  if (tensorType === "int64") {
+    return {
+      [inputName]: new ort.Tensor(
+        "int64",
+        BigInt64Array.from(tokens.map((value) => BigInt(value))),
+        inputShape
+      )
+    };
+  }
+
   return {
-    [inputSpec.name]: new ort.Tensor("int32", Int32Array.from(tokens), inputSpec.shape)
+    [inputName]: new ort.Tensor("int32", Int32Array.from(tokens), inputShape)
   };
 }
 
@@ -406,12 +538,18 @@ function installUi() {
 async function boot() {
   try {
     setGenerationEnabled(false);
+    setOnnxSizeText("ONNX Size: probing...");
+    const onnxSizeProbe = updateOnnxSizeStatus();
+    modelStatus.textContent = "Runtime: loading ONNX Runtime Web...";
+    ort = await loadOrtModule();
     modelStatus.textContent = "Model: loading metadata...";
     [modelMeta, promptPresets, tokenizerConfig] = await Promise.all([
       loadJson(META_PATH),
       loadJson(PRESETS_PATH),
       loadJson(TOKENIZER_PATH).catch(() => null)
     ]);
+    await onnxSizeProbe;
+    setParameterText(modelMeta?.parameters?.total ?? modelMeta?.parameter_count);
     if (!tokenizerConfig) {
       tokenizerConfig = modelMeta?.tokenizer ?? {};
     }
@@ -432,7 +570,7 @@ async function boot() {
 
     const hasModelAsset = await assetExists(MODEL_PATH);
     if (!hasUsableWeights(modelMeta) || !hasModelAsset) {
-      setMissingWeightsState("run `bundle exec rake \"web:train[nanogpt]\"` + `ruby tasks/web_assets_task/export_nanogpt_assets.rb`");
+      setMissingWeightsState("run `bundle exec rake web:assets`");
       tokenizerStatus.textContent = "Tokenizer: unavailable";
       contextStatus.textContent = "Context size: unavailable";
       shapeStatus.textContent = "Output shape: unavailable";
@@ -458,6 +596,7 @@ async function boot() {
   } catch (error) {
     showError(String(error));
     setMissingWeightsState("unavailable");
+    setParameterText(null);
     tokenizerStatus.textContent = "Tokenizer: unavailable";
     contextStatus.textContent = "Context size: unavailable";
     shapeStatus.textContent = "Output shape: unavailable";

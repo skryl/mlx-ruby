@@ -1,20 +1,20 @@
 MLX To Graph IR
 ===============
 
-Use ``MLX::GraphIR.export_graph_ir_json`` to trace a function/module call and
-emit Graph IR JSON.
+Use ``MLX::GraphIR.export_graph_ir`` to trace a function/module call and emit a
+Graph IR Hash, or ``MLX::GraphIR.export_graph_ir_json`` for debug JSON.
 
 Ownership boundary
 ------------------
 
-- Public API: ``MLX::GraphIR.export_graph_ir_json``.
-- Implementation module: ``MLX::GraphIR::Exporter``.
-- ``MLX::GraphIR`` owns payload normalization/schema semantics.
+- Public API: ``MLX::GraphIR.export_graph_ir`` and
+  ``MLX::GraphIR.export_graph_ir_json``.
+- Runtime implementation module: ``MLX::GraphIR::Native``.
 
 Basic capture
 -------------
 
-``export_graph_ir_json`` returns a normalized JSON string.
+``export_graph_ir`` returns a normalized Hash payload.
 
 .. code-block:: ruby
 
@@ -26,18 +26,18 @@ Basic capture
    y = mx.array([[0.5, 0.25]], mx.float32)
 
    trace = ->(lhs, rhs) { MLX::Core.add(lhs, rhs) }
-   payload_json = MLX::GraphIR.export_graph_ir_json(trace, x, y)
-   payload = JSON.parse(payload_json)
+   payload = MLX::GraphIR.export_graph_ir(trace, x, y)
 
    puts payload.fetch("ir_version")
 
-Write to disk
--------------
+Debug JSON export
+-----------------
 
-Write the JSON artifact explicitly when needed:
+Write a JSON artifact explicitly when needed:
 
 .. code-block:: ruby
 
+   payload_json = MLX::GraphIR.export_graph_ir_json(trace, x, y)
    graph_ir_path = "artifacts/graph_ir.json"
    File.binwrite(graph_ir_path, payload_json)
 

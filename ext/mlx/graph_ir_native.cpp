@@ -1,17 +1,30 @@
 #include "graph_ir_native.hpp"
 
 #include <algorithm>
+#include <array>
+#include <bit>
+#include <chrono>
+#include <cctype>
 #include <cmath>
+#include <cstring>
+#include <cstdio>
 #include <cstdint>
+#include <cerrno>
+#include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <functional>
+#include <fstream>
+#include <iomanip>
 #include <limits>
+#include <map>
 #include <numeric>
 #include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -35,9 +48,9 @@ using OrderedJson = nlohmann::ordered_json;
 namespace {
 
 using Shape = std::vector<int64_t>;
-using ShapeMap = std::unordered_map<std::string, Shape>;
-using DtypeMap = std::unordered_map<std::string, std::string>;
-using NameSet = std::unordered_set<std::string>;
+using ShapeMap = std::map<std::string, Shape>;
+using DtypeMap = std::map<std::string, std::string>;
+using NameSet = std::set<std::string>;
 
 static VALUE mGraphIR;
 static VALUE mGraphIRNative;
@@ -45,7 +58,7 @@ static VALUE eGraphIRNativeUnsupportedError = Qnil;
 
 constexpr int64_t kGraphIrVersion = 1;
 
-static const std::unordered_map<std::string, std::string> kOnnxOpMap = {
+static constexpr std::array<std::pair<const char*, const char*>, 49> kOnnxOpPairs = {{
     {"Add", "Add"},
     {"AddMM", "Gemm"},
     {"Subtract", "Sub"},
@@ -95,23 +108,23 @@ static const std::unordered_map<std::string, std::string> kOnnxOpMap = {
     {"Maximum", "Max"},
     {"Minimum", "Min"},
     {"Power", "Pow"},
-};
+}};
 
-static const std::unordered_map<int64_t, std::string> kReduceCodeToOnnxOp = {
+static constexpr std::array<std::pair<int64_t, const char*>, 6> kReduceCodeToOnnxOpPairs = {{
     {0, "ReduceMin"},
     {1, "ReduceMax"},
     {2, "ReduceSum"},
     {3, "ReduceProd"},
     {4, "ReduceMin"},
     {5, "ReduceMax"},
-};
+}};
 
-static const std::unordered_map<int64_t, std::string> kArgReduceCodeToOnnxOp = {
+static constexpr std::array<std::pair<int64_t, const char*>, 2> kArgReduceCodeToOnnxOpPairs = {{
     {0, "ArgMin"},
     {1, "ArgMax"},
-};
+}};
 
-static const std::unordered_map<std::string, std::string> kOnnxDtypeMap = {
+static constexpr std::array<std::pair<const char*, const char*>, 15> kOnnxDtypePairs = {{
     {"bool", "BOOL"},
     {"bool_", "BOOL"},
     {"uint8", "UINT8"},
@@ -127,9 +140,9 @@ static const std::unordered_map<std::string, std::string> kOnnxDtypeMap = {
     {"float64", "DOUBLE"},
     {"bfloat16", "BFLOAT16"},
     {"complex64", "COMPLEX64"},
-};
+}};
 
-static const std::unordered_map<std::string, int> kDtypePromotionRank = {
+static constexpr std::array<std::pair<const char*, int>, 13> kDtypePromotionRankPairs = {{
     {"bool", 0},
     {"uint8", 1},
     {"int8", 2},
@@ -143,7 +156,43 @@ static const std::unordered_map<std::string, int> kDtypePromotionRank = {
     {"float16", 10},
     {"float32", 11},
     {"float64", 12},
-};
+}};
+
+template <size_t N>
+static const char* lookup_string_pair(
+    const std::array<std::pair<const char*, const char*>, N>& pairs,
+    const std::string& key) {
+  for (const auto& [candidate_key, candidate_value] : pairs) {
+    if (key == candidate_key) {
+      return candidate_value;
+    }
+  }
+  return nullptr;
+}
+
+template <size_t N>
+static const char* lookup_int_string_pair(
+    const std::array<std::pair<int64_t, const char*>, N>& pairs,
+    int64_t key) {
+  for (const auto& [candidate_key, candidate_value] : pairs) {
+    if (candidate_key == key) {
+      return candidate_value;
+    }
+  }
+  return nullptr;
+}
+
+template <size_t N>
+static std::optional<int> lookup_string_int_pair(
+    const std::array<std::pair<const char*, int>, N>& pairs,
+    const std::string& key) {
+  for (const auto& [candidate_key, candidate_value] : pairs) {
+    if (key == candidate_key) {
+      return candidate_value;
+    }
+  }
+  return std::nullopt;
+}
 
 using GraphTensorInfo = std::tuple<std::string, mx::Shape, mx::Dtype>;
 
@@ -153,6 +202,105 @@ struct GraphIrExportInvocation {
   mx::Kwargs kwargs;
   bool shapeless;
 };
+
+struct GraphIrExportTimingStats {
+  double export_function_ms = 0.0;
+  double constants_capture_ms = 0.0;
+  size_t constants_count = 0;
+  size_t constant_elements = 0;
+};
+
+struct OnnxBinaryWriteOptions {
+  bool external_data = false;
+  std::string external_data_file = "weights.bin";
+  int64_t external_data_size_threshold = 1024;
+};
+
+struct OnnxBinaryArtifact {
+  std::string model_bytes;
+  std::string external_data_bytes;
+  bool has_external_data = false;
+};
+
+static bool graph_ir_native_timing_enabled() {
+  const char* raw = std::getenv("MLX_GRAPH_IR_NATIVE_TIMING");
+  if (raw == nullptr) {
+    return false;
+  }
+
+  std::string value(raw);
+  if (value.empty()) {
+    return false;
+  }
+
+  std::transform(
+      value.begin(),
+      value.end(),
+      value.begin(),
+      [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  return !(value == "0" || value == "false" || value == "off" || value == "no");
+}
+
+static double elapsed_millis(std::chrono::steady_clock::time_point started_at) {
+  const auto finished_at = std::chrono::steady_clock::now();
+  return std::chrono::duration<double, std::milli>(finished_at - started_at).count();
+}
+
+static void emit_graph_ir_native_timing_line(const std::string& line) {
+  std::fprintf(stderr, "%s\n", line.c_str());
+  std::fflush(stderr);
+}
+
+static void emit_export_onnx_json_timing_line(
+    const GraphIrExportInvocation& invocation,
+    int64_t opset,
+    const std::string& model_name,
+    const GraphIrExportTimingStats& export_stats,
+    double args_decode_ms,
+    double export_graph_ir_ms,
+    double lower_onnx_ms,
+    double dump_json_ms,
+    double total_ms,
+    size_t onnx_json_bytes) {
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(3);
+  out << "[mlx.graph_ir.native.timing] export_onnx_json";
+  out << " total_ms=" << total_ms;
+  out << " args_decode_ms=" << args_decode_ms;
+  out << " export_graph_ir_ms=" << export_graph_ir_ms;
+  out << " trace_export_ms=" << export_stats.export_function_ms;
+  out << " constants_capture_ms=" << export_stats.constants_capture_ms;
+  out << " constants_count=" << export_stats.constants_count;
+  out << " constant_elements=" << export_stats.constant_elements;
+  out << " lower_onnx_ms=" << lower_onnx_ms;
+  out << " json_dump_ms=" << dump_json_ms;
+  out << " onnx_json_bytes=" << onnx_json_bytes;
+  out << " shapeless=" << (invocation.shapeless ? "true" : "false");
+  out << " opset=" << opset;
+  out << " model_name=" << model_name;
+  emit_graph_ir_native_timing_line(out.str());
+}
+
+static void emit_graph_ir_to_onnx_json_timing_line(
+    int64_t opset,
+    const std::string& model_name,
+    double parse_json_ms,
+    double lower_onnx_ms,
+    double dump_json_ms,
+    double total_ms,
+    size_t onnx_json_bytes) {
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(3);
+  out << "[mlx.graph_ir.native.timing] graph_ir_to_onnx_json";
+  out << " total_ms=" << total_ms;
+  out << " parse_json_ms=" << parse_json_ms;
+  out << " lower_onnx_ms=" << lower_onnx_ms;
+  out << " json_dump_ms=" << dump_json_ms;
+  out << " onnx_json_bytes=" << onnx_json_bytes;
+  out << " opset=" << opset;
+  out << " model_name=" << model_name;
+  emit_graph_ir_native_timing_line(out.str());
+}
 
 static std::string dtype_to_string(mx::Dtype dtype) {
   std::ostringstream out;
@@ -551,41 +699,52 @@ static OrderedJson capture_json_state_values_from_mx_states(const std::vector<mx
   return out;
 }
 
-static OrderedJson export_graph_ir_payload(const GraphIrExportInvocation& invocation) {
+template <typename T>
+static const T* export_callback_field(
+    const mx::ExportCallbackInput& data,
+    const std::string& key) {
+  for (const auto& [candidate_key, candidate_value] : data) {
+    if (candidate_key == key && std::holds_alternative<T>(candidate_value)) {
+      return &std::get<T>(candidate_value);
+    }
+  }
+  return nullptr;
+}
+
+static OrderedJson export_graph_ir_payload(
+    const GraphIrExportInvocation& invocation,
+    GraphIrExportTimingStats* timing_stats = nullptr) {
   OrderedJson graph_inputs = OrderedJson::array();
   OrderedJson keyword_inputs = OrderedJson::array();
   OrderedJson graph_outputs = OrderedJson::array();
   OrderedJson graph_constants = OrderedJson::array();
   OrderedJson graph_nodes = OrderedJson::array();
 
+  const auto trace_started_at = std::chrono::steady_clock::now();
   mx::export_function(
-      [&graph_inputs, &keyword_inputs, &graph_outputs, &graph_constants, &graph_nodes](
+      [&graph_inputs, &keyword_inputs, &graph_outputs, &graph_constants, &graph_nodes, timing_stats](
           const mx::ExportCallbackInput& data) {
-        auto type_it = data.find("type");
-        if (type_it == data.end() || !std::holds_alternative<std::string>(type_it->second)) {
+        const auto* record_type = export_callback_field<std::string>(data, "type");
+        if (record_type == nullptr) {
           return;
         }
-        const auto& record_type = std::get<std::string>(type_it->second);
 
-        if (record_type == "inputs") {
-          auto inputs_it = data.find("inputs");
-          if (inputs_it != data.end() &&
-              std::holds_alternative<std::vector<GraphTensorInfo>>(inputs_it->second)) {
-            graph_inputs = capture_json_tensor_infos_from_graph_tensors(
-                std::get<std::vector<GraphTensorInfo>>(inputs_it->second));
+        if (*record_type == "inputs") {
+          const auto* inputs = export_callback_field<std::vector<GraphTensorInfo>>(data, "inputs");
+          if (inputs != nullptr) {
+            graph_inputs = capture_json_tensor_infos_from_graph_tensors(*inputs);
           }
           return;
         }
 
-        if (record_type == "keyword_inputs") {
-          auto keywords_it = data.find("keywords");
-          if (keywords_it != data.end() &&
-              std::holds_alternative<std::vector<std::pair<std::string, std::string>>>(
-                  keywords_it->second)) {
+        if (*record_type == "keyword_inputs") {
+          const auto* keywords =
+              export_callback_field<std::vector<std::pair<std::string, std::string>>>(
+                  data,
+                  "keywords");
+          if (keywords != nullptr) {
             keyword_inputs = OrderedJson::array();
-            const auto& keywords =
-                std::get<std::vector<std::pair<std::string, std::string>>>(keywords_it->second);
-            for (const auto& [name, tensor] : keywords) {
+            for (const auto& [name, tensor] : *keywords) {
               OrderedJson entry = OrderedJson::object();
               entry["name"] = name;
               entry["tensor"] = tensor;
@@ -595,72 +754,74 @@ static OrderedJson export_graph_ir_payload(const GraphIrExportInvocation& invoca
           return;
         }
 
-        if (record_type == "outputs") {
-          auto outputs_it = data.find("outputs");
-          if (outputs_it != data.end() &&
-              std::holds_alternative<std::vector<GraphTensorInfo>>(outputs_it->second)) {
-            graph_outputs = capture_json_tensor_infos_from_graph_tensors(
-                std::get<std::vector<GraphTensorInfo>>(outputs_it->second));
+        if (*record_type == "outputs") {
+          const auto* outputs = export_callback_field<std::vector<GraphTensorInfo>>(data, "outputs");
+          if (outputs != nullptr) {
+            graph_outputs = capture_json_tensor_infos_from_graph_tensors(*outputs);
           }
           return;
         }
 
-        if (record_type == "constants") {
-          auto constants_it = data.find("constants");
-          if (constants_it != data.end() &&
-              std::holds_alternative<std::vector<std::pair<std::string, mx::array>>>(
-                  constants_it->second)) {
+        if (*record_type == "constants") {
+          const auto* constants =
+              export_callback_field<std::vector<std::pair<std::string, mx::array>>>(
+                  data,
+                  "constants");
+          if (constants != nullptr) {
             graph_constants = OrderedJson::array();
-            const auto& constants =
-                std::get<std::vector<std::pair<std::string, mx::array>>>(constants_it->second);
-            for (const auto& [name, arr] : constants) {
+            if (timing_stats != nullptr) {
+              timing_stats->constants_count += constants->size();
+            }
+            for (const auto& [name, arr] : *constants) {
               OrderedJson entry = OrderedJson::object();
               entry["name"] = name;
               entry["shape"] = capture_json_shape_from_mx_shape(arr.shape());
               entry["dtype"] = dtype_to_string(arr.dtype());
-              entry["values"] = capture_json_values_from_array(arr);
+              if (timing_stats != nullptr) {
+                timing_stats->constant_elements += static_cast<size_t>(arr.size());
+                const auto capture_started_at = std::chrono::steady_clock::now();
+                entry["values"] = capture_json_values_from_array(arr);
+                timing_stats->constants_capture_ms += elapsed_millis(capture_started_at);
+              } else {
+                entry["values"] = capture_json_values_from_array(arr);
+              }
               graph_constants.push_back(std::move(entry));
             }
           }
           return;
         }
 
-        if (record_type != "primitive") {
+        if (*record_type != "primitive") {
           return;
         }
 
-        auto name_it = data.find("name");
-        if (name_it == data.end() || !std::holds_alternative<std::string>(name_it->second)) {
+        const auto* op_name = export_callback_field<std::string>(data, "name");
+        if (op_name == nullptr) {
           return;
         }
 
         OrderedJson node = OrderedJson::object();
-        node["op"] = std::get<std::string>(name_it->second);
+        node["op"] = *op_name;
 
         OrderedJson node_inputs = OrderedJson::array();
-        auto inputs_it = data.find("inputs");
-        if (inputs_it != data.end() &&
-            std::holds_alternative<std::vector<GraphTensorInfo>>(inputs_it->second)) {
-          node_inputs = capture_json_tensor_names_from_graph_tensors(
-              std::get<std::vector<GraphTensorInfo>>(inputs_it->second));
+        const auto* node_input_infos = export_callback_field<std::vector<GraphTensorInfo>>(data, "inputs");
+        if (node_input_infos != nullptr) {
+          node_inputs = capture_json_tensor_names_from_graph_tensors(*node_input_infos);
         }
         node["inputs"] = std::move(node_inputs);
 
         OrderedJson node_outputs = OrderedJson::array();
-        auto outputs_it = data.find("outputs");
-        if (outputs_it != data.end() &&
-            std::holds_alternative<std::vector<GraphTensorInfo>>(outputs_it->second)) {
-          node_outputs = capture_json_tensor_names_from_graph_tensors(
-              std::get<std::vector<GraphTensorInfo>>(outputs_it->second));
+        const auto* node_output_infos =
+            export_callback_field<std::vector<GraphTensorInfo>>(data, "outputs");
+        if (node_output_infos != nullptr) {
+          node_outputs = capture_json_tensor_names_from_graph_tensors(*node_output_infos);
         }
         node["outputs"] = std::move(node_outputs);
 
         OrderedJson node_arguments = OrderedJson::array();
-        auto arguments_it = data.find("arguments");
-        if (arguments_it != data.end() &&
-            std::holds_alternative<std::vector<mx::StateT>>(arguments_it->second)) {
-          node_arguments = capture_json_state_values_from_mx_states(
-              std::get<std::vector<mx::StateT>>(arguments_it->second));
+        const auto* arguments = export_callback_field<std::vector<mx::StateT>>(data, "arguments");
+        if (arguments != nullptr) {
+          node_arguments = capture_json_state_values_from_mx_states(*arguments);
         }
         node["arguments"] = std::move(node_arguments);
 
@@ -670,6 +831,9 @@ static OrderedJson export_graph_ir_payload(const GraphIrExportInvocation& invoca
       invocation.args,
       invocation.kwargs,
       invocation.shapeless);
+  if (timing_stats != nullptr) {
+    timing_stats->export_function_ms += elapsed_millis(trace_started_at);
+  }
 
   OrderedJson payload = OrderedJson::object();
   payload["ir_version"] = 1;
@@ -702,6 +866,232 @@ static std::string std_string_from_ruby(VALUE value) {
 
 static VALUE ruby_string_from_std(const std::string& value) {
   return rb_str_new(value.data(), static_cast<long>(value.size()));
+}
+
+static OrderedJson ordered_json_from_ruby(VALUE value);
+static OrderedJson ordered_json_complex_from_ruby(VALUE value);
+
+static OrderedJson ordered_json_integer_from_ruby(VALUE value) {
+  VALUE text_value = rb_funcall(value, rb_intern("to_s"), 0);
+  const std::string text =
+      std::string(RSTRING_PTR(text_value), static_cast<size_t>(RSTRING_LEN(text_value)));
+  if (text.empty()) {
+    throw std::invalid_argument("failed to convert Integer to JSON number");
+  }
+
+  const bool negative = text.front() == '-';
+  try {
+    if (negative) {
+      return static_cast<int64_t>(std::stoll(text));
+    }
+
+    const auto raw = std::stoull(text);
+    if (raw <= static_cast<unsigned long long>(std::numeric_limits<int64_t>::max())) {
+      return static_cast<int64_t>(raw);
+    }
+    return static_cast<uint64_t>(raw);
+  } catch (const std::out_of_range&) {
+    try {
+      return static_cast<double>(std::stold(text));
+    } catch (const std::exception&) {
+      throw std::invalid_argument("Integer is too large to convert into JSON numeric range");
+    }
+  } catch (const std::invalid_argument&) {
+    throw std::invalid_argument("failed to parse Integer while converting to JSON");
+  }
+}
+
+static OrderedJson ordered_json_object_from_ruby_hash(VALUE hash) {
+  OrderedJson out = OrderedJson::object();
+  VALUE keys = rb_funcall(hash, rb_intern("keys"), 0);
+  const long len = RARRAY_LEN(keys);
+  for (long i = 0; i < len; ++i) {
+    VALUE key = rb_ary_entry(keys, i);
+    VALUE item = rb_hash_aref(hash, key);
+    VALUE key_str = rb_obj_as_string(key);
+    out[std::string(RSTRING_PTR(key_str), static_cast<size_t>(RSTRING_LEN(key_str)))] =
+        ordered_json_from_ruby(item);
+  }
+  return out;
+}
+
+static OrderedJson ordered_json_complex_from_ruby(VALUE value) {
+  VALUE real_value = rb_funcall(value, rb_intern("real"), 0);
+  VALUE imag_value = rb_funcall(value, rb_intern("imag"), 0);
+  double real = NUM2DBL(real_value);
+  double imag = NUM2DBL(imag_value);
+  OrderedJson pair = OrderedJson::array();
+  pair.push_back(real);
+  pair.push_back(imag);
+  OrderedJson out = OrderedJson::object();
+  out["__mlx_complex__"] = std::move(pair);
+  return out;
+}
+
+static OrderedJson ordered_json_from_ruby(VALUE value) {
+  if (NIL_P(value)) {
+    return nullptr;
+  }
+  if (value == Qtrue || value == Qfalse) {
+    return value == Qtrue;
+  }
+  if (rb_obj_is_kind_of(value, rb_cComplex)) {
+    return ordered_json_complex_from_ruby(value);
+  }
+  if (RB_INTEGER_TYPE_P(value)) {
+    return ordered_json_integer_from_ruby(value);
+  }
+  if (RB_FLOAT_TYPE_P(value)) {
+    return NUM2DBL(value);
+  }
+  if (RB_TYPE_P(value, T_STRING)) {
+    return std::string(RSTRING_PTR(value), static_cast<size_t>(RSTRING_LEN(value)));
+  }
+  if (RB_TYPE_P(value, T_ARRAY)) {
+    OrderedJson out = OrderedJson::array();
+    const long len = RARRAY_LEN(value);
+    for (long i = 0; i < len; ++i) {
+      out.push_back(ordered_json_from_ruby(rb_ary_entry(value, i)));
+    }
+    return out;
+  }
+  if (RB_TYPE_P(value, T_HASH)) {
+    return ordered_json_object_from_ruby_hash(value);
+  }
+  if (SYMBOL_P(value)) {
+    VALUE symbol_str = rb_sym2str(value);
+    return std::string(RSTRING_PTR(symbol_str), static_cast<size_t>(RSTRING_LEN(symbol_str)));
+  }
+
+  VALUE converted = rb_obj_as_string(value);
+  return std::string(RSTRING_PTR(converted), static_cast<size_t>(RSTRING_LEN(converted)));
+}
+
+static VALUE ruby_value_from_ordered_json(const OrderedJson& value) {
+  if (value.is_null()) {
+    return Qnil;
+  }
+  if (value.is_boolean()) {
+    return value.get<bool>() ? Qtrue : Qfalse;
+  }
+  if (value.is_number_integer()) {
+    return LL2NUM(value.get<int64_t>());
+  }
+  if (value.is_number_unsigned()) {
+    return ULL2NUM(value.get<uint64_t>());
+  }
+  if (value.is_number_float()) {
+    return rb_float_new(value.get<double>());
+  }
+  if (value.is_string()) {
+    const auto& text = value.get_ref<const std::string&>();
+    return rb_str_new(text.data(), static_cast<long>(text.size()));
+  }
+  if (value.is_array()) {
+    VALUE out = rb_ary_new_capa(static_cast<long>(value.size()));
+    for (const auto& item : value) {
+      rb_ary_push(out, ruby_value_from_ordered_json(item));
+    }
+    return out;
+  }
+  if (value.is_object()) {
+    VALUE out = rb_hash_new();
+    for (auto it = value.begin(); it != value.end(); ++it) {
+      const auto& key = it.key();
+      rb_hash_aset(
+          out,
+          rb_str_new(key.data(), static_cast<long>(key.size())),
+          ruby_value_from_ordered_json(it.value()));
+    }
+    return out;
+  }
+
+  rb_raise(rb_eTypeError, "unsupported JSON value type");
+  return Qnil;
+}
+
+static std::string read_file_to_string(const std::string& path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input.good()) {
+    std::ostringstream out;
+    out << "failed to read file: " << path;
+    throw std::runtime_error(out.str());
+  }
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  return buffer.str();
+}
+
+static OrderedJson parse_json_payload_from_string(const std::string& raw, const std::string& label) {
+  try {
+    return OrderedJson::parse(raw);
+  } catch (const std::exception& error) {
+    std::ostringstream out;
+    out << "failed to parse " << label << ": " << error.what();
+    throw std::invalid_argument(out.str());
+  }
+}
+
+static OrderedJson parse_graph_ir_source_payload(VALUE source) {
+  if (RB_TYPE_P(source, T_HASH)) {
+    return ordered_json_from_ruby(source);
+  }
+
+  if (RB_TYPE_P(source, T_STRING)) {
+    const std::string raw = std_string_from_ruby(source);
+    bool treat_as_file = false;
+    try {
+      treat_as_file = std::filesystem::is_regular_file(raw);
+    } catch (const std::filesystem::filesystem_error&) {
+      treat_as_file = false;
+    }
+    if (treat_as_file) {
+      return parse_json_payload_from_string(read_file_to_string(raw), "graph ir file");
+    }
+    return parse_json_payload_from_string(raw, "graph ir string");
+  }
+
+  if (rb_respond_to(source, rb_intern("to_path"))) {
+    VALUE path_value = rb_funcall(source, rb_intern("to_path"), 0);
+    const std::string path = std_string_from_ruby(path_value);
+    if (path.empty()) {
+      throw std::invalid_argument("graph ir path-like source must be non-empty");
+    }
+    if (!std::filesystem::is_regular_file(path)) {
+      std::ostringstream out;
+      out << "graph ir path does not exist: " << path;
+      throw std::invalid_argument(out.str());
+    }
+    return parse_json_payload_from_string(read_file_to_string(path), "graph ir file");
+  }
+
+  if (rb_respond_to(source, rb_intern("read"))) {
+    VALUE io_raw = rb_funcall(source, rb_intern("read"), 0);
+    return parse_json_payload_from_string(std_string_from_ruby(io_raw), "graph ir IO");
+  }
+
+  throw std::invalid_argument(
+      "graph ir source must be a Hash, JSON String, file path, or IO-like object");
+}
+
+static std::string ruby_path_string(VALUE value, const char* label) {
+  if (rb_respond_to(value, rb_intern("write"))) {
+    std::ostringstream out;
+    out << label << " requires a path-like target, not an IO-like target";
+    throw std::invalid_argument(out.str());
+  }
+
+  VALUE raw = value;
+  if (rb_respond_to(value, rb_intern("to_path"))) {
+    raw = rb_funcall(value, rb_intern("to_path"), 0);
+  }
+  const std::string path = std_string_from_ruby(raw);
+  if (path.empty()) {
+    std::ostringstream out;
+    out << label << " target must be a non-empty path-like value";
+    throw std::invalid_argument(out.str());
+  }
+  return path;
 }
 
 static bool json_is_numeric(const OrderedJson& value) {
@@ -859,10 +1249,10 @@ static std::string onnx_effective_dtype(const std::string& dtype) {
   return canonical == "bfloat16" ? "float32" : canonical;
 }
 
-static const std::string& onnx_dtype_symbol(const std::string& dtype) {
-  const auto it = kOnnxDtypeMap.find(dtype);
-  if (it != kOnnxDtypeMap.end()) {
-    return it->second;
+static std::string onnx_dtype_symbol(const std::string& dtype) {
+  const char* symbol = lookup_string_pair(kOnnxDtypePairs, dtype);
+  if (symbol != nullptr) {
+    return std::string(symbol);
   }
 
   std::ostringstream out;
@@ -870,10 +1260,10 @@ static const std::string& onnx_dtype_symbol(const std::string& dtype) {
   throw std::runtime_error(out.str());
 }
 
-static const std::string& onnx_op_name(const std::string& op) {
-  const auto it = kOnnxOpMap.find(op);
-  if (it != kOnnxOpMap.end()) {
-    return it->second;
+static std::string onnx_op_name(const std::string& op) {
+  const char* mapped = lookup_string_pair(kOnnxOpPairs, op);
+  if (mapped != nullptr) {
+    return std::string(mapped);
   }
 
   std::ostringstream out;
@@ -1349,9 +1739,9 @@ static std::optional<std::string> reduce_onnx_op_type(const OrderedJson& argumen
     return std::nullopt;
   }
 
-  const auto it = kReduceCodeToOnnxOp.find(reduce_code);
-  if (it != kReduceCodeToOnnxOp.end()) {
-    return it->second;
+  const char* mapped = lookup_int_string_pair(kReduceCodeToOnnxOpPairs, reduce_code);
+  if (mapped != nullptr) {
+    return std::string(mapped);
   }
 
   if (!strict) {
@@ -1371,9 +1761,9 @@ static std::optional<std::string> argreduce_onnx_op_type(const OrderedJson& argu
     return std::nullopt;
   }
 
-  const auto it = kArgReduceCodeToOnnxOp.find(reduce_code);
-  if (it != kArgReduceCodeToOnnxOp.end()) {
-    return it->second;
+  const char* mapped = lookup_int_string_pair(kArgReduceCodeToOnnxOpPairs, reduce_code);
+  if (mapped != nullptr) {
+    return std::string(mapped);
   }
 
   if (!strict) {
@@ -1478,13 +1868,13 @@ static std::optional<std::string> promote_binary_dtype(
     return lhs;
   }
 
-  const auto lhs_rank_it = kDtypePromotionRank.find(lhs.value());
-  const auto rhs_rank_it = kDtypePromotionRank.find(rhs.value());
-  if (lhs_rank_it == kDtypePromotionRank.end() || rhs_rank_it == kDtypePromotionRank.end()) {
+  const auto lhs_rank = lookup_string_int_pair(kDtypePromotionRankPairs, lhs.value());
+  const auto rhs_rank = lookup_string_int_pair(kDtypePromotionRankPairs, rhs.value());
+  if (!lhs_rank.has_value() || !rhs_rank.has_value()) {
     return lhs;
   }
 
-  return lhs_rank_it->second >= rhs_rank_it->second ? lhs : rhs;
+  return lhs_rank.value() >= rhs_rank.value() ? lhs : rhs;
 }
 
 static int64_t normalize_slice_index(int64_t value, int64_t dim) {
@@ -1534,7 +1924,10 @@ static std::string as_type_target_dtype(
     const DtypeMap& known_dtypes) {
   if (arguments.is_array() && !arguments.empty()) {
     const auto& target = arguments.at(0);
-    if (!(target.is_string() && kOnnxDtypeMap.find(target.get<std::string>()) != kOnnxDtypeMap.end())) {
+    const bool valid_dtype =
+        target.is_string() &&
+        lookup_string_pair(kOnnxDtypePairs, target.get<std::string>()) != nullptr;
+    if (!valid_dtype) {
       std::ostringstream out;
       out << "[graph_ir_to_onnx_stub] unsupported AsType arguments " << arguments.dump()
           << "; expected first argument to be dtype String";
@@ -1700,7 +2093,7 @@ static std::pair<int64_t, int64_t> argreduce_mode_axis(const OrderedJson& argume
 
   const int64_t mode = normalized_integer_scalar(arguments.at(0), "ArgReduce mode");
   const int64_t axis = normalized_integer_scalar(arguments.at(1), "ArgReduce axis");
-  if (kArgReduceCodeToOnnxOp.find(mode) == kArgReduceCodeToOnnxOp.end()) {
+  if (lookup_int_string_pair(kArgReduceCodeToOnnxOpPairs, mode) == nullptr) {
     std::ostringstream out;
     out << "[graph_ir_to_onnx_stub] unsupported ArgReduce code " << mode;
     throw std::runtime_error(out.str());
@@ -2545,7 +2938,7 @@ static std::pair<std::vector<std::string>, std::vector<OrderedJson>> cast_inputs
   std::vector<std::string> casted_inputs = inputs;
   const auto& cast_to = onnx_dtype_symbol(target_dtype);
 
-  std::unordered_set<size_t> index_filter;
+  std::set<size_t> index_filter;
   if (indices.has_value()) {
     for (const auto index : indices.value()) {
       index_filter.insert(index);
@@ -2693,9 +3086,9 @@ static std::optional<std::string> onnx_op_type_for_node(
     return onnx_op_name(op);
   }
 
-  const auto it = kOnnxOpMap.find(op);
-  if (it != kOnnxOpMap.end()) {
-    return it->second;
+  const char* mapped = lookup_string_pair(kOnnxOpPairs, op);
+  if (mapped != nullptr) {
+    return std::string(mapped);
   }
 
   if (!strict) {
@@ -2973,7 +3366,13 @@ static std::vector<OrderedJson> lower_onnx_node_default(
       const auto cast_bool_out = unique_aux_tensor_name(used_tensor_names, node_index, "cast_bool");
       const auto cast_int_out = unique_aux_tensor_name(used_tensor_names, node_index, "cast_int64");
       const auto reduce_out = unique_aux_tensor_name(used_tensor_names, node_index, "reduce");
-      const auto reduce_type = kReduceCodeToOnnxOp.at(reduce_code);
+      const char* reduce_type_symbol = lookup_int_string_pair(kReduceCodeToOnnxOpPairs, reduce_code);
+      if (reduce_type_symbol == nullptr) {
+        std::ostringstream out;
+        out << "[graph_ir_to_onnx_stub] unsupported Reduce code " << reduce_code;
+        throw std::runtime_error(out.str());
+      }
+      const std::string reduce_type(reduce_type_symbol);
 
       for (const auto& name : outputs) {
         if (inferred_output_shape.has_value()) {
@@ -3525,7 +3924,13 @@ static std::vector<OrderedJson> lower_onnx_node_default(
 
   if (op == "ArgReduce") {
     const auto [arg_mode, arg_axis] = argreduce_mode_axis(arguments);
-    const auto arg_op = kArgReduceCodeToOnnxOp.at(arg_mode);
+    const char* arg_op_symbol = lookup_int_string_pair(kArgReduceCodeToOnnxOpPairs, arg_mode);
+    if (arg_op_symbol == nullptr) {
+      std::ostringstream out;
+      out << "[graph_ir_to_onnx_stub] unsupported ArgReduce code " << arg_mode;
+      throw std::runtime_error(out.str());
+    }
+    const std::string arg_op(arg_op_symbol);
     const auto arg_output = unique_aux_tensor_name(used_tensor_names, node_index, "argreduce");
 
     const auto arg_shape = infer_argreduce_keepdims_shape(known_shape_for(known_shapes, inputs[0]), arg_axis);
@@ -3942,6 +4347,781 @@ static OrderedJson graph_ir_to_onnx_json_payload(
   return out;
 }
 
+enum class PbWireType : uint8_t {
+  kVarint = 0,
+  kFixed64 = 1,
+  kLengthDelimited = 2,
+  kFixed32 = 5,
+};
+
+static void pb_write_varint(std::string& out, uint64_t value) {
+  while (value >= 0x80) {
+    out.push_back(static_cast<char>((value & 0x7fU) | 0x80U));
+    value >>= 7;
+  }
+  out.push_back(static_cast<char>(value));
+}
+
+static void pb_write_key(std::string& out, int field_number, PbWireType wire_type) {
+  const uint64_t key =
+      (static_cast<uint64_t>(field_number) << 3) | static_cast<uint64_t>(wire_type);
+  pb_write_varint(out, key);
+}
+
+static void pb_write_varint_field(std::string& out, int field_number, uint64_t value) {
+  pb_write_key(out, field_number, PbWireType::kVarint);
+  pb_write_varint(out, value);
+}
+
+static void pb_write_int64_field(std::string& out, int field_number, int64_t value) {
+  pb_write_varint_field(out, field_number, static_cast<uint64_t>(value));
+}
+
+static void pb_write_string_field(std::string& out, int field_number, const std::string& value) {
+  pb_write_key(out, field_number, PbWireType::kLengthDelimited);
+  pb_write_varint(out, static_cast<uint64_t>(value.size()));
+  out.append(value);
+}
+
+static void pb_write_bytes_field(std::string& out, int field_number, const std::string& value) {
+  pb_write_string_field(out, field_number, value);
+}
+
+static void pb_write_message_field(std::string& out, int field_number, const std::string& message) {
+  pb_write_key(out, field_number, PbWireType::kLengthDelimited);
+  pb_write_varint(out, static_cast<uint64_t>(message.size()));
+  out.append(message);
+}
+
+static void pb_write_fixed32_field(std::string& out, int field_number, uint32_t value) {
+  pb_write_key(out, field_number, PbWireType::kFixed32);
+  std::array<char, 4> bytes = {
+      static_cast<char>(value & 0xffU),
+      static_cast<char>((value >> 8) & 0xffU),
+      static_cast<char>((value >> 16) & 0xffU),
+      static_cast<char>((value >> 24) & 0xffU)};
+  out.append(bytes.data(), bytes.size());
+}
+
+static int onnx_elem_type_from_symbol(const std::string& symbol) {
+  static const std::map<std::string, int> kSymbolToOnnxElemType = {
+      {"UNDEFINED", 0},
+      {"FLOAT", 1},
+      {"UINT8", 2},
+      {"INT8", 3},
+      {"UINT16", 4},
+      {"INT16", 5},
+      {"INT32", 6},
+      {"INT64", 7},
+      {"STRING", 8},
+      {"BOOL", 9},
+      {"FLOAT16", 10},
+      {"DOUBLE", 11},
+      {"UINT32", 12},
+      {"UINT64", 13},
+      {"COMPLEX64", 14},
+      {"COMPLEX128", 15},
+      {"BFLOAT16", 16},
+  };
+  const auto it = kSymbolToOnnxElemType.find(symbol);
+  if (it != kSymbolToOnnxElemType.end()) {
+    return it->second;
+  }
+  std::ostringstream out;
+  out << "unsupported ONNX element type symbol: " << symbol;
+  throw std::invalid_argument(out.str());
+}
+
+static int onnx_elem_type_from_dtype(const std::string& dtype) {
+  return onnx_elem_type_from_symbol(onnx_dtype_symbol(onnx_effective_dtype(dtype)));
+}
+
+static bool json_integer_like(const OrderedJson& value) {
+  if (value.is_number_integer() || value.is_number_unsigned()) {
+    return true;
+  }
+  if (value.is_number_float()) {
+    const double v = value.get<double>();
+    return std::isfinite(v) && std::trunc(v) == v;
+  }
+  return false;
+}
+
+static std::vector<int64_t> shape_vector_from_json(const OrderedJson& shape, const std::string& label) {
+  if (!shape.is_array()) {
+    std::ostringstream out;
+    out << label << " shape must be an Array";
+    throw std::invalid_argument(out.str());
+  }
+  std::vector<int64_t> out;
+  out.reserve(shape.size());
+  for (const auto& dim : shape) {
+    out.push_back(normalized_integer_scalar(dim, label + " shape dim"));
+  }
+  return out;
+}
+
+static size_t expected_initializer_value_count(const std::vector<int64_t>& dims) {
+  if (dims.empty()) {
+    return 1;
+  }
+  size_t total = 1;
+  for (const auto dim : dims) {
+    if (dim < 0) {
+      throw std::invalid_argument("initializer shape values must be non-negative");
+    }
+    total *= static_cast<size_t>(dim);
+  }
+  return total;
+}
+
+static void collect_initializer_leaves(const OrderedJson& value, std::vector<const OrderedJson*>& out) {
+  if (value.is_array()) {
+    for (const auto& item : value) {
+      collect_initializer_leaves(item, out);
+    }
+    return;
+  }
+  out.push_back(&value);
+}
+
+static uint16_t float32_to_float16_bits(float value) {
+  uint32_t bits = 0;
+  std::memcpy(&bits, &value, sizeof(bits));
+
+  const uint32_t sign = (bits >> 16) & 0x8000U;
+  int32_t exponent = static_cast<int32_t>((bits >> 23) & 0xffU) - 127 + 15;
+  uint32_t mantissa = bits & 0x7fffffU;
+
+  if (exponent <= 0) {
+    if (exponent < -10) {
+      return static_cast<uint16_t>(sign);
+    }
+    mantissa |= 0x800000U;
+    const uint32_t shift = static_cast<uint32_t>(14 - exponent);
+    uint32_t half_mantissa = mantissa >> shift;
+    if ((mantissa >> (shift - 1)) & 1U) {
+      half_mantissa += 1U;
+    }
+    return static_cast<uint16_t>(sign | half_mantissa);
+  }
+
+  if (exponent >= 0x1f) {
+    return static_cast<uint16_t>(sign | 0x7c00U);
+  }
+
+  uint16_t half = static_cast<uint16_t>(sign | (static_cast<uint32_t>(exponent) << 10) | (mantissa >> 13));
+  if (mantissa & 0x00001000U) {
+    half = static_cast<uint16_t>(half + 1U);
+  }
+  return half;
+}
+
+static uint16_t float32_to_bfloat16_bits(float value) {
+  uint32_t bits = 0;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return static_cast<uint16_t>((bits + 0x00008000U) >> 16);
+}
+
+template <typename T>
+static void append_le_bytes(std::string& out, T value) {
+  std::array<char, sizeof(T)> bytes{};
+  std::memcpy(bytes.data(), &value, sizeof(T));
+  out.append(bytes.data(), bytes.size());
+}
+
+static void raise_invalid_complex_literal(const std::string& label) {
+  std::ostringstream out;
+  out << label << " unsupported complex literal";
+  throw std::invalid_argument(out.str());
+}
+
+static std::string normalize_complex_literal(std::string_view value) {
+  std::string normalized;
+  normalized.reserve(value.size());
+  for (const char ch : value) {
+    if (!std::isspace(static_cast<unsigned char>(ch))) {
+      normalized.push_back(ch);
+    }
+  }
+  return normalized;
+}
+
+static std::size_t find_complex_literal_split(std::string_view value) {
+  for (std::size_t idx = value.size(); idx > 0; --idx) {
+    const std::size_t pos = idx - 1;
+    if (pos == 0) {
+      continue;
+    }
+    const char ch = value[pos];
+    if ((ch == '+' || ch == '-') && value[pos - 1] != 'e' && value[pos - 1] != 'E') {
+      return pos;
+    }
+  }
+  return std::string_view::npos;
+}
+
+static double parse_complex_literal_double(const std::string& text, const std::string& label) {
+  if (text.empty()) {
+    raise_invalid_complex_literal(label);
+  }
+  char* end = nullptr;
+  errno = 0;
+  const double value = std::strtod(text.c_str(), &end);
+  if (text.c_str() == end) {
+    raise_invalid_complex_literal(label);
+  }
+  if (errno == ERANGE) {
+    raise_invalid_complex_literal(label);
+  }
+  if (static_cast<size_t>(end - text.c_str()) != text.size()) {
+    raise_invalid_complex_literal(label);
+  }
+  return value;
+}
+
+static std::pair<float, float> complex64_pair_from_string(const std::string& raw, const std::string& label) {
+  const std::string normalized = normalize_complex_literal(raw);
+  if (normalized.empty()) {
+    raise_invalid_complex_literal(label);
+  }
+  const char last = normalized.back();
+  if (last != 'i' && last != 'I') {
+    raise_invalid_complex_literal(label);
+  }
+  std::string_view remaining(normalized.data(), normalized.size() - 1);
+  if (remaining.empty()) {
+    return {0.0f, 1.0f};
+  }
+  const std::size_t split = find_complex_literal_split(remaining);
+  std::string real_text;
+  std::string imag_text;
+  if (split == std::string_view::npos) {
+    real_text = "0";
+    if (remaining == "+" || remaining == "-") {
+      imag_text = remaining == "+" ? "1" : "-1";
+    } else {
+      imag_text = std::string(remaining);
+    }
+  } else {
+    real_text = std::string(remaining.substr(0, split));
+    imag_text = std::string(remaining.substr(split));
+  }
+  const double real = parse_complex_literal_double(real_text, label);
+  const double imag = parse_complex_literal_double(imag_text, label);
+  return {static_cast<float>(real), static_cast<float>(imag)};
+}
+
+static std::pair<float, float> complex64_pair_from_json(const OrderedJson& value, const std::string& label) {
+  if (value.is_object() && value.contains("__mlx_complex__")) {
+    const auto& pair = value.at("__mlx_complex__");
+    if (!pair.is_array() || pair.size() != 2 || !json_is_numeric(pair.at(0)) || !json_is_numeric(pair.at(1))) {
+      std::ostringstream out;
+      out << label << " invalid complex marker";
+      throw std::invalid_argument(out.str());
+    }
+    return {static_cast<float>(pair.at(0).get<double>()), static_cast<float>(pair.at(1).get<double>())};
+  }
+  if (value.is_string()) {
+    return complex64_pair_from_string(value.get_ref<const std::string&>(), label);
+  }
+  if (value.is_boolean()) {
+    return {value.get<bool>() ? 1.0f : 0.0f, 0.0f};
+  }
+  if (json_is_numeric(value)) {
+    return {static_cast<float>(value.get<double>()), 0.0f};
+  }
+  std::ostringstream out;
+  out << label << " unsupported complex64 initializer leaf";
+  throw std::invalid_argument(out.str());
+}
+
+static std::string tensor_raw_bytes_from_initializer(const OrderedJson& initializer) {
+  const std::string dtype = initializer.at("dtype").get<std::string>();
+  const auto dims = shape_vector_from_json(initializer.at("shape"), "initializer");
+  const size_t expected = expected_initializer_value_count(dims);
+
+  std::vector<const OrderedJson*> leaves;
+  collect_initializer_leaves(initializer.at("values"), leaves);
+  if (leaves.size() != expected) {
+    std::ostringstream out;
+    out << "initializer " << initializer.at("name").get<std::string>() << " has " << leaves.size()
+        << " values but expected " << expected;
+    throw std::invalid_argument(out.str());
+  }
+
+  std::string raw;
+  if (dtype == "bool" || dtype == "bool_") {
+    raw.reserve(expected);
+    for (const auto* item : leaves) {
+      uint8_t v = 0;
+      if (item->is_boolean()) {
+        v = item->get<bool>() ? 1 : 0;
+      } else if (json_integer_like(*item)) {
+        v = normalized_integer_scalar(*item, "bool initializer leaf") == 0 ? 0 : 1;
+      } else if (item->is_number_float()) {
+        v = item->get<double>() == 0.0 ? 0 : 1;
+      } else {
+        throw std::invalid_argument("bool initializer values must be numeric/boolean");
+      }
+      raw.push_back(static_cast<char>(v));
+    }
+    return raw;
+  }
+
+  if (dtype == "uint8") {
+    raw.reserve(expected * sizeof(uint8_t));
+    for (const auto* item : leaves) {
+      append_le_bytes<uint8_t>(raw, static_cast<uint8_t>(normalized_integer_scalar(*item, "uint8 initializer leaf")));
+    }
+    return raw;
+  }
+  if (dtype == "uint16") {
+    raw.reserve(expected * sizeof(uint16_t));
+    for (const auto* item : leaves) {
+      append_le_bytes<uint16_t>(
+          raw, static_cast<uint16_t>(normalized_integer_scalar(*item, "uint16 initializer leaf")));
+    }
+    return raw;
+  }
+  if (dtype == "uint32") {
+    raw.reserve(expected * sizeof(uint32_t));
+    for (const auto* item : leaves) {
+      append_le_bytes<uint32_t>(
+          raw, static_cast<uint32_t>(normalized_integer_scalar(*item, "uint32 initializer leaf")));
+    }
+    return raw;
+  }
+  if (dtype == "uint64") {
+    raw.reserve(expected * sizeof(uint64_t));
+    for (const auto* item : leaves) {
+      append_le_bytes<uint64_t>(
+          raw, static_cast<uint64_t>(normalized_integer_scalar(*item, "uint64 initializer leaf")));
+    }
+    return raw;
+  }
+  if (dtype == "int8") {
+    raw.reserve(expected * sizeof(int8_t));
+    for (const auto* item : leaves) {
+      append_le_bytes<int8_t>(raw, static_cast<int8_t>(normalized_integer_scalar(*item, "int8 initializer leaf")));
+    }
+    return raw;
+  }
+  if (dtype == "int16") {
+    raw.reserve(expected * sizeof(int16_t));
+    for (const auto* item : leaves) {
+      append_le_bytes<int16_t>(raw, static_cast<int16_t>(normalized_integer_scalar(*item, "int16 initializer leaf")));
+    }
+    return raw;
+  }
+  if (dtype == "int32") {
+    raw.reserve(expected * sizeof(int32_t));
+    for (const auto* item : leaves) {
+      append_le_bytes<int32_t>(raw, static_cast<int32_t>(normalized_integer_scalar(*item, "int32 initializer leaf")));
+    }
+    return raw;
+  }
+  if (dtype == "int64") {
+    raw.reserve(expected * sizeof(int64_t));
+    for (const auto* item : leaves) {
+      append_le_bytes<int64_t>(raw, normalized_integer_scalar(*item, "int64 initializer leaf"));
+    }
+    return raw;
+  }
+  if (dtype == "float16") {
+    raw.reserve(expected * sizeof(uint16_t));
+    for (const auto* item : leaves) {
+      if (!json_is_numeric(*item)) {
+        throw std::invalid_argument("float16 initializer values must be numeric");
+      }
+      const float value = static_cast<float>(item->get<double>());
+      append_le_bytes<uint16_t>(raw, float32_to_float16_bits(value));
+    }
+    return raw;
+  }
+  if (dtype == "bfloat16") {
+    raw.reserve(expected * sizeof(uint16_t));
+    for (const auto* item : leaves) {
+      if (!json_is_numeric(*item)) {
+        throw std::invalid_argument("bfloat16 initializer values must be numeric");
+      }
+      const float value = static_cast<float>(item->get<double>());
+      append_le_bytes<uint16_t>(raw, float32_to_bfloat16_bits(value));
+    }
+    return raw;
+  }
+  if (dtype == "float32") {
+    raw.reserve(expected * sizeof(float));
+    for (const auto* item : leaves) {
+      if (!json_is_numeric(*item)) {
+        throw std::invalid_argument("float32 initializer values must be numeric");
+      }
+      append_le_bytes<float>(raw, static_cast<float>(item->get<double>()));
+    }
+    return raw;
+  }
+  if (dtype == "float64") {
+    raw.reserve(expected * sizeof(double));
+    for (const auto* item : leaves) {
+      if (!json_is_numeric(*item)) {
+        throw std::invalid_argument("float64 initializer values must be numeric");
+      }
+      append_le_bytes<double>(raw, item->get<double>());
+    }
+    return raw;
+  }
+  if (dtype == "complex64") {
+    raw.reserve(expected * sizeof(float) * 2);
+    for (const auto* item : leaves) {
+      auto [real, imag] = complex64_pair_from_json(*item, "complex64 initializer leaf");
+      append_le_bytes<float>(raw, real);
+      append_le_bytes<float>(raw, imag);
+    }
+    return raw;
+  }
+
+  std::ostringstream out;
+  out << "unsupported initializer dtype for native ONNX binary export: " << dtype;
+  throw std::invalid_argument(out.str());
+}
+
+static std::string pb_encode_string_string_entry(const std::string& key, const std::string& value) {
+  std::string out;
+  pb_write_string_field(out, 1, key);
+  pb_write_string_field(out, 2, value);
+  return out;
+}
+
+static std::string pb_encode_tensor_shape(const std::vector<int64_t>& shape) {
+  std::string out;
+  for (const auto dim : shape) {
+    std::string dim_msg;
+    pb_write_int64_field(dim_msg, 1, dim);
+    pb_write_message_field(out, 1, dim_msg);
+  }
+  return out;
+}
+
+static std::string pb_encode_tensor_type_proto(int elem_type, const std::vector<int64_t>& shape) {
+  std::string tensor_type;
+  pb_write_varint_field(tensor_type, 1, static_cast<uint64_t>(elem_type));
+  pb_write_message_field(tensor_type, 2, pb_encode_tensor_shape(shape));
+
+  std::string type_proto;
+  pb_write_message_field(type_proto, 1, tensor_type);
+  return type_proto;
+}
+
+static std::string pb_encode_value_info(const OrderedJson& info) {
+  const std::string name = info.at("name").get<std::string>();
+  const auto shape = shape_vector_from_json(info.at("shape"), "value_info");
+  std::string onnx_elem_symbol;
+  if (info.contains("onnx_elem_type") && info.at("onnx_elem_type").is_string()) {
+    onnx_elem_symbol = info.at("onnx_elem_type").get<std::string>();
+  } else {
+    onnx_elem_symbol = onnx_dtype_symbol(onnx_effective_dtype(info.at("dtype").get<std::string>()));
+  }
+  const int elem_type = onnx_elem_type_from_symbol(onnx_elem_symbol);
+
+  std::string out;
+  pb_write_string_field(out, 1, name);
+  pb_write_message_field(out, 2, pb_encode_tensor_type_proto(elem_type, shape));
+  return out;
+}
+
+static std::string pb_encode_attribute(
+    const std::string& op_type,
+    const std::string& name,
+    const OrderedJson& value) {
+  std::string out;
+  pb_write_string_field(out, 1, name);
+
+  if (op_type == "Cast" && name == "to" && value.is_string()) {
+    const int cast_to = onnx_elem_type_from_symbol(value.get<std::string>());
+    pb_write_varint_field(out, 20, 2);
+    pb_write_int64_field(out, 3, cast_to);
+    return out;
+  }
+
+  if (value.is_boolean()) {
+    pb_write_varint_field(out, 20, 2);
+    pb_write_int64_field(out, 3, value.get<bool>() ? 1 : 0);
+    return out;
+  }
+  if (value.is_number_integer() || value.is_number_unsigned()) {
+    pb_write_varint_field(out, 20, 2);
+    pb_write_int64_field(out, 3, normalized_integer_scalar(value, "attribute"));
+    return out;
+  }
+  if (value.is_number_float()) {
+    pb_write_varint_field(out, 20, 1);
+    pb_write_fixed32_field(out, 2, std::bit_cast<uint32_t>(static_cast<float>(value.get<double>())));
+    return out;
+  }
+  if (value.is_string()) {
+    pb_write_varint_field(out, 20, 3);
+    pb_write_bytes_field(out, 4, value.get<std::string>());
+    return out;
+  }
+  if (value.is_array()) {
+    bool all_integer_typed = true;
+    bool all_numeric = true;
+    bool all_string = true;
+    for (const auto& item : value) {
+      all_integer_typed =
+          all_integer_typed &&
+          (item.is_boolean() || item.is_number_integer() || item.is_number_unsigned());
+      all_numeric = all_numeric && json_is_numeric(item);
+      all_string = all_string && item.is_string();
+    }
+    if (value.empty() || all_integer_typed) {
+      pb_write_varint_field(out, 20, 7);
+      for (const auto& item : value) {
+        pb_write_int64_field(out, 8, normalized_integer_scalar(item, "attribute vector"));
+      }
+      return out;
+    }
+    if (all_numeric) {
+      pb_write_varint_field(out, 20, 6);
+      for (const auto& item : value) {
+        pb_write_fixed32_field(out, 7, std::bit_cast<uint32_t>(static_cast<float>(item.get<double>())));
+      }
+      return out;
+    }
+    if (all_string) {
+      pb_write_varint_field(out, 20, 8);
+      for (const auto& item : value) {
+        pb_write_bytes_field(out, 9, item.get<std::string>());
+      }
+      return out;
+    }
+  }
+
+  std::ostringstream msg;
+  msg << "unsupported ONNX attribute type for " << op_type << "." << name;
+  throw std::invalid_argument(msg.str());
+}
+
+static std::string pb_encode_node(const OrderedJson& node) {
+  const auto op_type = node.at("op_type").get<std::string>();
+  std::string out;
+  for (const auto& input : node.at("inputs")) {
+    pb_write_string_field(out, 1, input.get<std::string>());
+  }
+  for (const auto& output : node.at("outputs")) {
+    pb_write_string_field(out, 2, output.get<std::string>());
+  }
+  pb_write_string_field(out, 3, node.at("name").get<std::string>());
+  pb_write_string_field(out, 4, op_type);
+
+  const auto& attributes = node.at("attributes");
+  for (auto it = attributes.begin(); it != attributes.end(); ++it) {
+    pb_write_message_field(out, 5, pb_encode_attribute(op_type, it.key(), it.value()));
+  }
+  return out;
+}
+
+static std::string pb_encode_tensor(
+    const OrderedJson& tensor,
+    const OnnxBinaryWriteOptions& options,
+    std::string& external_data,
+    uint64_t& external_offset,
+    bool& has_external_data) {
+  const auto name = tensor.at("name").get<std::string>();
+  const auto shape = shape_vector_from_json(tensor.at("shape"), "initializer");
+  const auto dtype = tensor.at("dtype").get<std::string>();
+  const int elem_type = onnx_elem_type_from_dtype(dtype);
+  const std::string raw = tensor_raw_bytes_from_initializer(tensor);
+
+  std::string out;
+  for (const auto dim : shape) {
+    pb_write_int64_field(out, 1, dim);
+  }
+  pb_write_varint_field(out, 2, static_cast<uint64_t>(elem_type));
+  pb_write_string_field(out, 8, name);
+
+  const bool externalize = options.external_data &&
+      static_cast<int64_t>(raw.size()) >= options.external_data_size_threshold;
+
+  if (!externalize) {
+    if (dtype == "complex64") {
+      if ((raw.size() % sizeof(float)) != 0) {
+        throw std::invalid_argument("complex64 initializer raw byte count must be divisible by 4");
+      }
+      for (size_t offset = 0; offset < raw.size(); offset += sizeof(float)) {
+        const auto b0 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 0]));
+        const auto b1 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 1]));
+        const auto b2 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 2]));
+        const auto b3 = static_cast<uint32_t>(static_cast<unsigned char>(raw[offset + 3]));
+        const uint32_t bits = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+        pb_write_fixed32_field(out, 4, bits);
+      }
+      return out;
+    }
+    pb_write_bytes_field(out, 9, raw);
+    return out;
+  }
+
+  has_external_data = true;
+  pb_write_message_field(out, 13, pb_encode_string_string_entry("location", options.external_data_file));
+  pb_write_message_field(out, 13, pb_encode_string_string_entry("offset", std::to_string(external_offset)));
+  pb_write_message_field(out, 13, pb_encode_string_string_entry("length", std::to_string(raw.size())));
+  pb_write_varint_field(out, 14, 1);
+
+  external_data.append(raw);
+  external_offset += static_cast<uint64_t>(raw.size());
+  return out;
+}
+
+static std::string pb_encode_graph(
+    const OrderedJson& graph,
+    const OnnxBinaryWriteOptions& options,
+    std::string& external_data,
+    bool& has_external_data) {
+  std::string out;
+  const auto name = graph.at("name").get<std::string>();
+  pb_write_string_field(out, 2, name);
+
+  for (const auto& node : graph.at("nodes")) {
+    pb_write_message_field(out, 1, pb_encode_node(node));
+  }
+  uint64_t external_offset = 0;
+  for (const auto& initializer : graph.at("initializers")) {
+    pb_write_message_field(
+        out,
+        5,
+        pb_encode_tensor(initializer, options, external_data, external_offset, has_external_data));
+  }
+  for (const auto& input : graph.at("inputs")) {
+    pb_write_message_field(out, 11, pb_encode_value_info(input));
+  }
+  for (const auto& output : graph.at("outputs")) {
+    pb_write_message_field(out, 12, pb_encode_value_info(output));
+  }
+  return out;
+}
+
+static std::string pb_encode_opset_import(int64_t opset) {
+  std::string out;
+  pb_write_string_field(out, 1, "");
+  pb_write_int64_field(out, 2, opset);
+  return out;
+}
+
+static OnnxBinaryArtifact build_onnx_binary_artifact_from_stub(
+    const OrderedJson& onnx_stub,
+    const OnnxBinaryWriteOptions& options) {
+  if (!onnx_stub.is_object()) {
+    throw std::invalid_argument("onnx stub must be a JSON object");
+  }
+  if (!onnx_stub.contains("graph") || !onnx_stub.at("graph").is_object()) {
+    throw std::invalid_argument("onnx stub must include graph object");
+  }
+  const int64_t opset = normalized_integer_scalar(onnx_stub.at("opset"), "onnx_stub opset");
+  const std::string producer_name =
+      onnx_stub.contains("producer_name") && onnx_stub.at("producer_name").is_string()
+      ? onnx_stub.at("producer_name").get<std::string>()
+      : "mlx-ruby";
+
+  std::string external_data;
+  bool has_external_data = false;
+  const std::string graph_message = pb_encode_graph(onnx_stub.at("graph"), options, external_data, has_external_data);
+
+  std::string model;
+  pb_write_int64_field(model, 1, 10);
+  pb_write_string_field(model, 2, producer_name);
+  pb_write_message_field(model, 7, graph_message);
+  pb_write_message_field(model, 8, pb_encode_opset_import(opset));
+
+  OnnxBinaryArtifact artifact;
+  artifact.model_bytes = std::move(model);
+  artifact.external_data_bytes = std::move(external_data);
+  artifact.has_external_data = has_external_data;
+  return artifact;
+}
+
+static void write_binary_file(const std::filesystem::path& path, const std::string& bytes) {
+  std::ofstream output(path, std::ios::binary);
+  if (!output.good()) {
+    std::ostringstream out;
+    out << "failed to open file for write: " << path.string();
+    throw std::runtime_error(out.str());
+  }
+  output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  if (!output.good()) {
+    std::ostringstream out;
+    out << "failed to write file: " << path.string();
+    throw std::runtime_error(out.str());
+  }
+}
+
+static OnnxBinaryWriteOptions normalize_onnx_binary_write_options(
+    const std::string& target_path,
+    VALUE external_data,
+    VALUE external_data_file,
+    VALUE external_data_size_threshold) {
+  if (!(external_data == Qtrue || external_data == Qfalse)) {
+    throw std::invalid_argument("external_data must be true or false");
+  }
+
+  OnnxBinaryWriteOptions options;
+  options.external_data = (external_data == Qtrue);
+  options.external_data_size_threshold = 1024;
+  options.external_data_file = "weights.bin";
+
+  if (!options.external_data) {
+    return options;
+  }
+
+  const int64_t threshold = NUM2LL(external_data_size_threshold);
+  if (threshold < 0) {
+    throw std::invalid_argument("external_data_size_threshold must be a non-negative Integer");
+  }
+  options.external_data_size_threshold = threshold;
+
+  std::string location;
+  if (NIL_P(external_data_file)) {
+    std::filesystem::path path(target_path);
+    std::string base = path.stem().string();
+    if (base.empty()) {
+      base = "weights";
+    }
+    location = base + ".data";
+  } else {
+    location = std_string_from_ruby(external_data_file);
+  }
+  if (location.empty()) {
+    throw std::invalid_argument("external_data_file must be a non-empty filename");
+  }
+  std::filesystem::path location_path(location);
+  if (location_path.has_parent_path() || location.find('/') != std::string::npos ||
+      location.find('\\') != std::string::npos) {
+    throw std::invalid_argument("external_data_file must be a filename without path separators");
+  }
+  options.external_data_file = location;
+  return options;
+}
+
+static VALUE write_onnx_binary_artifact_to_target(
+    const std::string& target_path,
+    const OnnxBinaryArtifact& artifact,
+    const OnnxBinaryWriteOptions& options) {
+  std::filesystem::path path(target_path);
+  if (!path.has_parent_path()) {
+    path = std::filesystem::absolute(path);
+  }
+  const auto parent = path.parent_path();
+  if (!parent.empty()) {
+    std::filesystem::create_directories(parent);
+  }
+  write_binary_file(path, artifact.model_bytes);
+
+  if (options.external_data && artifact.has_external_data) {
+    write_binary_file(parent / options.external_data_file, artifact.external_data_bytes);
+  }
+  return ruby_string_from_std(path.string());
+}
+
 static bool graph_ir_is_unsupported_error_message(const std::string& message) {
   return message.rfind("[graph_ir_to_onnx_stub] unsupported", 0) == 0;
 }
@@ -3960,17 +5140,7 @@ static bool graph_ir_is_unsupported_error_message(const std::string& message) {
 
 static OrderedJson parse_graph_ir_json_payload(VALUE graph_ir_json) {
   VALUE graph_ir_json_str = StringValue(graph_ir_json);
-  const std::string payload_raw(
-      RSTRING_PTR(graph_ir_json_str),
-      static_cast<size_t>(RSTRING_LEN(graph_ir_json_str)));
-
-  try {
-    return OrderedJson::parse(payload_raw);
-  } catch (const std::exception& error) {
-    std::ostringstream out;
-    out << "failed to parse graph ir json: " << error.what();
-    throw std::invalid_argument(out.str());
-  }
+  return parse_json_payload_from_string(std_string_from_ruby(graph_ir_json_str), "graph ir json");
 }
 
 static OrderedJson graph_ir_compatibility_report_payload(const OrderedJson& payload) {
@@ -4070,29 +5240,129 @@ static OrderedJson graph_ir_compatibility_report_payload(const OrderedJson& payl
   return report;
 }
 
-static VALUE graph_ir_to_onnx_json_from_graph_ir_json(VALUE graph_ir_json, VALUE opset, VALUE model_name) {
+static VALUE graph_ir_to_onnx_json_from_source(VALUE graph_ir_source, VALUE opset, VALUE model_name) {
+  const bool timing_enabled = graph_ir_native_timing_enabled();
+  const auto started_at = std::chrono::steady_clock::now();
   const auto opset_int = normalize_positive_integer(opset, "opset");
   const auto model_name_str = non_empty_model_name(model_name);
-  const auto payload = parse_graph_ir_json_payload(graph_ir_json);
+  const auto parse_started_at = std::chrono::steady_clock::now();
+  const auto payload = parse_graph_ir_source_payload(graph_ir_source);
+  const double parse_json_ms = elapsed_millis(parse_started_at);
 
+  const auto lower_started_at = std::chrono::steady_clock::now();
   const auto onnx_payload = graph_ir_to_onnx_json_payload(payload, opset_int, model_name_str);
+  const double lower_onnx_ms = elapsed_millis(lower_started_at);
+  const auto dump_started_at = std::chrono::steady_clock::now();
   const auto content = onnx_payload.dump();
+  const double dump_json_ms = elapsed_millis(dump_started_at);
+  if (timing_enabled) {
+    emit_graph_ir_to_onnx_json_timing_line(
+        opset_int,
+        model_name_str,
+        parse_json_ms,
+        lower_onnx_ms,
+        dump_json_ms,
+        elapsed_millis(started_at),
+        content.size());
+  }
   return ruby_string_from_std(content);
 }
 
-static VALUE graph_ir_compatibility_report_json_from_graph_ir_json(VALUE graph_ir_json) {
-  const auto payload = parse_graph_ir_json_payload(graph_ir_json);
+static VALUE graph_ir_compatibility_report_json_from_source(VALUE graph_ir_source) {
+  const auto payload = parse_graph_ir_source_payload(graph_ir_source);
   const auto report = graph_ir_compatibility_report_payload(payload);
   return ruby_string_from_std(report.dump());
 }
 
-static VALUE graph_ir_native_graph_ir_to_onnx_json(
+static GraphIrExportInvocation parse_graph_ir_export_invocation_from_structured_args(
+    VALUE fun,
+    VALUE args_array,
+    VALUE kwargs_hash,
+    VALUE shapeless,
+    const char* method_name) {
+  if (!RB_TYPE_P(args_array, T_ARRAY)) {
+    std::ostringstream out;
+    out << method_name << " args_array must be an Array";
+    throw std::invalid_argument(out.str());
+  }
+  if (!(NIL_P(kwargs_hash) || RB_TYPE_P(kwargs_hash, T_HASH))) {
+    std::ostringstream out;
+    out << method_name << " kwargs_hash must be a Hash or nil";
+    throw std::invalid_argument(out.str());
+  }
+  if (!(shapeless == Qtrue || shapeless == Qfalse)) {
+    std::ostringstream out;
+    out << method_name << " shapeless must be true or false";
+    throw std::invalid_argument(out.str());
+  }
+
+  mx::Args args;
+  const long args_len = RARRAY_LEN(args_array);
+  args.reserve(static_cast<size_t>(args_len));
+  for (long i = 0; i < args_len; ++i) {
+    args.push_back(graph_ir_array_from_ruby(rb_ary_entry(args_array, i)));
+  }
+
+  mx::Kwargs kwargs = NIL_P(kwargs_hash) ? mx::Kwargs{} : graph_ir_array_map_from_ruby_hash(kwargs_hash);
+  if (args.empty() && kwargs.empty()) {
+    std::ostringstream out;
+    out << "[" << method_name << "] Inputs must include at least one positional or keyword array";
+    throw std::invalid_argument(out.str());
+  }
+
+  GraphIrExportInvocation invocation;
+  invocation.fun = fun;
+  invocation.args = std::move(args);
+  invocation.kwargs = std::move(kwargs);
+  invocation.shapeless = RTEST(shapeless);
+  return invocation;
+}
+
+static VALUE graph_ir_native_export_graph_ir(
     VALUE,
-    VALUE graph_ir_json,
-    VALUE opset,
-    VALUE model_name) {
+    VALUE fun,
+    VALUE args_array,
+    VALUE kwargs_hash,
+    VALUE shapeless) {
   try {
-    return graph_ir_to_onnx_json_from_graph_ir_json(graph_ir_json, opset, model_name);
+    auto invocation = parse_graph_ir_export_invocation_from_structured_args(
+        fun,
+        args_array,
+        kwargs_hash,
+        shapeless,
+        "native_export_graph_ir");
+    auto payload = export_graph_ir_payload(invocation);
+    return ruby_value_from_ordered_json(payload);
+  } catch (const std::exception& error) {
+    raise_graph_ir_native_exception(error);
+    return Qnil;
+  }
+}
+
+static VALUE graph_ir_native_export_graph_ir_json(
+    VALUE,
+    VALUE fun,
+    VALUE args_array,
+    VALUE kwargs_hash,
+    VALUE shapeless) {
+  try {
+    auto invocation = parse_graph_ir_export_invocation_from_structured_args(
+        fun,
+        args_array,
+        kwargs_hash,
+        shapeless,
+        "native_export_graph_ir_json");
+    auto payload = export_graph_ir_payload(invocation);
+    return ruby_string_from_std(payload.dump());
+  } catch (const std::exception& error) {
+    raise_graph_ir_native_exception(error);
+    return Qnil;
+  }
+}
+
+static VALUE graph_ir_native_graph_ir_to_onnx_json(VALUE, VALUE graph_ir_source, VALUE opset, VALUE model_name) {
+  try {
+    return graph_ir_to_onnx_json_from_source(graph_ir_source, opset, model_name);
   } catch (const std::exception& error) {
     raise_graph_ir_native_exception(error);
     return Qnil;
@@ -4108,51 +5378,143 @@ static VALUE graph_ir_native_export_onnx_json(
     VALUE opset,
     VALUE model_name) {
   try {
-    if (!RB_TYPE_P(args_array, T_ARRAY)) {
-      rb_raise(rb_eTypeError, "args_array must be an Array");
-    }
-    if (!(NIL_P(kwargs_hash) || RB_TYPE_P(kwargs_hash, T_HASH))) {
-      rb_raise(rb_eTypeError, "kwargs_hash must be a Hash or nil");
-    }
-    if (!(shapeless == Qtrue || shapeless == Qfalse)) {
-      rb_raise(rb_eTypeError, "shapeless must be true or false");
-    }
-
-    mx::Args args;
-    const long args_len = RARRAY_LEN(args_array);
-    args.reserve(static_cast<size_t>(args_len));
-    for (long i = 0; i < args_len; ++i) {
-      args.push_back(graph_ir_array_from_ruby(rb_ary_entry(args_array, i)));
-    }
-
-    mx::Kwargs kwargs = NIL_P(kwargs_hash) ? mx::Kwargs{} : graph_ir_array_map_from_ruby_hash(kwargs_hash);
-    if (args.empty() && kwargs.empty()) {
-      rb_raise(
-          rb_eArgError,
-          "[native_export_onnx_json] Inputs must include at least one positional or keyword array");
-    }
-
-    GraphIrExportInvocation invocation;
-    invocation.fun = fun;
-    invocation.args = std::move(args);
-    invocation.kwargs = std::move(kwargs);
-    invocation.shapeless = RTEST(shapeless);
+    const bool timing_enabled = graph_ir_native_timing_enabled();
+    const auto started_at = std::chrono::steady_clock::now();
+    const auto decode_started_at = std::chrono::steady_clock::now();
+    auto invocation = parse_graph_ir_export_invocation_from_structured_args(
+        fun,
+        args_array,
+        kwargs_hash,
+        shapeless,
+        "native_export_onnx_json");
+    const double args_decode_ms = elapsed_millis(decode_started_at);
 
     const auto opset_int = normalize_positive_integer(opset, "opset");
     const auto model_name_str = non_empty_model_name(model_name);
 
-    const auto payload = export_graph_ir_payload(invocation);
+    GraphIrExportTimingStats export_stats;
+    const auto export_started_at = std::chrono::steady_clock::now();
+    const auto payload = export_graph_ir_payload(invocation, timing_enabled ? &export_stats : nullptr);
+    const double export_graph_ir_ms = elapsed_millis(export_started_at);
+    const auto lower_started_at = std::chrono::steady_clock::now();
     const auto onnx_payload = graph_ir_to_onnx_json_payload(payload, opset_int, model_name_str);
-    return ruby_string_from_std(onnx_payload.dump());
+    const double lower_onnx_ms = elapsed_millis(lower_started_at);
+    const auto dump_started_at = std::chrono::steady_clock::now();
+    const auto content = onnx_payload.dump();
+    const double dump_json_ms = elapsed_millis(dump_started_at);
+
+    if (timing_enabled) {
+      emit_export_onnx_json_timing_line(
+          invocation,
+          opset_int,
+          model_name_str,
+          export_stats,
+          args_decode_ms,
+          export_graph_ir_ms,
+          lower_onnx_ms,
+          dump_json_ms,
+          elapsed_millis(started_at),
+          content.size());
+    }
+
+    return ruby_string_from_std(content);
   } catch (const std::exception& error) {
     raise_graph_ir_native_exception(error);
     return Qnil;
   }
 }
 
-static VALUE graph_ir_native_graph_ir_compatibility_report_json(VALUE, VALUE graph_ir_json) {
+static VALUE graph_ir_native_export_onnx_compatibility_report(
+    VALUE,
+    VALUE fun,
+    VALUE args_array,
+    VALUE kwargs_hash,
+    VALUE shapeless) {
   try {
-    return graph_ir_compatibility_report_json_from_graph_ir_json(graph_ir_json);
+    auto invocation = parse_graph_ir_export_invocation_from_structured_args(
+        fun,
+        args_array,
+        kwargs_hash,
+        shapeless,
+        "native_export_onnx_compatibility_report");
+    const auto payload = export_graph_ir_payload(invocation);
+    const auto report = graph_ir_compatibility_report_payload(payload);
+    return ruby_value_from_ordered_json(report);
+  } catch (const std::exception& error) {
+    raise_graph_ir_native_exception(error);
+    return Qnil;
+  }
+}
+
+static VALUE graph_ir_native_export_onnx(
+    VALUE,
+    VALUE target_path,
+    VALUE fun,
+    VALUE args_array,
+    VALUE kwargs_hash,
+    VALUE shapeless,
+    VALUE opset,
+    VALUE model_name,
+    VALUE external_data,
+    VALUE external_data_file,
+    VALUE external_data_size_threshold) {
+  try {
+    const auto target = ruby_path_string(target_path, "export_onnx");
+    const auto options = normalize_onnx_binary_write_options(
+        target,
+        external_data,
+        external_data_file,
+        external_data_size_threshold);
+    auto invocation = parse_graph_ir_export_invocation_from_structured_args(
+        fun,
+        args_array,
+        kwargs_hash,
+        shapeless,
+        "native_export_onnx");
+    const auto opset_int = normalize_positive_integer(opset, "opset");
+    const auto model_name_str = non_empty_model_name(model_name);
+
+    const auto payload = export_graph_ir_payload(invocation);
+    const auto onnx_payload = graph_ir_to_onnx_json_payload(payload, opset_int, model_name_str);
+    const auto artifact = build_onnx_binary_artifact_from_stub(onnx_payload, options);
+    return write_onnx_binary_artifact_to_target(target, artifact, options);
+  } catch (const std::exception& error) {
+    raise_graph_ir_native_exception(error);
+    return Qnil;
+  }
+}
+
+static VALUE graph_ir_native_graph_ir_to_onnx(
+    VALUE,
+    VALUE target_path,
+    VALUE graph_ir_source,
+    VALUE opset,
+    VALUE model_name,
+    VALUE external_data,
+    VALUE external_data_file,
+    VALUE external_data_size_threshold) {
+  try {
+    const auto target = ruby_path_string(target_path, "graph_ir_to_onnx");
+    const auto options = normalize_onnx_binary_write_options(
+        target,
+        external_data,
+        external_data_file,
+        external_data_size_threshold);
+    const auto opset_int = normalize_positive_integer(opset, "opset");
+    const auto model_name_str = non_empty_model_name(model_name);
+    const auto payload = parse_graph_ir_source_payload(graph_ir_source);
+    const auto onnx_payload = graph_ir_to_onnx_json_payload(payload, opset_int, model_name_str);
+    const auto artifact = build_onnx_binary_artifact_from_stub(onnx_payload, options);
+    return write_onnx_binary_artifact_to_target(target, artifact, options);
+  } catch (const std::exception& error) {
+    raise_graph_ir_native_exception(error);
+    return Qnil;
+  }
+}
+
+static VALUE graph_ir_native_graph_ir_compatibility_report_json(VALUE, VALUE graph_ir_source) {
+  try {
+    return graph_ir_compatibility_report_json_from_source(graph_ir_source);
   } catch (const std::exception& error) {
     raise_graph_ir_native_exception(error);
     return Qnil;
@@ -4168,7 +5530,15 @@ extern "C" void init_graph_ir_native_bindings(VALUE mMLX) {
       rb_define_class_under(mGraphIRNative, "UnsupportedError", rb_eRuntimeError);
 
   rb_define_singleton_method(
-      mGraphIRNative, "export_graph_ir_json", RUBY_METHOD_FUNC(core_native_export_graph_ir_json), -1);
+      mGraphIRNative,
+      "export_graph_ir",
+      RUBY_METHOD_FUNC(graph_ir_native_export_graph_ir),
+      4);
+  rb_define_singleton_method(
+      mGraphIRNative,
+      "export_graph_ir_json",
+      RUBY_METHOD_FUNC(graph_ir_native_export_graph_ir_json),
+      4);
   rb_define_singleton_method(
       mGraphIRNative,
       "graph_ir_to_onnx_json",
@@ -4176,9 +5546,24 @@ extern "C" void init_graph_ir_native_bindings(VALUE mMLX) {
       3);
   rb_define_singleton_method(
       mGraphIRNative,
+      "graph_ir_to_onnx",
+      RUBY_METHOD_FUNC(graph_ir_native_graph_ir_to_onnx),
+      7);
+  rb_define_singleton_method(
+      mGraphIRNative,
       "export_onnx_json",
       RUBY_METHOD_FUNC(graph_ir_native_export_onnx_json),
       6);
+  rb_define_singleton_method(
+      mGraphIRNative,
+      "export_onnx_compatibility_report",
+      RUBY_METHOD_FUNC(graph_ir_native_export_onnx_compatibility_report),
+      4);
+  rb_define_singleton_method(
+      mGraphIRNative,
+      "export_onnx",
+      RUBY_METHOD_FUNC(graph_ir_native_export_onnx),
+      10);
   rb_define_singleton_method(
       mGraphIRNative,
       "graph_ir_compatibility_report_json",

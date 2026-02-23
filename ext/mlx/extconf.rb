@@ -3,6 +3,7 @@
 require "etc"
 require "fileutils"
 require "mkmf"
+require "rbconfig"
 
 def run_or_abort(*cmd, chdir:)
   puts ">> #{cmd.join(' ')}"
@@ -26,6 +27,67 @@ def rpath_flag(path)
   else
     ""
   end
+end
+
+def cmake_compilers_from_cache(cache_path)
+  return [nil, nil] unless File.file?(cache_path)
+
+  cc = nil
+  cxx = nil
+  File.foreach(cache_path) do |line|
+    cc = Regexp.last_match(1).strip if line =~ /^CMAKE_C_COMPILER:(?:STRING|FILEPATH)=(.+)$/
+    cxx = Regexp.last_match(1).strip if line =~ /^CMAKE_CXX_COMPILER:(?:STRING|FILEPATH)=(.+)$/
+  end
+  [cc, cxx]
+end
+
+def normalize_compiler_for_mkmf(path, kind)
+  return path if path.nil? || path.empty?
+
+  case kind
+  when :cc
+    return "/usr/bin/clang" if path.end_with?("/usr/bin/cc")
+  when :cxx
+    return "/usr/bin/clang++" if path.end_with?("/usr/bin/c++")
+  end
+  path
+end
+
+def force_mkmf_compilers!(cc, cxx)
+  return if cc.nil? || cc.empty? || cxx.nil? || cxx.empty?
+
+  cc = normalize_compiler_for_mkmf(cc, :cc)
+  cxx = normalize_compiler_for_mkmf(cxx, :cxx)
+
+  [RbConfig::CONFIG, RbConfig::MAKEFILE_CONFIG].each do |cfg|
+    cfg["CC"] = cc if cfg.key?("CC")
+    cfg["CXX"] = cxx if cfg.key?("CXX")
+
+    if cfg.key?("LDSHARED") && cfg["LDSHARED"]
+      cfg["LDSHARED"] = cfg["LDSHARED"].sub(/\A\S+/, cc)
+    end
+    if cfg.key?("LDSHAREDXX") && cfg["LDSHAREDXX"]
+      cfg["LDSHAREDXX"] = cfg["LDSHAREDXX"].sub(/\A\S+/, cxx)
+    end
+  end
+
+  $CC = cc if defined?($CC)
+  $CXX = cxx if defined?($CXX)
+  $LDSHARED = $LDSHARED.sub(/\A\S+/, cc) if defined?($LDSHARED) && $LDSHARED
+  $LDSHAREDXX = $LDSHAREDXX.sub(/\A\S+/, cxx) if defined?($LDSHAREDXX) && $LDSHAREDXX
+end
+
+def patch_makefile_compilers!(makefile_path, cc, cxx)
+  return if cc.nil? || cc.empty? || cxx.nil? || cxx.empty?
+  return unless File.file?(makefile_path)
+
+  cc = normalize_compiler_for_mkmf(cc, :cc)
+  cxx = normalize_compiler_for_mkmf(cxx, :cxx)
+
+  text = File.read(makefile_path)
+  text = text.gsub(/^CC = .+$/, "CC = #{cc}")
+  text = text.gsub(/^CXX = .+$/, "CXX = #{cxx}")
+  File.write(makefile_path, text)
 end
 
 repo_root = File.expand_path("../..", __dir__)
@@ -78,6 +140,10 @@ unless configured
 end
 run_or_abort(*cmake_build, chdir: ext_root)
 
+cmake_cache_path = File.join(mlx_build_dir, "CMakeCache.txt")
+cmake_cc, cmake_cxx = cmake_compilers_from_cache(cmake_cache_path)
+force_mkmf_compilers!(cmake_cc, cmake_cxx)
+
 include_dir = mlx_include_dir
 lib_dir = File.join(mlx_install_dir, "lib")
 json_include_dirs = [
@@ -99,3 +165,4 @@ $LDFLAGS = "#{$LDFLAGS} -L#{lib_dir} #{rpath_flag(lib_dir)}"
 $libs = "-lmlx #{$libs}"
 
 create_makefile("mlx/native")
+patch_makefile_compilers!(File.join(Dir.pwd, "Makefile"), cmake_cc, cmake_cxx)

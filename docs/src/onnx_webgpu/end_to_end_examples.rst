@@ -17,17 +17,25 @@ Minimal script example
    y = mx.array([[0.5, 0.25]], mx.float32)
 
    trace = ->(lhs, rhs) { MLX::Core.add(lhs, rhs) }
-   payload = JSON.parse(MLX::GraphIR.export_graph_ir_json(trace, x, y))
+   payload = MLX::GraphIR.export_graph_ir(trace, x, y)
    onnx_json = MLX::GraphIR.graph_ir_to_onnx_json(payload, model_name: "minimal_add")
 
-   MLX::GraphIR.validate!(payload)
-   report = MLX::GraphIR.compatibility_report(payload)
+   report = JSON.parse(
+     MLX::GraphIR::Native.graph_ir_compatibility_report_json(payload)
+   )
    abort("unsupported ops: #{report.fetch('unsupported_ops').inspect}") unless report.fetch("unsupported_nodes").zero?
 
-   MLX::GraphIR.onnx_json_to_onnx("artifacts/model.onnx", onnx_json)
-   MLX::GraphIR.export_onnx_webgpu_harness("artifacts/web_harness", payload, model_name: "minimal_add")
+   MLX::GraphIR.graph_ir_to_onnx("artifacts/model.onnx", payload, model_name: "minimal_add")
+   MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness(
+     "artifacts/web_harness",
+     payload,
+     model_name: "minimal_add"
+   )
 
-   telemetry = MLX::GraphIR.smoke_test_onnx_webgpu_harness("artifacts/web_harness", mock_ort: true)
+   telemetry = MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness(
+     "artifacts/web_harness",
+     mock_ort: true
+   )
    puts telemetry.fetch("format")
 
 Repository task examples
@@ -58,13 +66,13 @@ Use the local server task to validate demos after export:
 
 .. code-block:: bash
 
-   bundle exec rake web:start
+   bundle exec rake web:serve
 
 Parity and harness checks
 -------------------------
 
 Useful parity coverage examples:
 
-- ``test/parity/phase309_export_onnx_webgpu_harness_parity_test.rb``
-- ``test/parity/phase310_onnx_webgpu_harness_smoke_parity_test.rb``
-- ``test/parity/phase311_onnx_webgpu_harness_real_runtime_smoke_parity_test.rb``
+- ``test/graph_ir/export_onnx_webgpu_harness_test.rb``
+- ``test/graph_ir/onnx_webgpu_harness_smoke_test.rb``
+- ``test/graph_ir/onnx_webgpu_harness_real_runtime_smoke_test.rb``

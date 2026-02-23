@@ -2,7 +2,6 @@
 
 require "fileutils"
 require "json"
-require "stringio"
 
 REPO_ROOT = File.expand_path("../..", __dir__)
 LIB_ROOT = File.join(REPO_ROOT, "lib")
@@ -39,20 +38,24 @@ module Gpt2WebAssets
       abort("MLX native extension unavailable. Run `bundle exec rake build` first.")
     end
 
+    timings = {}
     repo_id = ENV.fetch("GPT2_HF_REPO", DEFAULT_HF_REPO_ID)
     model_dtype = resolve_model_dtype(ENV.fetch("GPT2_MODEL_DTYPE", DEFAULT_MODEL_DTYPE))
     FileUtils.mkdir_p(OUTPUT_DIR)
     FileUtils.mkdir_p(WEIGHTS_DIR)
     cleanup_legacy_hf_model_dir!
 
-    tokenizer_repo_changed = current_tokenizer_repo_id != repo_id
-    fetch_tokenizer_files!(repo_id, force: tokenizer_repo_changed)
-
-    weights_repo_changed = current_weights_repo_id != repo_id
-    clear_weights_dir! if weights_repo_changed
-
     hf_model_dir = WEIGHTS_DIR
-    Gpt2Example::Gpt2Model.download_hf_weights!(hf_model_dir, repo_id: repo_id)
+    benchmark_step(timings, "fetch_tokenizer_files") do
+      tokenizer_repo_changed = current_tokenizer_repo_id != repo_id
+      fetch_tokenizer_files!(repo_id, force: tokenizer_repo_changed)
+    end
+
+    benchmark_step(timings, "fetch_model_weights") do
+      weights_repo_changed = current_weights_repo_id != repo_id
+      clear_weights_dir! if weights_repo_changed
+      Gpt2Example::Gpt2Model.download_hf_weights!(hf_model_dir, repo_id: repo_id)
+    end
 
     config_payload = JSON.parse(File.binread(File.join(hf_model_dir, "config.json")))
     generation_config = read_json_or_default(
@@ -65,25 +68,31 @@ module Gpt2WebAssets
     eos_token_id = Integer(generation_config.fetch("eos_token_id", DEFAULT_EOS_TOKEN_ID))
     vocab = JSON.parse(File.binread(File.join(OUTPUT_DIR, "vocab.json")))
 
-    model = Gpt2Example::Gpt2Model.from_hf_directory(hf_model_dir, dtype: model_dtype)
-    model.eval
-    MLX::Core.eval(model.parameters)
+    model = benchmark_step(timings, "load_model_weights_into_mlx") do
+      loaded = Gpt2Example::Gpt2Model.from_hf_directory(hf_model_dir, dtype: model_dtype)
+      loaded.eval
+      MLX::Core.eval(loaded.parameters)
+      loaded
+    end
 
     seed_tokens = Array.new(context_size, eos_token_id)
     input_seed = MLX::Core.array([seed_tokens], MLX::Core.int32)
-    graph_ir_path = File.join(OUTPUT_DIR, "graph_ir.json")
-    MLX::GraphIR.export_graph_ir(
-      graph_ir_path,
-      ->(input_ids) { model.call(input_ids) },
-      input_seed
-    )
-    payload = JSON.parse(read_file_with_fallback(graph_ir_path))
+    benchmark_step(timings, "export_onnx_binary") do
+      MLX::GraphIR.export_onnx(
+        File.join(OUTPUT_DIR, "model.onnx"),
+        ->(input_ids) { model.call(input_ids) },
+        input_seed,
+        model_name: MODEL_NAME
+      )
+    end
 
     onnx_path = File.join(OUTPUT_DIR, "model.onnx")
-    MLX::GraphIR.export_onnx(onnx_path, payload, model_name: MODEL_NAME)
+    onnx_io = benchmark_step(timings, "inspect_onnx_io") do
+      derive_onnx_io!(input_seed: input_seed, model: model)
+    end
 
-    inputs = normalize_io_specs(payload.fetch("inputs"))
-    outputs = normalize_io_specs(payload.fetch("outputs"))
+    inputs = normalize_io_specs(onnx_io.fetch("inputs"))
+    outputs = normalize_io_specs(onnx_io.fetch("outputs"))
 
     metadata = {
       "format" => "gpt2_ruby_demo_asset_v1",
@@ -105,6 +114,9 @@ module Gpt2WebAssets
         "default_max_tokens" => 80,
         "default_temperature" => 0.8
       },
+      "parameters" => {
+        "total" => parameter_count(model.parameters)
+      },
       "weights" => {
         "source" => "huggingface",
         "repo_id" => repo_id,
@@ -114,20 +126,22 @@ module Gpt2WebAssets
       }
     }
 
-    File.binwrite(File.join(OUTPUT_DIR, "meta.json"), JSON.pretty_generate(metadata))
-    File.binwrite(File.join(OUTPUT_DIR, "prompt.presets.json"), JSON.pretty_generate(PROMPT_PRESETS))
-    FileUtils.cp(File.join(hf_model_dir, "config.json"), File.join(OUTPUT_DIR, "config.json"))
-    File.binwrite(TOKENIZER_REPO_MARKER, "#{repo_id}\n")
-    File.binwrite(WEIGHTS_REPO_MARKER, "#{repo_id}\n")
+    benchmark_step(timings, "write_metadata_and_markers") do
+      File.binwrite(File.join(OUTPUT_DIR, "meta.json"), JSON.pretty_generate(metadata))
+      File.binwrite(File.join(OUTPUT_DIR, "prompt.presets.json"), JSON.pretty_generate(PROMPT_PRESETS))
+      FileUtils.cp(File.join(hf_model_dir, "config.json"), File.join(OUTPUT_DIR, "config.json"))
+      File.binwrite(TOKENIZER_REPO_MARKER, "#{repo_id}\n")
+      File.binwrite(WEIGHTS_REPO_MARKER, "#{repo_id}\n")
+    end
 
     puts "Wrote GPT-2 demo assets to #{OUTPUT_DIR}"
     puts "  repo: #{repo_id}"
     puts "  dtype: #{dtype_name(model_dtype)}"
-    puts "  - #{graph_ir_path}"
     puts "  - #{onnx_path}"
     puts "  - #{File.join(OUTPUT_DIR, 'meta.json')}"
     puts "  - #{File.join(OUTPUT_DIR, 'prompt.presets.json')}"
     puts "  - #{File.join(WEIGHTS_DIR, 'model.safetensors')}"
+    print_timings(timings)
   end
 
   def fetch_tokenizer_files!(repo_id, force: false)
@@ -228,17 +242,64 @@ module Gpt2WebAssets
     JSON.parse(File.binread(path))
   end
 
-  def read_file_with_fallback(path)
-    File.binread(path)
-  rescue Errno::EINVAL
-    File.open(path, "rb") do |io|
-      content = +""
-      while (chunk = io.read(8 * 1024 * 1024))
-        content << chunk
-      end
-      content
+  def derive_onnx_io!(input_seed:, model:)
+    logits = model.call(input_seed)
+    MLX::Core.eval(logits)
+
+    {
+      "inputs" => [tensor_io_spec("input_ids", input_seed)],
+      "outputs" => [tensor_io_spec("logits", logits)]
+    }
+  end
+
+  def tensor_io_spec(name, tensor)
+    {
+      "name" => name,
+      "type" => dtype_name(tensor.dtype),
+      "shape" => tensor.shape.map { |dim| Integer(dim) }
+    }
+  end
+
+  def benchmark_step(timings, label)
+    started_at = monotonic_now
+    result = yield
+    timings[label] = monotonic_now - started_at
+    result
+  end
+
+  def print_timings(timings)
+    total = timings.values.inject(0.0, :+)
+    puts "  benchmark:"
+    timings.each do |label, seconds|
+      puts format("    - %<label>s: %<seconds>.2fs", label: label, seconds: seconds)
+    end
+    puts format("    - total: %.2fs", total)
+  end
+
+  def monotonic_now
+    Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  end
+
+  def parameter_count(tree, seen = {})
+    case tree
+    when MLX::Core::Array
+      oid = tree.object_id
+      return 0 if seen.key?(oid)
+
+      seen[oid] = true
+      shape = tree.shape
+      return 1 if shape.empty?
+
+      shape.reduce(1) { |acc, dim| acc * Integer(dim) }
+    when Hash
+      tree.values.sum { |value| parameter_count(value, seen) }
+    when Array
+      tree.sum { |value| parameter_count(value, seen) }
+    else
+      0
     end
   end
+
 end
 
 if $PROGRAM_NAME == __FILE__

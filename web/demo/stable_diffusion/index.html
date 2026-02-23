@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Stable Diffusion Tiny: Web Demo</title>
+    <title>Stable Diffusion Kanji: Web Demo</title>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
@@ -220,16 +220,18 @@
   </head>
   <body>
     <main>
-      <h1>Stable Diffusion Tiny</h1>
+      <h1>Stable Diffusion Kanji</h1>
       <p class="subtitle">
-        Tiny Stable Diffusion pipeline exported locally to ONNX from pretrained Hugging Face weights (text encoder, UNet, and VAE decoder).
+        Stable Diffusion Kanji pipeline exported locally to ONNX from pretrained Hugging Face weights (text encoder, UNet, and VAE decoder).
         Click once to run multi-step denoising in browser and decode the final latents into pixel-space output.
       </p>
 
       <div class="badges">
-        <span class="badge">Model: tiny SD (pretrained)</span>
+        <span class="badge">Model: SD Kanji (pretrained)</span>
         <span class="badge" id="badge-weights">Weights: loading...</span>
         <span class="badge" id="badge-provider">Provider: loading...</span>
+        <span class="badge" id="badge-onnx-size">ONNX Size: loading...</span>
+        <span class="badge" id="badge-parameters">Parameters: loading...</span>
         <span class="badge" id="badge-timing">Inference: -- ms</span>
       </div>
 
@@ -292,6 +294,7 @@
               <div id="status-io">I/O: --</div>
               <div id="status-output">Output: --</div>
               <div id="status-stats">Stats: --</div>
+              <div id="status-onnx-size">ONNX Size: loading...</div>
             </div>
           </section>
           <section class="panel">

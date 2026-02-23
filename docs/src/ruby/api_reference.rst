@@ -120,11 +120,12 @@ Core entry points in ``MLX::Core``:
 
 Graph IR / ONNX / WebGPU entry points in ``MLX::GraphIR``:
 
-- ``export_graph_ir_json`` / ``validate!``
-- ``graph_ir_to_onnx_json`` / ``compatibility_report``
-- ``onnx_json_to_onnx`` / ``export_onnx_json``
-- ``export_onnx_webgpu_harness``
-- ``smoke_test_onnx_webgpu_harness``
+- ``export_graph_ir`` / ``export_graph_ir_json``
+- ``graph_ir_to_onnx`` / ``graph_ir_to_onnx_json``
+- ``export_onnx`` / ``export_onnx_json``
+- ``export_onnx_compatibility_report``
+- ``MLX::GraphIR::WebGPUHarness.export_onnx_webgpu_harness``
+- ``MLX::GraphIR::WebGPUHarness.smoke_test_onnx_webgpu_harness``
 
 .. _distributed:
 

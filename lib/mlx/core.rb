@@ -604,7 +604,11 @@ module MLX
           Dir.glob(File.join(dir, "**", "*.npy")).sort.each do |npy_path|
             rel = npy_path.delete_prefix(dir + File::SEPARATOR)
             key = rel.end_with?(".npy") ? rel[0...-4] : rel
-            out[key] = native_load(npy_path, "npy", false)
+            # Force a materialized copy to avoid keeping many file-backed mmap handles open.
+            value = native_load(npy_path, "npy", false)
+            value = add(value, 0)
+            eval(value)
+            out[key] = value
           end
           out
         end

@@ -83,7 +83,7 @@ def benchmark_payload(model_name)
 end
 
 def graph_report_from_payload(payload)
-  MLX::GraphIR.compatibility_report(payload)
+  JSON.parse(MLX::GraphIR::Native.graph_ir_compatibility_report_json(payload))
 end
 
 def submodule_available?

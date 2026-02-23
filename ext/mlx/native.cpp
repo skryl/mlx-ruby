@@ -344,14 +344,7 @@ static VALUE id_to_symbol(ID id) {
 }
 
 static ID cached_intern_id(const char* name) {
-  static std::unordered_map<std::string, ID> cache;
-  auto it = cache.find(name);
-  if (it != cache.end()) {
-    return it->second;
-  }
-  const ID id = rb_intern(name);
-  cache.emplace(name, id);
-  return id;
+  return rb_intern(name);
 }
 
 static mx::Device::DeviceType device_type_from_value(VALUE value) {
@@ -933,12 +926,6 @@ struct ArrayCollector {
 
 static void collect_arrays_from_tree(VALUE value, std::vector<mx::array>& arrays);
 
-static int hash_collect_arrays_iter(VALUE, VALUE value, VALUE arg) {
-  auto* collector = reinterpret_cast<ArrayCollector*>(arg);
-  collect_arrays_from_tree(value, *collector->arrays);
-  return ST_CONTINUE;
-}
-
 static void collect_arrays_from_tree(VALUE value, std::vector<mx::array>& arrays) {
   if (rb_obj_is_kind_of(value, cArray)) {
     arrays.push_back(array_unwrap(value));
@@ -952,28 +939,37 @@ static void collect_arrays_from_tree(VALUE value, std::vector<mx::array>& arrays
     return;
   }
   if (RB_TYPE_P(value, T_HASH)) {
-    ArrayCollector collector{&arrays};
-    rb_hash_foreach(value, hash_collect_arrays_iter, reinterpret_cast<VALUE>(&collector));
+    VALUE keys = rb_funcall(value, cached_intern_id("keys"), 0);
+    const long len = RARRAY_LEN(keys);
+    for (long i = 0; i < len; ++i) {
+      VALUE key = rb_ary_entry(keys, i);
+      VALUE hash_value = rb_hash_lookup2(value, key, Qundef);
+      if (hash_value == Qundef) {
+        continue;
+      }
+      collect_arrays_from_tree(hash_value, arrays);
+    }
   }
-}
-
-struct ArrayMapBuilder {
-  std::unordered_map<std::string, mx::array> map;
-};
-
-static int hash_to_array_map_iter(VALUE key, VALUE value, VALUE arg) {
-  auto* builder = reinterpret_cast<ArrayMapBuilder*>(arg);
-  builder->map.insert_or_assign(string_from_ruby(key), array_unwrap(value));
-  return ST_CONTINUE;
 }
 
 static std::unordered_map<std::string, mx::array> array_map_from_ruby_hash(VALUE value) {
   if (!RB_TYPE_P(value, T_HASH)) {
     rb_raise(rb_eTypeError, "expected Hash mapping String/Symbol keys to MLX::Core::Array");
   }
-  ArrayMapBuilder builder;
-  rb_hash_foreach(value, hash_to_array_map_iter, reinterpret_cast<VALUE>(&builder));
-  return builder.map;
+  VALUE keys = rb_funcall(value, cached_intern_id("keys"), 0);
+  const long len = RARRAY_LEN(keys);
+  std::unordered_map<std::string, mx::array> out;
+  out.reserve(static_cast<size_t>(len));
+  for (long i = 0; i < len; ++i) {
+    VALUE key = rb_ary_entry(keys, i);
+    VALUE hash_value = rb_hash_lookup2(value, key, Qundef);
+    if (hash_value == Qundef) {
+      continue;
+    }
+    std::string ruby_key = string_from_ruby(key);
+    out.insert_or_assign(ruby_key, array_unwrap(hash_value));
+  }
+  return out;
 }
 
 static VALUE ruby_hash_of_arrays(const std::unordered_map<std::string, mx::array>& map) {
@@ -995,16 +991,6 @@ static VALUE ruby_hash_of_strings(const std::unordered_map<std::string, std::str
   return out;
 }
 
-struct StringMapBuilder {
-  std::unordered_map<std::string, std::string> map;
-};
-
-static int hash_to_string_map_iter(VALUE key, VALUE value, VALUE arg) {
-  auto* builder = reinterpret_cast<StringMapBuilder*>(arg);
-  builder->map.insert_or_assign(string_from_ruby(key), string_from_ruby(value));
-  return ST_CONTINUE;
-}
-
 static std::unordered_map<std::string, std::string> string_map_from_ruby_hash(VALUE value) {
   if (NIL_P(value)) {
     return {};
@@ -1012,9 +998,20 @@ static std::unordered_map<std::string, std::string> string_map_from_ruby_hash(VA
   if (!RB_TYPE_P(value, T_HASH)) {
     rb_raise(rb_eTypeError, "expected Hash mapping String/Symbol keys to String values");
   }
-  StringMapBuilder builder;
-  rb_hash_foreach(value, hash_to_string_map_iter, reinterpret_cast<VALUE>(&builder));
-  return builder.map;
+  VALUE keys = rb_funcall(value, cached_intern_id("keys"), 0);
+  const long len = RARRAY_LEN(keys);
+  std::unordered_map<std::string, std::string> out;
+  out.reserve(static_cast<size_t>(len));
+  for (long i = 0; i < len; ++i) {
+    VALUE key = rb_ary_entry(keys, i);
+    VALUE hash_value = rb_hash_lookup2(value, key, Qundef);
+    if (hash_value == Qundef) {
+      continue;
+    }
+    std::string ruby_key = string_from_ruby(key);
+    out.insert_or_assign(ruby_key, string_from_ruby(hash_value));
+  }
+  return out;
 }
 
 static mx::GGUFMetaData gguf_metadata_from_ruby(VALUE value) {
@@ -1043,16 +1040,6 @@ static mx::GGUFMetaData gguf_metadata_from_ruby(VALUE value) {
   return std::monostate{};
 }
 
-struct GGUFMetaMapBuilder {
-  std::unordered_map<std::string, mx::GGUFMetaData> map;
-};
-
-static int hash_to_gguf_meta_map_iter(VALUE key, VALUE value, VALUE arg) {
-  auto* builder = reinterpret_cast<GGUFMetaMapBuilder*>(arg);
-  builder->map.insert_or_assign(string_from_ruby(key), gguf_metadata_from_ruby(value));
-  return ST_CONTINUE;
-}
-
 static std::unordered_map<std::string, mx::GGUFMetaData> gguf_meta_map_from_ruby_hash(VALUE value) {
   if (NIL_P(value)) {
     return {};
@@ -1060,9 +1047,20 @@ static std::unordered_map<std::string, mx::GGUFMetaData> gguf_meta_map_from_ruby
   if (!RB_TYPE_P(value, T_HASH)) {
     rb_raise(rb_eTypeError, "expected Hash for GGUF metadata");
   }
-  GGUFMetaMapBuilder builder;
-  rb_hash_foreach(value, hash_to_gguf_meta_map_iter, reinterpret_cast<VALUE>(&builder));
-  return builder.map;
+  VALUE keys = rb_funcall(value, cached_intern_id("keys"), 0);
+  const long len = RARRAY_LEN(keys);
+  std::unordered_map<std::string, mx::GGUFMetaData> out;
+  out.reserve(static_cast<size_t>(len));
+  for (long i = 0; i < len; ++i) {
+    VALUE key = rb_ary_entry(keys, i);
+    VALUE hash_value = rb_hash_lookup2(value, key, Qundef);
+    if (hash_value == Qundef) {
+      continue;
+    }
+    std::string ruby_key = string_from_ruby(key);
+    out.insert_or_assign(ruby_key, gguf_metadata_from_ruby(hash_value));
+  }
+  return out;
 }
 
 static VALUE gguf_metadata_to_ruby(const mx::GGUFMetaData& value) {

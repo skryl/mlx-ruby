@@ -14,66 +14,91 @@ class Phase330StableDiffusionExampleWeightMappingTest < Minitest::Test
     $LOAD_PATH.delete(File.join(RUBY_ROOT, "lib"))
   end
 
-  def test_load_hf_state_dict_maps_core_unet_weights
-    model = StableDiffusionExample::TinyUnetModel.new(cross_attention_dim: 32)
-    state = build_fake_hf_state
+  def test_map_unet_weights_remaps_core_keys_without_slicing
+    ff_proj = rand_tensor([640, 320])
+    conv_in = rand_tensor([32, 4, 3, 3])
+    attn_key = rand_tensor([128, 768])
 
-    model.load_hf_state_dict!(state)
+    state = {
+      "conv_in.weight" => conv_in,
+      "down_blocks.0.attentions.0.transformer_blocks.0.ff.net.0.proj.weight" => ff_proj,
+      "down_blocks.0.attentions.0.transformer_blocks.0.ff.net.2.weight" => rand_tensor([320, 1280]),
+      "mid_block.attentions.0.transformer_blocks.0.attn2.to_k.weight" => attn_key
+    }
 
-    expected_conv_in = transpose_conv_weight(state.fetch("conv_in.weight"))
-    assert_nested_close(expected_conv_in, model.conv_in.weight.to_a)
+    mapped = StableDiffusionExample.map_unet_weights(state)
 
-    expected_down = transpose_conv_weight(state.fetch("down_blocks.1.resnets.0.conv1.weight"))
-    assert_nested_close(expected_down, model.down.weight.to_a)
+    expected_conv = MLX::Core.transpose(conv_in, [0, 2, 3, 1]).to_a
+    assert_nested_close(expected_conv, mapped.fetch("conv_in.weight").to_a)
 
-    expected_cond_proj = MLX::Core.slice(
-      state.fetch("down_blocks.1.attentions.0.transformer_blocks.0.attn2.to_k.weight"),
-      [0, 0],
-      [32, 32]
-    ).to_a
-    assert_nested_close(expected_cond_proj, model.cond_proj.weight.to_a)
+    linear1_key = "down_blocks.0.attentions.0.transformer_blocks.0.linear1.weight"
+    linear2_key = "down_blocks.0.attentions.0.transformer_blocks.0.linear2.weight"
+    linear3_key = "down_blocks.0.attentions.0.transformer_blocks.0.linear3.weight"
+    mapped_attn_key = "mid_blocks.1.transformer_blocks.0.attn2.key_proj.weight"
+
+    assert_equal [320, 320], mapped.fetch(linear1_key).shape
+    assert_equal [320, 320], mapped.fetch(linear2_key).shape
+    assert_includes mapped.keys, linear3_key
+
+    part1, part2 = MLX::Core.split(ff_proj, 2, 0)
+    assert_nested_close(part1.to_a, mapped.fetch(linear1_key).to_a)
+    assert_nested_close(part2.to_a, mapped.fetch(linear2_key).to_a)
+
+    assert_equal [128, 768], mapped.fetch(mapped_attn_key).shape
+    assert_nested_close(attn_key.to_a, mapped.fetch(mapped_attn_key).to_a)
   end
 
-  def test_forward_shape_matches_unet_like_signature
-    model = StableDiffusionExample::TinyUnetModel.new(cross_attention_dim: 32)
-    model.load_hf_state_dict!(build_fake_hf_state)
+  def test_map_clip_text_encoder_weights_normalizes_names
+    state = {
+      "text_model.embeddings.token_embedding.weight" => rand_tensor([49_408, 768]),
+      "text_model.embeddings.position_embedding.weight" => rand_tensor([77, 768]),
+      "text_model.encoder.layers.0.self_attn.q_proj.weight" => rand_tensor([768, 768]),
+      "text_model.encoder.layers.0.mlp.fc1.weight" => rand_tensor([3072, 768]),
+      "text_model.final_layer_norm.weight" => rand_tensor([768])
+    }
 
-    latents = MLX::Core.random_uniform([1, 8, 8, 4], -1.0, 1.0, MLX::Core.float32)
-    timestep = MLX::Core.array([1.0], MLX::Core.float32)
-    encoder_hidden_states = MLX::Core.random_uniform([1, 77, 32], -1.0, 1.0, MLX::Core.float32)
+    mapped = StableDiffusionExample.map_clip_text_encoder_weights(state)
 
-    output = model.call(latents, timestep, encoder_hidden_states)
-    MLX::Core.eval(output)
+    assert_includes mapped.keys, "token_embedding.weight"
+    assert_includes mapped.keys, "position_embedding.weight"
+    assert_includes mapped.keys, "layers.0.attention.query_proj.weight"
+    assert_includes mapped.keys, "layers.0.linear1.weight"
+    assert_includes mapped.keys, "final_layer_norm.weight"
 
-    assert_equal [1, 8, 8, 4], output.shape
+    assert_equal [768, 768], mapped.fetch("layers.0.attention.query_proj.weight").shape
+    assert_equal [3072, 768], mapped.fetch("layers.0.linear1.weight").shape
+  end
+
+  def test_map_vae_weights_remaps_and_transposes_expected_tensors
+    downsample_conv = rand_tensor([64, 64, 3, 3])
+    quant_conv = rand_tensor([8, 8, 1, 1])
+
+    state = {
+      "encoder.down_blocks.0.downsamplers.0.conv.weight" => downsample_conv,
+      "mid_block.attentions.0.to_out.0.weight" => rand_tensor([512, 512]),
+      "quant_conv.weight" => quant_conv
+    }
+
+    mapped = StableDiffusionExample.map_vae_weights(state)
+
+    downsample_key = "encoder.down_blocks.0.downsample.weight"
+    out_proj_key = "mid_blocks.1.out_proj.weight"
+    quant_proj_key = "quant_proj.weight"
+
+    expected_downsample = MLX::Core.transpose(downsample_conv, [0, 2, 3, 1]).to_a
+    assert_nested_close(expected_downsample, mapped.fetch(downsample_key).to_a)
+
+    assert_includes mapped.keys, out_proj_key
+    assert_equal [512, 512], mapped.fetch(out_proj_key).shape
+
+    assert_equal [8, 8], mapped.fetch(quant_proj_key).shape
+    assert_nested_close(MLX::Core.squeeze(quant_conv).to_a, mapped.fetch(quant_proj_key).to_a)
   end
 
   private
 
-  def build_fake_hf_state
-    {
-      "conv_in.weight" => rand_tensor([32, 4, 3, 3]),
-      "conv_in.bias" => rand_tensor([32]),
-      "down_blocks.1.resnets.0.conv1.weight" => rand_tensor([64, 32, 3, 3]),
-      "down_blocks.1.resnets.0.conv1.bias" => rand_tensor([64]),
-      "mid_block.resnets.0.conv1.weight" => rand_tensor([64, 64, 3, 3]),
-      "mid_block.resnets.0.conv1.bias" => rand_tensor([64]),
-      "up_blocks.1.resnets.2.conv1.weight" => rand_tensor([32, 64, 3, 3]),
-      "up_blocks.1.resnets.2.conv1.bias" => rand_tensor([32]),
-      "conv_out.weight" => rand_tensor([4, 32, 3, 3]),
-      "conv_out.bias" => rand_tensor([4]),
-      "down_blocks.1.attentions.0.transformer_blocks.0.attn2.to_k.weight" => rand_tensor([64, 32]),
-      "time_embedding.linear_2.weight" => rand_tensor([128, 128]),
-      "time_embedding.linear_2.bias" => rand_tensor([128])
-    }
-  end
-
   def rand_tensor(shape)
     MLX::Core.random_uniform(shape, -1.0, 1.0, MLX::Core.float32)
-  end
-
-  def transpose_conv_weight(weight)
-    MLX::Core.transpose(weight, [0, 2, 3, 1]).to_a
   end
 
   def assert_nested_close(expected, actual, atol: 1e-5)

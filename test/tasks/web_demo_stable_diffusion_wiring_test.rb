@@ -12,14 +12,14 @@ class WebDemoStableDiffusionWiringTest < Minitest::Test
     source = File.read(WEB_INDEX_HTML)
 
     assert_includes source, 'href="./demo/stable_diffusion/"'
-    assert_includes source, "Stable Diffusion Tiny"
+    assert_includes source, "Stable Diffusion Kanji"
   end
 
   def test_stable_diffusion_demo_points_at_stable_diffusion_assets
     main_source = File.read(STABLE_DIFFUSION_MAIN_JS)
     html_source = File.read(STABLE_DIFFUSION_INDEX_HTML)
 
-    assert_includes html_source, "<title>Stable Diffusion Tiny: Web Demo</title>"
+    assert_includes html_source, "<title>Stable Diffusion Kanji: Web Demo</title>"
     assert_includes main_source, 'const ASSET_ROOT = "../../assets/stable_diffusion"'
     assert_includes main_source, "const TEXT_ENCODER_PATH = `${ASSET_ROOT}/text_encoder.onnx`"
     assert_includes main_source, "const UNET_PATH = `${ASSET_ROOT}/unet.onnx`"
@@ -48,5 +48,25 @@ class WebDemoStableDiffusionWiringTest < Minitest::Test
     assert_includes source, 'File.join(WEB_ROOT, "assets", "stable_diffusion", "vae_decoder.onnx")'
     assert_includes source, 'File.join(WEB_ROOT, "assets", "stable_diffusion", "vocab.json")'
     assert_includes source, 'File.join(WEB_ROOT, "assets", "stable_diffusion", "merges.txt")'
+  end
+
+  def test_web_start_requires_gpt2_and_nanogpt_metadata_assets
+    source = File.read(WEB_TASK)
+    assert_includes source, 'File.join(WEB_ROOT, "assets", "gpt2", "meta.json")'
+    assert_includes source, 'File.join(WEB_ROOT, "assets", "gpt2", "vocab.json")'
+    assert_includes source, 'File.join(WEB_ROOT, "assets", "gpt2", "merges.txt")'
+    assert_includes source, 'File.join(WEB_ROOT, "assets", "gpt2", "prompt.presets.json")'
+    assert_includes source, 'File.join(WEB_ROOT, "assets", "nanogpt", "meta.json")'
+    assert_includes source, 'File.join(WEB_ROOT, "assets", "nanogpt", "tokenizer.json")'
+    assert_includes source, 'File.join(WEB_ROOT, "assets", "nanogpt", "prompt.presets.json")'
+  end
+
+  def test_stable_diffusion_demo_does_not_block_runtime_on_trained_flag
+    source = File.read(STABLE_DIFFUSION_MAIN_JS)
+    refute_includes source, "if (!modelMeta?.weights?.trained)"
+    assert_includes source, "await Promise.all(["
+    assert_includes source, "assetExists(TEXT_ENCODER_PATH)"
+    assert_includes source, "assetExists(UNET_PATH)"
+    assert_includes source, "assetExists(VAE_DECODER_PATH)"
   end
 end

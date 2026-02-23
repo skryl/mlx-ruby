@@ -1,5 +1,3 @@
-import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.mjs";
-
 const ASSET_ROOT = "../../assets/stable_diffusion";
 const META_PATH = `${ASSET_ROOT}/meta.json`;
 const PRESETS_PATH = `${ASSET_ROOT}/prompt.presets.json`;
@@ -9,15 +7,22 @@ const MERGES_PATH = `${ASSET_ROOT}/merges.txt`;
 const TEXT_ENCODER_PATH = `${ASSET_ROOT}/text_encoder.onnx`;
 const UNET_PATH = `${ASSET_ROOT}/unet.onnx`;
 const VAE_DECODER_PATH = `${ASSET_ROOT}/vae_decoder.onnx`;
+const ORT_MODULE_CANDIDATES = [
+  "../../node_modules/onnxruntime-web/dist/ort.all.min.mjs",
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.mjs"
+];
 
 const weightsBadge = document.getElementById("badge-weights");
 const providerBadge = document.getElementById("badge-provider");
+const onnxSizeBadge = document.getElementById("badge-onnx-size");
+const parametersBadge = document.getElementById("badge-parameters");
 const timingBadge = document.getElementById("badge-timing");
 
 const modelStatus = document.getElementById("status-model");
 const ioStatus = document.getElementById("status-io");
 const outputStatus = document.getElementById("status-output");
 const statsStatus = document.getElementById("status-stats");
+const onnxSizeStatus = document.getElementById("status-onnx-size");
 const previewValues = document.getElementById("preview-values");
 const errorBox = document.getElementById("error-box");
 
@@ -46,6 +51,7 @@ let pipelineSessions = null;
 let tokenizer = null;
 let selectedProviders = null;
 let running = false;
+let ort = null;
 
 runButton.disabled = true;
 
@@ -72,6 +78,94 @@ function setRunEnabled(enabled) {
   runButton.disabled = !enabled;
 }
 
+function setOnnxSizeText(text) {
+  onnxSizeStatus.textContent = text;
+  if (onnxSizeBadge) {
+    onnxSizeBadge.textContent = text;
+  }
+}
+
+function formatParameterCount(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return "unknown";
+  }
+  return Math.trunc(numeric).toLocaleString("en-US");
+}
+
+function setParameterText(value) {
+  if (!parametersBadge) {
+    return;
+  }
+  parametersBadge.textContent = `Parameters: ${formatParameterCount(value)}`;
+}
+
+function formatByteSize(bytes) {
+  const numeric = Number(bytes);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return "unknown";
+  }
+  if (numeric < 1024) {
+    return `${Math.trunc(numeric)} B`;
+  }
+
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = numeric;
+  let unitIndex = -1;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+async function onnxSizeBytes(path) {
+  try {
+    const response = await fetch(path, { method: "HEAD", cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    const contentLength = response.headers.get("content-length");
+    const parsed = Number.parseInt(contentLength || "", 10);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return null;
+    }
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function updateOnnxSizeStatus() {
+  const specs = [
+    { label: "text", path: TEXT_ENCODER_PATH },
+    { label: "unet", path: UNET_PATH },
+    { label: "vae", path: VAE_DECODER_PATH }
+  ];
+
+  const measured = await Promise.all(specs.map(async (spec) => {
+    const bytes = await onnxSizeBytes(spec.path);
+    return { ...spec, bytes };
+  }));
+
+  const available = measured.filter((entry) => Number.isFinite(entry.bytes));
+  if (available.length === 0) {
+    setOnnxSizeText("ONNX Size: unavailable");
+    return;
+  }
+
+  const totalBytes = available.reduce((sum, entry) => sum + entry.bytes, 0);
+  const parts = measured.map((entry) => {
+    if (!Number.isFinite(entry.bytes)) {
+      return `${entry.label}=missing`;
+    }
+    return `${entry.label}=${formatByteSize(entry.bytes)}`;
+  });
+  setOnnxSizeText(`ONNX Size: ${parts.join(", ")} (total ${formatByteSize(totalBytes)})`);
+}
+
 function loadJson(path) {
   return fetch(path, { cache: "no-store" }).then((response) => {
     if (!response.ok) {
@@ -88,6 +182,24 @@ function loadText(path) {
     }
     return response.text();
   });
+}
+
+async function loadOrtModule() {
+  const errors = [];
+  for (const source of ORT_MODULE_CANDIDATES) {
+    try {
+      const mod = await import(source);
+      if (mod && mod.InferenceSession && mod.Tensor) {
+        return mod;
+      }
+      errors.push(`${source}: missing expected exports`);
+    } catch (error) {
+      errors.push(`${source}: ${String(error)}`);
+    }
+  }
+  throw new Error(
+    `failed to load ONNX Runtime Web module:\n${errors.map((entry) => `- ${entry}`).join("\n")}`
+  );
 }
 
 function basename(path) {
@@ -152,7 +264,7 @@ async function sessionOptionsForModel(provider, modelPath) {
 
 async function createPipelineSessions() {
   const textUnetProviders = ["webgpu", "wasm"];
-  const vaeProviders = ["wasm", "webgpu"];
+  const vaeProviders = ["webgpu", "wasm"];
   const errors = [];
 
   for (const textUnetProvider of textUnetProviders) {
@@ -425,6 +537,84 @@ function tensorTypeForSpec(spec, fallback = "float32") {
   return "float32";
 }
 
+const FLOAT32_BUFFER = new Float32Array(1);
+const UINT32_BUFFER = new Uint32Array(FLOAT32_BUFFER.buffer);
+
+function float16ToFloat32(bits) {
+  const sign = (bits & 0x8000) ? -1 : 1;
+  const exponent = (bits >> 10) & 0x1f;
+  const fraction = bits & 0x03ff;
+
+  if (exponent === 0) {
+    if (fraction === 0) {
+      return sign * 0.0;
+    }
+    return sign * (fraction / 1024) * (2 ** -14);
+  }
+
+  if (exponent === 0x1f) {
+    return fraction === 0 ? sign * Infinity : Number.NaN;
+  }
+
+  return sign * (1 + (fraction / 1024)) * (2 ** (exponent - 15));
+}
+
+function float32ToFloat16Bits(value) {
+  FLOAT32_BUFFER[0] = Number(value);
+  const bits = UINT32_BUFFER[0];
+
+  const sign = (bits >>> 16) & 0x8000;
+  let exponent = ((bits >>> 23) & 0xff) - 127;
+  let mantissa = bits & 0x007fffff;
+
+  if (exponent === 128) {
+    if (mantissa !== 0) {
+      return sign | 0x7e00;
+    }
+    return sign | 0x7c00;
+  }
+
+  if (exponent > 15) {
+    return sign | 0x7c00;
+  }
+
+  if (exponent < -24) {
+    return sign;
+  }
+
+  if (exponent < -14) {
+    mantissa |= 0x00800000;
+    const shift = -exponent - 14;
+    let halfMantissa = mantissa >> (shift + 13);
+    if (((mantissa >> (shift + 12)) & 1) === 1) {
+      halfMantissa += 1;
+    }
+    return sign | (halfMantissa & 0x03ff);
+  }
+
+  exponent += 15;
+  let halfMantissa = mantissa >> 13;
+  if ((mantissa & 0x00001000) !== 0) {
+    halfMantissa += 1;
+    if ((halfMantissa & 0x0400) !== 0) {
+      halfMantissa = 0;
+      exponent += 1;
+      if (exponent >= 31) {
+        return sign | 0x7c00;
+      }
+    }
+  }
+
+  return sign | (exponent << 10) | (halfMantissa & 0x03ff);
+}
+
+function tensorValueAt(data, index, tensorType = "float32") {
+  if (tensorType === "float16") {
+    return float16ToFloat32(Number(data[index]));
+  }
+  return Number(data[index]);
+}
+
 function makeTensor(values, spec, dimsFallback) {
   const dims = normalizeShape(spec?.shape, dimsFallback);
   const type = tensorTypeForSpec(spec, "float32");
@@ -444,12 +634,18 @@ function makeTensor(values, spec, dimsFallback) {
     return new ort.Tensor("bool", casted, dims);
   }
 
+  if (type === "float16") {
+    const casted = Uint16Array.from(Array.from(values, (value) => float32ToFloat16Bits(value)));
+    return new ort.Tensor("float16", casted, dims);
+  }
+
   const casted = Float32Array.from(Array.from(values, (value) => Number(value)));
   return new ort.Tensor("float32", casted, dims);
 }
 
 function summarizeTensor(tensorLike) {
   const data = tensorLike?.data || tensorLike;
+  const tensorType = String(tensorLike?.type || "float32").toLowerCase();
   if (!data || data.length === 0) {
     return "Stats: empty tensor";
   }
@@ -458,7 +654,7 @@ function summarizeTensor(tensorLike) {
   let max = -Infinity;
   let sum = 0.0;
   for (let i = 0; i < data.length; i += 1) {
-    const value = Number(data[i]);
+    const value = tensorValueAt(data, i, tensorType);
     if (value < min) min = value;
     if (value > max) max = value;
     sum += value;
@@ -470,11 +666,12 @@ function summarizeTensor(tensorLike) {
 
 function previewTensorValues(tensorLike, count = 18) {
   const data = tensorLike?.data || tensorLike;
+  const tensorType = String(tensorLike?.type || "float32").toLowerCase();
   if (!data) return "--";
 
   const values = [];
   for (let i = 0; i < Math.min(count, data.length); i += 1) {
-    values.push(Number(data[i]).toFixed(6));
+    values.push(tensorValueAt(data, i, tensorType).toFixed(6));
   }
   return values.join(", ");
 }
@@ -482,6 +679,7 @@ function previewTensorValues(tensorLike, count = 18) {
 function tensorReader(tensor) {
   const dims = tensor?.dims || [];
   const data = tensor?.data;
+  const tensorType = String(tensor?.type || "float32").toLowerCase();
   if (!data || dims.length !== 4) {
     return null;
   }
@@ -494,7 +692,11 @@ function tensorReader(tensor) {
       width,
       height,
       channels,
-      at: (x, y, channel) => data[((y * width) + x) * channels + Math.min(channel, channels - 1)]
+      at: (x, y, channel) => tensorValueAt(
+        data,
+        ((y * width) + x) * channels + Math.min(channel, channels - 1),
+        tensorType
+      )
     };
   }
 
@@ -506,7 +708,11 @@ function tensorReader(tensor) {
       width,
       height,
       channels,
-      at: (x, y, channel) => data[(Math.min(channel, channels - 1) * height * width) + (y * width) + x]
+      at: (x, y, channel) => tensorValueAt(
+        data,
+        (Math.min(channel, channels - 1) * height * width) + (y * width) + x,
+        tensorType
+      )
     };
   }
 
@@ -878,7 +1084,14 @@ function updateStatuses() {
 
 async function initialize() {
   try {
+    setOnnxSizeText("ONNX Size: probing...");
+    const onnxSizeProbe = updateOnnxSizeStatus();
+    modelStatus.textContent = "Runtime: loading ONNX Runtime Web...";
+    ort = await loadOrtModule();
+    modelStatus.textContent = "Model: loading metadata...";
     modelMeta = await loadJson(META_PATH);
+    await onnxSizeProbe;
+    setParameterText(modelMeta?.parameters?.total ?? modelMeta?.parameter_count);
     updateStatuses();
 
     try {
@@ -927,16 +1140,26 @@ async function initialize() {
     setGuidanceLabel();
     setTimestepLabel();
 
-    if (!modelMeta?.weights?.trained) {
+    const [hasTextEncoder, hasUnet, hasVaeDecoder] = await Promise.all([
+      assetExists(TEXT_ENCODER_PATH),
+      assetExists(UNET_PATH),
+      assetExists(VAE_DECODER_PATH)
+    ]);
+
+    if (!(hasTextEncoder && hasUnet && hasVaeDecoder)) {
       weightsBadge.textContent = "Weights: missing";
       providerBadge.textContent = "Provider: unavailable";
-      modelStatus.textContent = "Model: unavailable (missing weights)";
+      modelStatus.textContent = "Model: unavailable (missing ONNX assets)";
       return;
     }
 
     await loadTokenizer();
 
-    weightsBadge.textContent = `Weights: ${modelMeta?.weights?.repo_id || modelMeta?.weights?.source || "trained"}`;
+    if (modelMeta?.weights?.trained) {
+      weightsBadge.textContent = `Weights: ${modelMeta?.weights?.repo_id || modelMeta?.weights?.source || "trained"}`;
+    } else {
+      weightsBadge.textContent = "Weights: random-init fallback";
+    }
 
     const created = await createPipelineSessions();
     pipelineSessions = created.sessions;
@@ -945,6 +1168,7 @@ async function initialize() {
     setRunEnabled(true);
   } catch (error) {
     showError(String(error));
+    setParameterText(null);
   }
 }
 
