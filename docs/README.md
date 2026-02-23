@@ -16,16 +16,16 @@ bundle install
 
 ### Build
 
-Build the docs from `submodules/mlx/docs/`
+Build the docs from the repository root:
 
 ```
-doxygen && make html
+bundle exec rake docs:build
 ```
 
-View the docs by running a server in `submodules/mlx/docs/build/html/`:
+View the docs by running a server in `docs/build/html/`:
 
 ```sh
-ruby -run -e httpd submodules/mlx/docs/build/html -p <port>
+ruby -run -e httpd docs/build/html -p <port>
 ```
 
 and point your browser to `http://localhost:<port>`.

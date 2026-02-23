@@ -74,7 +74,13 @@ To build and install the MLX Ruby gem from source, first clone this repo:
 
 .. code-block:: shell
 
-   git clone https://github.com/skryl/mlx-ruby.git && cd mlx-ruby
+   git clone --recurse-submodules https://github.com/skryl/mlx-ruby.git && cd mlx-ruby
+
+If you cloned without submodules, initialize them before building:
+
+.. code-block:: shell
+
+   git submodule update --init --recursive
 
 Then build the gem and install locally:
 

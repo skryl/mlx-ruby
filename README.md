@@ -504,10 +504,14 @@ The repo’s Pages workflow builds docs together with the web demo for deploymen
 ## Repository layout
 
 - `lib/`: Ruby API surface (`core`, `nn`, `optimizers`, `dsl`, distributed
-  utilities), with Graph IR/ONNX implementation modules under
-  `lib/mlx-onnx/**`.
-- `ext/mlx/`: native extension build bridge (`extconf.rb`, C++ binding entry).
+  utilities), with ONNX public facade under `lib/mlx/onnx.rb` and ONNX harness
+  helpers under `lib/mlx-onnx/**`.
+- `ext/mlx/`: core native extension build bridge (`extconf.rb`, C++ binding
+  entry).
+- `ext/mlx-onnx/`: ONNX native binding layer loaded by the core extension.
 - `submodules/mlx/`: upstream MLX submodule.
+- `submodules/mlx-onnx/`: extracted ONNX core library submodule used by Ruby
+  bindings.
 - `examples/web/`: web demo model/export helpers (GPT-2, nanoGPT, Stable Diffusion).
 - `tasks/`: rake task implementations (`build`, `test`, `docs`, `benchmark`,
   `web`, training/assets exporters).
@@ -519,6 +523,12 @@ The repo’s Pages workflow builds docs together with the web demo for deploymen
 ## Troubleshooting
 
 - `missing MLX include dir`: initialize submodules (`git submodule update --init --recursive`).
+- `mlx/mlx-onnx revision mismatch detected`: sync the pinned submodules:
+
+```bash
+git submodule update --init --recursive submodules/mlx submodules/mlx-onnx
+```
+
 - Native extension does not load: rebuild manually:
 
 ```bash

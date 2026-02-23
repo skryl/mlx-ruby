@@ -50,8 +50,9 @@ conversion readiness and unsupported operations.
 Current MLX -> ONNX mapped ops
 ------------------------------
 
-The compatibility preflight and lowering path use native IR/ONNX mapping
-tables in ``ext/mlx-onnx/native.cpp``.
+The compatibility preflight and lowering path use native IR/ONNX mapping tables
+in ``submodules/mlx-onnx/src/mappings.cpp`` (and lowering logic in
+``submodules/mlx-onnx/src/lowering.cpp``).
 
 Direct op mapping table
 ^^^^^^^^^^^^^^^^^^^^^^^
