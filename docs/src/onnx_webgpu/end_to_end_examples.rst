@@ -73,6 +73,6 @@ Parity and harness checks
 
 Useful parity coverage examples:
 
-- ``test/integration/onnx/export_onnx_webgpu_harness_test.rb``
-- ``test/integration/onnx/onnx_webgpu_harness_smoke_test.rb``
-- ``test/integration/onnx/onnx_webgpu_harness_real_runtime_smoke_test.rb``
+- ``test/onnx/integration/export_onnx_webgpu_harness_test.rb``
+- ``test/onnx/integration/onnx_webgpu_harness_smoke_test.rb``
+- ``test/onnx/integration/onnx_webgpu_harness_real_runtime_smoke_test.rb``

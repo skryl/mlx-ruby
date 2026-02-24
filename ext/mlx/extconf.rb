@@ -69,6 +69,27 @@ def enforce_mlx_onnx_compatibility!(mlx_root:, mlx_onnx_root:)
   MSG
 end
 
+def patch_mlx_onnx_gcc_optional_shape_initlist!(mlx_onnx_root)
+  lowering_cpp = File.join(mlx_onnx_root, "src", "lowering.cpp")
+  return unless File.file?(lowering_cpp)
+
+  source = File.read(lowering_cpp)
+  patched = source
+    .gsub(
+      "std::optional<Shape>({work_shape[0], 1, seq_len})",
+      "std::optional<Shape>(Shape{work_shape[0], 1, seq_len})"
+    )
+    .gsub(
+      "std::optional<Shape>({seq_len})",
+      "std::optional<Shape>(Shape{seq_len})"
+    )
+
+  return if patched == source
+
+  File.write(lowering_cpp, patched)
+  puts "patched mlx-onnx lowering.cpp optional Shape initlists for GCC compatibility"
+end
+
 def rpath_flag(path)
   case RUBY_PLATFORM
   when /darwin/
@@ -188,6 +209,7 @@ mlx_install_dir = File.join(build_root, "install")
 jobs = [Etc.nprocessors, 1].max
 
 enforce_mlx_onnx_compatibility!(mlx_root: mlx_root, mlx_onnx_root: mlx_onnx_root)
+patch_mlx_onnx_gcc_optional_shape_initlist!(mlx_onnx_root)
 if ENV["MLX_EXTCONF_VALIDATE_ONLY"] == "1"
   puts "mlx-onnx compatibility check passed"
   exit 0

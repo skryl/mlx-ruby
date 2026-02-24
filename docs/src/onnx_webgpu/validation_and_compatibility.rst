@@ -51,8 +51,9 @@ Current MLX -> ONNX mapped ops
 ------------------------------
 
 The compatibility preflight and lowering path use native IR/ONNX mapping tables
-in ``submodules/mlx-onnx/src/mappings.cpp`` (and lowering logic in
-``submodules/mlx-onnx/src/lowering.cpp``).
+from the separate ``mlx-onnx`` repository (``src/mappings.cpp`` and
+``src/lowering.cpp``). In this repository, that source is vendored under
+``submodules/mlx-onnx``.
 
 Direct op mapping table
 ^^^^^^^^^^^^^^^^^^^^^^^

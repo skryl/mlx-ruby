@@ -15,14 +15,17 @@ Use ``MLX::ONNX.*`` methods as the public API. The implementation is split acros
 - ``MLX::ONNX::Native``
 - ``MLX::ONNX::WebGPUHarness``
 
+The ONNX lowering core now lives in the separate ``mlx-onnx`` repository and is
+consumed here via ``submodules/mlx-onnx``.
+
 Pipeline stages
 ---------------
 
 1. Capture MLX execution as Graph IR.
 2. Convert Graph IR to ONNX (JSON stub and/or binary model).
 3. Run optional compatibility diagnostics (native report).
-5. Package browser harness assets.
-6. Run smoke validation in Node/browser runtime.
+4. Package browser harness assets.
+5. Run smoke validation in Node/browser runtime.
 
 Pages in this section:
 
