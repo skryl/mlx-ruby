@@ -477,7 +477,7 @@ class BenchmarkTask
   end
 
   def karpathy_gpt2_dataset_path
-    File.join(@repo_root, "test", "fixtures", "karpathy.txt")
+    File.join(@repo_root, "test", "support", "fixtures", "karpathy.txt")
   end
 
   def benchmark_python(model_name)
@@ -1179,7 +1179,7 @@ class BenchmarkTask
   end
 
   def self.run_ir_coverage!
-    script = File.join(REPO_ROOT, "test", "parity", "scripts", "generate_onnx_webgpu_coverage_report.rb")
+    script = File.join(REPO_ROOT, "test", "support", "parity", "generate_onnx_webgpu_coverage_report.rb")
     run_command!([RbConfig.ruby, script], chdir: REPO_ROOT)
   end
 

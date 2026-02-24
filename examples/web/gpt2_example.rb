@@ -9,7 +9,7 @@ require "mlx/dsl"
 
 module Gpt2Example
   REPO_ROOT = File.expand_path("../..", __dir__)
-  DEFAULT_TRAINING_CORPUS_PATH = File.expand_path("test/fixtures/gpt2_example.txt", REPO_ROOT)
+  DEFAULT_TRAINING_CORPUS_PATH = File.expand_path("test/support/fixtures/karpathy.txt", REPO_ROOT)
 
   HF_REPO_ID = "hf-internal-testing/tiny-random-gpt2"
   HF_REQUIRED_FILES = %w[config.json model.safetensors].freeze

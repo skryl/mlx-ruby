@@ -9,7 +9,7 @@ require "mlx/dsl"
 
 module NanoGptExample
   REPO_ROOT = File.expand_path("../..", __dir__)
-  DEFAULT_DATASET_PATH = File.expand_path("test/fixtures/karpathy.txt", REPO_ROOT)
+  DEFAULT_DATASET_PATH = File.expand_path("test/support/fixtures/karpathy.txt", REPO_ROOT)
   DEFAULT_PROMPT = "To be, or not to be"
   HF_REPO_ID = "sosier/nanoGPT-shakespeare-char-weights-not-tied"
   HF_REQUIRED_FILES = %w[config.json model.safetensors].freeze

@@ -238,7 +238,7 @@ class DocExamplesTest < Minitest::Test
       if ENV["DOCS_TEST_FILE"] && !ENV["DOCS_TEST_FILE"].strip.empty?
         [File.expand_path("../../#{ENV["DOCS_TEST_FILE"]}", __dir__)]
       else
-        list_path = File.join(__dir__, "rst_files.txt")
+        list_path = File.join(RUBY_ROOT, "test", "support", "snapshots", "rst_files.txt")
         File.readlines(list_path, chomp: true).reject(&:empty?).map do |path|
           File.expand_path("../../#{path}", __dir__)
         end

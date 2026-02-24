@@ -517,7 +517,7 @@ The repo’s Pages workflow builds docs together with the web demo for deploymen
   `web`, training/assets exporters).
 - `web/`: static demo site, generated assets, ONNX WebGPU harness templates.
 - `test/`: unit/task/parity suites.
-- `test/parity/scripts/`: coverage/report generators.
+- `test/support/parity/`: coverage/report generators.
 - `docs/`: Sphinx + Doxygen documentation sources.
 
 ## Troubleshooting
@@ -554,8 +554,8 @@ ruby -e 'require "rbconfig"; puts RbConfig::CONFIG["host_cpu"]'
 ## Contributing
 
 - Open pull requests against this repository.
-- Keep parity snapshots in `test/snapshots/parity/` in sync with contract changes.
-- Keep generated parity artifacts under `test/tmp/reports/parity/` (not source-controlled paths).
+- Keep parity snapshots in `test/support/snapshots/parity/` in sync with contract changes.
+- Keep generated parity artifacts under `test/reports/` (not source-controlled paths).
 - Follow upstream MLX contributor guidance where applicable: [mlx/CONTRIBUTING.md](https://github.com/ml-explore/mlx/blob/main/CONTRIBUTING.md).
 
 CI currently runs on `ubuntu-22.04` and `macos-14` with Ruby `3.4` and `4.0`.

@@ -6,7 +6,7 @@ require_relative "test_helper"
 
 class Phase106PackageInventoryContractTest < Minitest::Test
   def test_package_inventory_generator_writes_contract_artifact
-    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_package_inventory.rb")
+    tool = File.join(RUBY_ROOT, "test", "support", "parity", "generate_package_inventory.rb")
     out_file = TestSupport.parity_generated_report_path("package_inventory.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)

@@ -4,7 +4,7 @@ module TestSupport
   module ParityPaths
     def parity_generated_reports_dir
       @parity_generated_reports_dir ||= begin
-        path = File.join(test_tmp_dir, "reports", "parity")
+        path = File.join(RUBY_ROOT, "test", "reports")
         FileUtils.mkdir_p(path)
         path
       end
@@ -15,7 +15,7 @@ module TestSupport
     end
 
     def parity_snapshot_dir
-      File.join(RUBY_ROOT, "test", "snapshots", "parity")
+      File.join(RUBY_ROOT, "test", "support", "snapshots", "parity")
     end
 
     def parity_snapshot_path(name)

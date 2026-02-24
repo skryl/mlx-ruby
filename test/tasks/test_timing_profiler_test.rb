@@ -2,7 +2,7 @@
 
 require "tempfile"
 require_relative "../support/test_helper"
-require_relative "../scripts/profile_test_timings"
+require_relative "../support/profile_helpers"
 
 class TestTimingProfilerTest < Minitest::Test
   def test_parse_verbose_log_extracts_test_method_durations

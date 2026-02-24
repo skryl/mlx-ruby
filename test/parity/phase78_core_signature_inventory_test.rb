@@ -8,7 +8,7 @@ class Phase78CoreSignatureInventoryTest < Minitest::Test
   def test_core_signature_inventory_contract
     skip "Python sources are unavailable in this environment" unless TestSupport.python_sources_available?
 
-    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_core_signature_inventory.rb")
+    tool = File.join(RUBY_ROOT, "test", "support", "parity", "generate_core_signature_inventory.rb")
     out_file = TestSupport.parity_generated_report_path("core_signature_inventory.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)

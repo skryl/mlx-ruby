@@ -8,7 +8,7 @@ class Phase77ApiInventoryContractTest < Minitest::Test
   def test_api_inventory_generator_writes_contract_artifact
     skip "Python sources are unavailable in this environment" unless TestSupport.python_sources_available?
 
-    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_api_inventory.rb")
+    tool = File.join(RUBY_ROOT, "test", "support", "parity", "generate_api_inventory.rb")
     out_file = TestSupport.parity_generated_report_path("api_inventory.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)

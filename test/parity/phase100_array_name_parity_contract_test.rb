@@ -6,7 +6,7 @@ require_relative "test_helper"
 
 class Phase100ArrayNameParityContractTest < Minitest::Test
   def test_python_array_names_have_no_missing_entries_in_ruby_inventory
-    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_api_inventory.rb")
+    tool = File.join(RUBY_ROOT, "test", "support", "parity", "generate_api_inventory.rb")
     out_file = TestSupport.parity_generated_report_path("api_inventory.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)

@@ -43,7 +43,7 @@ def load_dataset(path):
     if not os.path.exists(path):
         raise FileNotFoundError(
             f"GPT-2 fixture missing at {path}. "
-            "Add test/fixtures/karpathy.txt before running this benchmark."
+            "Add test/support/fixtures/karpathy.txt before running this benchmark."
         )
 
     with open(path, "rb") as handle:

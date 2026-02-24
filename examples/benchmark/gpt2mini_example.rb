@@ -135,10 +135,10 @@ module BenchmarkExamples
     end
 
     def prepare_dataset(repo_root)
-      data_path = File.join(repo_root, "test", "fixtures", "karpathy.txt")
+      data_path = File.join(repo_root, "test", "support", "fixtures", "karpathy.txt")
       unless File.exist?(data_path)
         raise "GPT-2 fixture missing at #{data_path}. " \
-              "Add test/fixtures/karpathy.txt before running this benchmark."
+              "Add test/support/fixtures/karpathy.txt before running this benchmark."
       end
 
       bytes = File.binread(data_path).bytes

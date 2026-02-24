@@ -2,7 +2,7 @@
 
 require "yaml"
 require_relative "test_helper"
-require_relative "scripts/phase_manifest_builder"
+require_relative "../support/parity/phase_manifest_builder"
 
 class Phase340PhaseManifestContractTest < Minitest::Test
   MANIFEST_PATH = File.join(RUBY_ROOT, "test", "parity", "manifest.yml").freeze

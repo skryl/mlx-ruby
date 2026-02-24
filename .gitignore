@@ -78,7 +78,6 @@ uv.lock
 *.pdb
 
 # Generated parity reports
-/test/parity/reports/
 /test/tmp/
 
 # Generated web demo assets (`rake web:assets`)

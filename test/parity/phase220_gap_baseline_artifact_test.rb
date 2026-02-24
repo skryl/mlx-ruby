@@ -6,7 +6,7 @@ require_relative "test_helper"
 
 class Phase220GapBaselineArtifactTest < Minitest::Test
   def test_gap_baseline_artifact_contains_method_and_module_coverage
-    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_gap_baseline_artifact.rb")
+    tool = File.join(RUBY_ROOT, "test", "support", "parity", "generate_gap_baseline_artifact.rb")
     out_file = TestSupport.parity_generated_report_path("gap_baseline.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)

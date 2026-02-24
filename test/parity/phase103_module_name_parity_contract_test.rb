@@ -6,7 +6,7 @@ require_relative "test_helper"
 
 class Phase103ModuleNameParityContractTest < Minitest::Test
   def test_top_level_module_name_parity_has_no_missing_entries
-    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_api_inventory.rb")
+    tool = File.join(RUBY_ROOT, "test", "support", "parity", "generate_api_inventory.rb")
     out_file = TestSupport.parity_generated_report_path("api_inventory.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)

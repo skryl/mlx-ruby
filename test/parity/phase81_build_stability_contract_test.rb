@@ -6,7 +6,7 @@ require_relative "test_helper"
 
 class Phase81BuildStabilityContractTest < Minitest::Test
   def test_build_stability_contract
-    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "check_build_stability.rb")
+    tool = File.join(RUBY_ROOT, "test", "support", "parity", "check_build_stability.rb")
     out_file = TestSupport.parity_generated_report_path("build_stability.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)

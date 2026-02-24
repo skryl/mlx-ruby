@@ -10,7 +10,7 @@ class Phase206FunctionalHarnessOptimizerLossModuleTest < Minitest::Test
   end
 
   def test_harness_optimizer_loss_module_section
-    tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_functional_golden_report.rb")
+    tool = File.join(RUBY_ROOT, "test", "support", "parity", "generate_functional_golden_report.rb")
     out_file = TestSupport.parity_generated_report_path("functional_golden_report.json")
     _stdout, stderr, status = Open3.capture3("ruby", tool)
     assert status.success?, "functional golden harness failed\nstderr:\n#{stderr}"
