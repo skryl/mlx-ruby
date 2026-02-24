@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stable Diffusion Kanji: Web Demo</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+      :root {
+        --bg: #f0f6ff;
+        --ink: #162433;
+        --card: #fbfdff;
+        --line: #24405f;
+        --accent: #006a83;
+        --accent-soft: #d2f5ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 10% 8%, #e0f7ff 0%, transparent 36%),
+          radial-gradient(circle at 88% 12%, #e6f2ff 0%, transparent 38%),
+          radial-gradient(circle at 72% 86%, #fff1d5 0%, transparent 36%),
+          var(--bg);
+      }
+
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 28px 20px 44px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5.3vw, 3.7rem);
+        line-height: 0.95;
+        letter-spacing: -0.03em;
+      }
+
+      .subtitle {
+        margin: 11px 0 18px;
+        max-width: 80ch;
+        opacity: 0.88;
+      }
+
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .badge {
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.82rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        padding: 6px 10px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 420px 1fr;
+        gap: 18px;
+      }
+
+      .card {
+        border: 1.8px solid var(--line);
+        border-radius: 16px;
+        background: var(--card);
+        box-shadow: 4px 4px 0 #00000012;
+      }
+
+      .controls {
+        padding: 16px;
+      }
+
+      .row {
+        margin-bottom: 12px;
+      }
+
+      .row label {
+        display: flex;
+        justify-content: space-between;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.84rem;
+        margin-bottom: 4px;
+      }
+
+      textarea,
+      select,
+      input[type="number"] {
+        width: 100%;
+        border: 1.8px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        color: var(--ink);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.94rem;
+        padding: 9px 11px;
+      }
+
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+
+      button {
+        border: 1.8px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        color: var(--ink);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.92rem;
+        padding: 9px 12px;
+      }
+
+      button.primary {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+      }
+
+      button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+
+      .output {
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .panel {
+        border: 1.5px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 11px;
+      }
+
+      .panel h2 {
+        margin: 0 0 8px;
+        font-size: 0.95rem;
+        letter-spacing: 0.01em;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.82rem;
+      }
+
+      .status {
+        display: grid;
+        gap: 4px;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.82rem;
+      }
+
+      .latent-canvas {
+        width: min(100%, 420px);
+        aspect-ratio: 1 / 1;
+        border: 1.5px solid var(--line);
+        border-radius: 10px;
+        background:
+          repeating-linear-gradient(45deg, #edf6ff, #edf6ff 8px, #f9fcff 8px, #f9fcff 16px);
+        image-rendering: pixelated;
+      }
+
+      .generated-canvas {
+        width: min(100%, 420px);
+        aspect-ratio: 1 / 1;
+        border: 1.5px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        image-rendering: pixelated;
+      }
+
+      .error {
+        margin-top: 12px;
+        border: 2px solid #9b2f2f;
+        border-radius: 10px;
+        background: #ffdede;
+        padding: 10px;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+        font-size: 0.82rem;
+        white-space: pre-wrap;
+        display: none;
+      }
+
+      @media (max-width: 940px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Stable Diffusion Kanji</h1>
+      <p class="subtitle">
+        Stable Diffusion Kanji pipeline exported locally to ONNX from pretrained Hugging Face weights (text encoder, UNet, and VAE decoder).
+        Click once to run multi-step denoising in browser and decode the final latents into pixel-space output.
+      </p>
+
+      <div class="badges">
+        <span class="badge">Model: SD Kanji (pretrained)</span>
+        <span class="badge" id="badge-weights">Weights: loading...</span>
+        <span class="badge" id="badge-provider">Provider: loading...</span>
+        <span class="badge" id="badge-onnx-size">ONNX Size: loading...</span>
+        <span class="badge" id="badge-parameters">Parameters: loading...</span>
+        <span class="badge" id="badge-timing">Inference: -- ms</span>
+      </div>
+
+      <section class="grid">
+        <article class="card controls">
+          <div class="row">
+            <label for="preset">
+              <span>Prompt preset</span>
+              <span id="preset-name">--</span>
+            </label>
+            <select id="preset"></select>
+          </div>
+
+          <div class="row">
+            <label for="prompt"><span>Prompt</span><span>Conditioning text</span></label>
+            <textarea id="prompt" placeholder="Describe a scene"></textarea>
+          </div>
+
+          <div class="row">
+            <label for="seed"><span>Seed</span><span>Deterministic latents</span></label>
+            <input id="seed" type="number" min="0" step="1" value="1337">
+          </div>
+
+          <div class="row">
+            <label for="timestep"><span>Timestep</span><span id="timestep-value">999.00</span></label>
+            <input id="timestep" type="range" min="1" max="999" step="1" value="999">
+          </div>
+
+          <div class="row">
+            <label for="steps"><span>Denoise steps</span><span id="steps-value">1</span></label>
+            <input id="steps" type="number" min="1" max="64" step="1" value="1">
+          </div>
+
+          <div class="row">
+            <label for="guidance"><span>Guidance scale</span><span id="guidance-value">0.00</span></label>
+            <input id="guidance" type="range" min="0" max="14" step="0.25" value="0">
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="run" type="button" disabled>Generate Image</button>
+            <button id="new-seed" type="button">Random Seed</button>
+          </div>
+
+          <pre class="error" id="error-box"></pre>
+        </article>
+
+        <article class="card output">
+          <section class="panel">
+            <h2>Generated Image</h2>
+            <canvas class="generated-canvas" id="generated-canvas" width="64" height="64"></canvas>
+          </section>
+          <section class="panel">
+            <h2>Latent Preview</h2>
+            <canvas class="latent-canvas" id="latent-canvas" width="64" height="64"></canvas>
+          </section>
+          <section class="panel">
+            <h2>Run Stats</h2>
+            <div class="status">
+              <div id="status-model">Model: loading...</div>
+              <div id="status-io">I/O: --</div>
+              <div id="status-output">Output: --</div>
+              <div id="status-stats">Stats: --</div>
+              <div id="status-onnx-size">ONNX Size: loading...</div>
+            </div>
+          </section>
+          <section class="panel">
+            <h2>Preview Values</h2>
+            <pre id="preview-values">--</pre>
+          </section>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

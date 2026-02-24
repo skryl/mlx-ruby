@@ -4,32 +4,60 @@
 [![RubyGems](https://img.shields.io/gem/v/mlx.svg)](https://rubygems.org/gems/mlx)
 [![Documentation](https://img.shields.io/badge/docs-MLX%20Ruby-blue)](https://skryl.github.io/mlx-ruby)
 
-[Full Documentation](https://skryl.github.io/mlx-ruby)
+## Index
+
+- [Full Docs](https://skryl.github.io/mlx-ruby)
+- [Examples](https://github.com/skryl/mlx-ruby-examples)
+- [Ruby DSL Docs](https://skryl.github.io/mlx-ruby/ruby_dsl/index.html)
+- [ONNX/WebGPU Docs](https://skryl.github.io/mlx-ruby/ruby/export.html#onnx-webgpu-support)
+- [WebGPU Demo](https://skryl.github.io/mlx-ruby/demo/)
+
+## About
 
 Ruby bindings for [MLX](https://github.com/ml-explore/mlx): a NumPy-like array framework for machine learning.
 
 This repository packages:
 
 - A native Ruby extension backed by the upstream C++ MLX runtime.
-- Ruby APIs that mirror the core MLX package layout: `MLX::Core`, `MLX::NN`, `MLX::Optimizers`, `MLX::Utils`, and distributed helpers.
-- Parity and contract tooling used to keep the Ruby surface aligned with upstream MLX behavior.
+- Ruby APIs for `MLX::Core`, `MLX::NN`, `MLX::Optimizers`, `MLX::Utils`,
+  distributed helpers, and `MLX::DSL`.
+- Graph IR -> ONNX export plus browser harness tooling for WebGPU/wasm paths.
+- Parity/contract tooling and benchmark adapters for local models and
+  `mlx-ruby-examples`.
 
 ## Highlights
 
 - Lazy arrays and dynamic graph construction.
 - Function transforms (`grad`, `value_and_grad`, `vmap`, `jvp`, `vjp`, `compile`, and more).
 - Neural-network layers, losses, initialization, and optimizers.
-- Device-aware execution (CPU/GPU support exposed through MLX), including full Metal support on Apple silicon.
-- Extensive parity testing and generated report artifacts.
+- Ruby DSL model/training primitives (`train_step`, trainer, checkpoints,
+  data pipelines, experiments).
+- Device-aware execution (`cpu`/`gpu`, including Metal-backed GPU on Apple
+  silicon when available).
+- Graph IR validation, ONNX export, and WebGPU browser harness generation.
+- Extensive parity testing (op-level, model fixture, browser harness, and
+  examples-submodule coverage).
 
 ## Requirements
 
-- Ruby `>= 3.3` (from `mlx.gemspec`).
-- Git (with submodule support).
-- CMake `>= 3.25`.
-- A C++20-capable toolchain.
-- macOS: Xcode command-line tools and CMake.
-- Linux: standard build tools plus BLAS/LAPACK headers (CI uses `build-essential cmake libopenblas-dev liblapacke-dev`).
+- Core build/runtime:
+  - Ruby `>= 3.3` (from `mlx.gemspec`)
+  - Git (with submodule support)
+  - CMake `>= 3.25`
+  - C++20-capable toolchain
+  - macOS: Xcode command-line tools + Metal toolchain
+  - Linux: standard build tools + BLAS/LAPACK headers (`build-essential cmake
+    libopenblas-dev liblapacke-dev`)
+- ONNX export / benchmark helpers:
+  - Python 3 with packages from `requirements.txt`
+  - `onnx` package available for parity/check utilities in tests and tooling
+- Web smoke/harness workflows:
+  - Node.js + `npm` (for `playwright` and `onnxruntime-web`)
+- Docs build:
+  - Python 3 + `pip`
+  - `doxygen`
+  - `make`
+  - Python deps from `requirements.txt`
 
 ## Installation
 
@@ -61,6 +89,7 @@ gem install mlx
 git clone --recurse-submodules https://github.com/skryl/mlx-ruby.git
 cd mlx-ruby
 bundle install
+bundle exec rake build
 bundle exec rake test
 ```
 
@@ -91,13 +120,19 @@ bundle exec ruby -e 'require "mlx"; puts MLX::VERSION; puts "native=#{MLX.native
 
 ## Examples
 
-For end-to-end examples, see [`skryl/mlx-ruby-examples`](https://github.com/skryl/mlx-ruby-examples).
+Primary end-to-end examples live in
+[`skryl/mlx-ruby-examples`](https://github.com/skryl/mlx-ruby-examples).
 
 - [Transformer](https://github.com/skryl/mlx-ruby-examples/tree/main/transformer_lm)
 - [LLaMA](https://github.com/skryl/mlx-ruby-examples/tree/main/llms/llama)
 - [LoRA](https://github.com/skryl/mlx-ruby-examples/tree/main/lora)
 - [Stable Diffusion](https://github.com/skryl/mlx-ruby-examples/tree/main/stable_diffusion)
 - [Whisper](https://github.com/skryl/mlx-ruby-examples/tree/main/whisper)
+
+Web demo model/export scripts in this repo are under:
+
+- `examples/web/`
+
 
 ## Quickstart
 
@@ -115,50 +150,6 @@ p y.to_a           # => [1.414..., 1.732..., 2.0]
 ```
 
 ### Minimal trainable module
-
-#### Non-DSL
-
-```ruby
-require "mlx"
-
-mx = MLX::Core
-
-class LinearRegressor < MLX::NN::Module
-  def initialize
-    super()
-    self.linear = MLX::NN::Linear.new(3, 1)
-  end
-
-  def call(x)
-    linear.call(x)
-  end
-end
-
-model = LinearRegressor.new
-optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-2)
-
-loss_and_grad = MLX::NN.value_and_grad(
-  model,
-  lambda do |inputs, targets|
-    diff = model.call(inputs) - targets
-    mx.mean(diff * diff)
-  end
-)
-
-x = mx.array([[1.0, 2.0, 3.0], [2.0, 1.0, 0.0]], mx.float32)
-y = mx.array([[1.0], [0.0]], mx.float32)
-
-5.times do |step|
-  loss, grads = loss_and_grad.call(x, y)
-  optimizer.update(model, grads)
-  mx.eval(loss, model.parameters, optimizer.state)
-  puts "step=#{step} loss=#{loss.item}"
-end
-```
-
-Important: when defining `MLX::NN::Module`, register trainable arrays/submodules with `self.<name> = ...` (not only `@ivar = ...`) so they are tracked in `parameters` and optimized correctly.
-
-#### DSL
 
 ```ruby
 require "mlx"
@@ -193,55 +184,6 @@ end
 ```
 
 ### Small CNN (single training step)
-
-#### Non-DSL
-
-```ruby
-require "mlx"
-
-mx = MLX::Core
-
-class SmallCNN < MLX::NN::Module
-  def initialize(num_classes: 10)
-    super()
-    self.conv1 = MLX::NN::Conv2d.new(1, 16, 3, padding: 1)
-    self.conv2 = MLX::NN::Conv2d.new(16, 32, 3, padding: 1)
-    self.relu = MLX::NN::ReLU.new
-    self.pool = MLX::NN::MaxPool2d.new(2, stride: 2)
-    self.fc1 = MLX::NN::Linear.new(32 * 7 * 7, 64)
-    self.fc2 = MLX::NN::Linear.new(64, num_classes)
-  end
-
-  def call(x)
-    y = pool.call(relu.call(conv1.call(x)))
-    y = pool.call(relu.call(conv2.call(y)))
-    y = MLX::Core.reshape(y, [y.shape[0], 32 * 7 * 7])
-    y = relu.call(fc1.call(y))
-    fc2.call(y)
-  end
-end
-
-model = SmallCNN.new(num_classes: 10)
-optimizer = MLX::Optimizers::Adam.new(learning_rate: 1e-3)
-
-loss_and_grad = MLX::NN.value_and_grad(
-  model,
-  lambda do |images, labels|
-    logits = model.call(images)
-    MLX::NN.cross_entropy(logits, labels, reduction: "mean")
-  end
-)
-
-images = mx.random_uniform([4, 28, 28, 1], 0.0, 1.0, mx.float32)
-labels = mx.array([1, 3, 4, 7], mx.int32)
-
-loss, grads = loss_and_grad.call(images, labels)
-optimizer.update(model, grads)
-mx.eval(loss, model.parameters, optimizer.state)
-puts "cnn_loss=#{loss.item}"
-```
-
-#### DSL
 
 ```ruby
 require "mlx"
@@ -292,73 +234,6 @@ puts "cnn_loss=#{loss.item}"
 ```
 
 ### Karpathy-style nano GPT (single training step)
-
-#### Non-DSL
-
-```ruby
-require "mlx"
-
-mx = MLX::Core
-vocab_size = 65
-seq_len = 32
-batch_size = 4
-dims = 128
-heads = 4
-layers = 2
-
-class NanoGpt < MLX::NN::Module
-  def initialize(vocab_size:, seq_len:, dims:, heads:, layers:)
-    super()
-    self.token_embedding = MLX::NN::Embedding.new(vocab_size, dims)
-    self.pos_embedding = MLX::NN::Embedding.new(seq_len, dims)
-    self.blocks = Array.new(layers) do
-      MLX::NN::TransformerEncoderLayer.new(
-        dims,
-        heads,
-        mlp_dims: dims * 4,
-        dropout: 0.0,
-        norm_first: true
-      )
-    end
-    self.norm = MLX::NN::LayerNorm.new(dims)
-    self.head = MLX::NN::Linear.new(dims, vocab_size)
-    @causal_mask = MLX::NN::MultiHeadAttention.create_additive_causal_mask(seq_len)
-  end
-
-  def call(input_ids)
-    positions = MLX::Core.arange(0, input_ids.shape[1], 1, MLX::Core.int32)
-    hidden = MLX::Core.add(token_embedding.call(input_ids), pos_embedding.call(positions))
-    blocks.each { |block| hidden = block.call(hidden, @causal_mask) }
-    head.call(norm.call(hidden))
-  end
-end
-
-tokens = Array.new(batch_size) { Array.new(seq_len) { rand(vocab_size) } }
-targets = tokens.map { |row| row[1..] + [0] }
-
-input_ids = mx.array(tokens, mx.int32)
-target_ids = mx.array(targets, mx.int32)
-
-model = NanoGpt.new(vocab_size: vocab_size, seq_len: seq_len, dims: dims, heads: heads, layers: layers)
-optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-3)
-
-loss_and_grad = MLX::NN.value_and_grad(
-  model,
-  lambda do |ids, labels|
-    logits = model.call(ids)
-    logits2d = MLX::Core.reshape(logits, [batch_size * seq_len, vocab_size])
-    labels1d = MLX::Core.reshape(labels, [batch_size * seq_len])
-    MLX::NN.cross_entropy(logits2d, labels1d, reduction: "mean")
-  end
-)
-
-loss, grads = loss_and_grad.call(input_ids, target_ids)
-optimizer.update(model, grads)
-mx.eval(loss, model.parameters, optimizer.state)
-puts "nanogpt_loss=#{loss.item}"
-```
-
-#### DSL
 
 ```ruby
 require "mlx"
@@ -414,305 +289,105 @@ loss = step.call(input_ids: input_ids, target_ids: target_ids)
 puts "nanogpt_loss=#{loss.item}"
 ```
 
-### Ruby DSL
-
-`MLX::DSL` provides Ruby-style declarations on top of the existing `MLX::NN::Module` behavior.
-
-```ruby
-require "mlx"
-
-class Mlp < MLX::DSL::Model
-  option :in_dim
-  option :hidden_dim, default: 128
-  option :out_dim
-
-  layer :net do
-    sequential do
-      linear in_dim, hidden_dim
-      relu
-      linear hidden_dim, out_dim
-    end
-  end
-
-  def call(x)
-    net.call(x)
-  end
-end
-
-model = Mlp.new(in_dim: 32, out_dim: 10)
-```
-
-Declaration factories can also accept dynamic constructor args/kwargs:
-
-```ruby
-class Projector < MLX::DSL::Model
-  option :dims, default: 64
-  layer :proj, MLX::NN::Linear, -> { dims }, -> { dims }, bias: false
-end
-```
-
-You can also mix the DSL into existing `MLX::NN::Module` subclasses:
-
-```ruby
-class Block < MLX::NN::Module
-  include MLX::DSL::ModelMixin
-
-  option :dims, default: 64
-  layer(:proj) { linear dims, dims, bias: false }
-  layer(:norm) { layer_norm dims }
-
-  def call(x)
-    norm.call(proj.call(x))
-  end
-end
-```
-
-`train_step` wraps `value_and_grad` and optimizer updates, and also supports optional compile/sync controls:
-
-```ruby
-optimizer = MLX::Optimizers::AdamW.new(learning_rate: 1e-3)
-
-step = model.train_step(
-  optimizer: optimizer,
-  clip_grad_norm: 1.0,
-  compile: { shapeless: true }, # or true / false
-  sync: :step                   # :none or :step
-) do |x:, y:|
-  logits = model.call(x)
-  MLX::NN.cross_entropy(logits, y, reduction: "mean")
-end
-
-step.after_step { |ctx| puts "step=#{ctx[:step]} loss=#{ctx[:loss].item}" }
-loss = step.call(x: batch_x, y: batch_y)
-```
-
-A small trainer wrapper is also available:
-
-```ruby
-trainer = model.trainer(optimizer: optimizer, compile: { shapeless: true }, sync: :epoch) do |x:, y:|
-  logits = model.call(x)
-  MLX::NN.cross_entropy(logits, y, reduction: "mean")
-end
-
-trainer.before_epoch { |ctx| puts "epoch=#{ctx[:epoch]}" }
-trainer.after_batch { |ctx| puts "batch=#{ctx[:batch_index]} loss=#{ctx[:loss_value]}" }
-trainer.on(:after_batch, every: 10, priority: -10) { |ctx| puts "milestone batch=#{ctx[:batch_index]}" }
-trainer.on(:after_batch, if: ->(ctx) { ctx[:epoch] > 0 }) { |ctx| puts "warm epoch=#{ctx[:epoch]}" }
-
-train_data = ->(epoch, kind:) { shuffled_batches_for(epoch, split: kind) }
-validation_data = ->(epoch:) { heldout_batches_for(epoch) }
-
-pipeline_data = MLX::DSL::Data
-  .from(train_data.call(0, kind: :train))
-  .map { |item, index| preprocess(item, index: index) }
-  .batch(32)
-  .take(100)
-
-losses = trainer.fit(train_data, epochs: 2)
-
-trainer.register_collate(:xy_base, { x: 0, y: 1 })
-trainer.register_collate(:xy_with_meta, { meta: 2 }, extends: [:xy_base])
-
-report = trainer.fit_report(
-  train_data,
-  epochs: 5,
-  resume_from: "checkpoints/latest.bin",
-  collate: :xy_with_meta,
-  reduce: :mean,
-  limit: ->(epoch:, kind:) { kind == :train && epoch.zero? ? 64 : nil },
-  strict_data_reuse: true,
-  train_transform: ->(batch, epoch:, batch_index:) { collate_train(batch, epoch: epoch, batch_index: batch_index) },
-  validation_data: validation_data,
-  validation_limit: ->(epoch:, kind:) { kind == :validation && epoch.zero? ? 16 : 32 },
-  validation_collate: ->(batch, epoch:, batch_index:, kind:) { collate_eval(batch, epoch: epoch, batch_index: batch_index, kind: kind) },
-  validation_reduce: :mean,
-  validation_transform: ->(batch, epoch:) { collate_eval(batch, epoch: epoch) },
-  monitor: :val_loss,
-  monitor_mode: :min,
-  checkpoint_path: ->(epoch:, next_epoch:, monitor:, monitor_name:) {
-    "checkpoints/epoch-#{next_epoch}-#{monitor_name}-#{monitor}.bin"
-  },
-  save_best: true,
-  keep_losses: false,
-  metadata: { "run" => "exp-42" }
-)
-
-puts "#{report['monitor_name']}=#{report['best_metric']}"
-puts "progress=#{report['epochs_completed']}/#{report['epochs_target']}"
-```
-
-Preset/dataflow helpers reduce repeated fit keyword boilerplate:
-
-```ruby
-trainer = trainer.with_fit_defaults(reduce: :mean, monitor_mode: :min)
-trainer.register_fit_preset(:fast_eval, epochs: 3, limit: 128, validation_limit: 32)
-trainer.register_dataflow(
-  :xy_batches,
-  train: { collate: { x: 0, y: 1 }, limit: 256 },
-  validation: { collate: { x: :input, y: :target }, reduce: :mean }
-)
-trainer.batch_schema(train: { x: 0, y: 1 }, validation: { x: :input, y: :target })
-
-report = trainer.fit_report_with(
-  :fast_eval,
-  train_data,
-  validation_data: validation_data,
-  collate: :auto,
-  validation_collate: :auto,
-  **trainer.use_dataflow(:xy_batches)
-)
-```
-
-Task shortcuts are also available for common training modes:
-
-```ruby
-report = trainer.fit_task_report(:classification, train_data, epochs: 5, validation_data: validation_data)
-lm_report = trainer.fit_task_report(:language_modeling, train_data, epochs: 3)
-```
-
-Split plans let you package train/validation wiring once and pass it directly to `fit` / `fit_report`:
-
-```ruby
-plan = MLX::DSL.splits do
-  shared collate: :xy
-  train train_data
-  validation validation_data
-end
-
-report = trainer.fit_report(plan, epochs: 5)
-```
-
-Artifact policies reduce repetitive checkpoint/resume/run-bundle setup:
-
-```ruby
-trainer.artifact_policy(
-  checkpoint: { path: "checkpoints/ep-%{epoch}.bin", strategy: :latest },
-  retention: { keep_last_n: 3 },
-  resume: :latest,
-  run_bundle: { enabled: true, path: "artifacts/auto_bundle.json" }
-)
-```
-
-Batch execution errors raised during training/validation include epoch and batch index context for faster debugging.
-`resume_from:` restores trainer state (`epoch`, `best_metric`, `stale_epochs`) from checkpoint metadata and continues from the next epoch.
-It accepts a checkpoint path, run-bundle JSON path, run-bundle hash, inline checkpoint payload hash, or a callable loader that returns any of those.
-
-Checkpoint helpers support both legacy marshal (`.bin`) and native weights formats (`.npz`, `.safetensors`):
-
-```ruby
-model.save_checkpoint("checkpoints/latest.npz", optimizer: optimizer, metadata: { "run" => "exp-42" })
-payload = model.load_checkpoint("checkpoints/latest.npz", optimizer: optimizer, strict: true)
-puts payload["format"] # => "mlx_dsl_checkpoint_v2_native"
-```
-
-Checkpoint save paths create parent directories automatically when needed.
-Extensionless load paths auto-detect `*.npz` / `*.safetensors` files when present.
-
-Trainer run bundles capture report/config/checkpoint metadata for reproducible resumes:
-
-```ruby
-bundle_path = trainer.save_run_bundle("artifacts/run_bundle.json", report: report, config: { "seed" => 42 })
-resumed_report = trainer.fit_report(train_data, epochs: 10, resume_from: bundle_path)
-```
-
-Runnable DSL examples:
-
-- `examples/dsl/streaming_factory.rb`
-- `examples/dsl/validation_monitor.rb`
-- `examples/dsl/memory_friendly_reporting.rb`
-- `examples/dsl/collate_schemas.rb`
-- `examples/dsl/compile_sync_and_native_checkpoint.rb`
-
-For non-linear graph composition, the DSL also supports branch/merge helpers:
-
-```ruby
-class ResidualHead < MLX::DSL::Model
-  option :dims, default: 64
-
-  layer :merge do
-    concat(axis: -1) do
-      identity
-      residual do
-        linear dims, dims
-      end
-    end
-  end
-
-  def call(x)
-    merge.call(x)
-  end
-end
-```
-
-Inline callable layers are also supported for quick experiments without defining standalone module classes:
-
-```ruby
-layer :adapter do
-  sequential do
-    linear dims, dims
-    fn { |x| MLX::Core.multiply(x, 0.5) }
-  end
-end
-```
-
-You can also build repeated blocks with less boilerplate:
-
-```ruby
-layer :tower do
-  stack(4, MLX::NN::Linear, dims, dims)
-end
-```
-
-A unified experiment DSL is available for declarative run wiring:
-
-```ruby
-exp = MLX::DSL.experiment("mnist") do
-  model { model }
-  optimizer { optimizer }
-  trainer { |x:, y:| MLX::NN.cross_entropy(model.call(x), y, reduction: "mean") }
-  data train: train_data, validation: validation_data
-  artifacts checkpoint_path: "checkpoints/ep-%{epoch}.bin"
-end
-
-report = exp.report(epochs: 5)
-```
-
-`layer` is polymorphic and accepts module instances, module classes, callables, or a block:
-
-```ruby
-layer AddOne.new
-layer AddN, 4
-layer ->(x) { MLX::Core.multiply(x, 2.0) }
-layer { |x| MLX::Core.add(x, 1.0) }
-```
-
-Parameter-group optimizers:
-
-```ruby
-grouped = model.optimizer_groups do
-  group(/^encoder\./) { MLX::Optimizers::AdamW.new(learning_rate: 1e-4) }
-  group(nil) { MLX::Optimizers::SGD.new(learning_rate: 1e-2) }
-end
-```
-
-Introspection helpers:
-
-```ruby
-puts model.parameter_count
-puts model.trainable_parameter_count
-pp model.parameter_paths(matcher: /^encoder\./)
-puts model.summary(as: :text)
-```
-
 ## Device selection
 
-Default device is chosen at load time. You can override it:
+Default device selection runs during `require "mlx"`:
+
+- `MLX_DEFAULT_DEVICE=cpu|gpu|metal`
+- fallback: `DEVICE=cpu|gpu|metal`
+
+On systems without Metal-backed GPU support, `gpu`/`metal` requests fall back
+to CPU.
+
+Example:
 
 ```bash
 MLX_DEFAULT_DEVICE=gpu bundle exec ruby your_script.rb
 ```
 
-Supported values are `cpu`, `gpu`, or `metal` (`metal` maps to GPU selection when available). `DEVICE` is also accepted as a fallback environment variable.
+## Onnx/WebGPU Support
+
+MLX Ruby exposes Graph IR/ONNX/WebGPU entrypoints on `MLX::ONNX`.
+
+Architecture boundary:
+
+- Public API (`MLX::ONNX`):
+  - `export_onnx`
+  - `export_onnx_json`
+  - `export_onnx_compatibility_report`
+  - `export_graph_ir`
+  - `export_graph_ir_json`
+  - `graph_ir_to_onnx`
+  - `graph_ir_to_onnx_json`
+- Internal implementation modules:
+  - `MLX::ONNX`
+  - `MLX::ONNX::Native`
+  - `MLX::ONNX::WebGPUHarness`
+
+End-to-end flow:
+
+1. Export Graph IR hash with `MLX::ONNX.export_graph_ir` (or JSON debug
+   payload with `MLX::ONNX.export_graph_ir_json`).
+2. Generate ONNX JSON debug stubs with `MLX::ONNX.graph_ir_to_onnx_json`
+   or directly with `MLX::ONNX.export_onnx_json`.
+3. Run ONNX export readiness diagnostics with
+   `MLX::ONNX.export_onnx_compatibility_report` and inspect
+   `unsupported_ops`.
+4. Export binary ONNX with `MLX::ONNX.graph_ir_to_onnx` or directly with
+   `MLX::ONNX.export_onnx` (`external_data` options are available for large
+   models).
+5. Package browser harness assets with
+   `MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness`.
+6. Verify runtime behavior with
+   `MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness`.
+
+Harness artifacts from `MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness`:
+
+- `model.onnx`
+- `harness.manifest.json`
+- `inputs.example.json`
+- `index.html`
+- `harness.js`
+- optional external data file (for example `model.data`)
+
+Smoke telemetry from `MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness` uses
+`onnx_webgpu_telemetry_v1` and reports provider selection/fallback details
+(`selected_provider`, `requested_providers`, `fallback_used`) plus timing
+fields (`run_timings_ms`, `model_load_latency_ms`,
+`first_inference_latency_ms`, `steady_state_inference_latency_ms`).
+
+Operational requirements:
+
+- `MLX::ONNX.export_onnx` and `MLX::ONNX.graph_ir_to_onnx` require a
+  path-like target (not IO).
+- Browser smoke tests require Node.js + Playwright (`web/`) and optionally
+  local `onnxruntime-web` assets.
+- Harness execution providers are `webgpu` and `wasm`.
+- `web:assets` exports GPT-2, nanoGPT Shakespeare, and Stable Diffusion assets
+  each run via Hugging Face checkpoints.
+
+Demo asset workflows:
+
+- Generate browser assets: `bundle exec rake web:assets`
+- Start local demo server: `bundle exec rake web:start` (or `bundle exec rake web:serve`)
+
+Web Demo quickstart:
+
+```bash
+bundle exec rake web:assets
+bundle exec rake web:serve
+```
+
+Then open:
+
+- `http://127.0.0.1:3030/`
+- `http://127.0.0.1:3030/demo/gpt2/`
+- `http://127.0.0.1:3030/demo/nanogpt/`
+- `http://127.0.0.1:3030/demo/stable_diffusion/`
+
+API reference:
+
+- `docs/src/ruby/export.rst`
 
 ## Development
 
@@ -734,6 +409,12 @@ bundle exec rake clean
 bundle exec rake test
 ```
 
+Test task shortcuts:
+
+- CPU-only: `bundle exec rake "test[cpu]"`
+- GPU-only: `bundle exec rake "test[gpu]"`
+- Installed gem artifact test: `bundle exec rake test:gem`
+
 Strict mode (per-file timeout):
 
 ```bash
@@ -748,16 +429,16 @@ List tasks:
 bundle exec rake -T
 ```
 
-Run one benchmark:
+Run one benchmark lane:
 
 ```bash
-bundle exec rake benchmark:transformer
+bundle exec rake "benchmark:cpu[local]"
 ```
 
 Run all benchmark suites:
 
 ```bash
-bundle exec rake benchmark:all
+bundle exec rake "benchmark:all[local,examples]"
 ```
 
 Install benchmark Python dependencies into your active Python environment (for asdf users, this is the Python selected by your current shell / `.tool-versions`):
@@ -766,12 +447,12 @@ Install benchmark Python dependencies into your active Python environment (for a
 bundle exec rake benchmark:deps
 ```
 
-Benchmark environment variables:
+Common benchmark environment variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DEVICE` | `gpu` | Compute device (`cpu`, `gpu`, or `metal`) |
-| `ITERATIONS` | `50` | Timed iterations |
+| `RUNS` | `50` | Timed iterations (`ITERATIONS` is accepted for compatibility) |
 | `WARMUP` | `10` | Warmup iterations |
 | `BATCH` | `8` | Batch size |
 | `SEQUENCE_LENGTH` | `128` | Source sequence length |
@@ -780,53 +461,74 @@ Benchmark environment variables:
 | `HEADS` | `8` | Attention heads |
 | `LAYERS` | `4` | Number of layers |
 | `PYTHON` | `python3` | Python executable for cross-language comparison |
+| `BENCHMARK_DEVICES` | `cpu,gpu` | Devices for top-level `rake benchmark` |
+| `EXAMPLES_MODE` | `dsl` | Examples-submodule mode (`dsl` or `no_dsl`) |
+| `WEBGPU_TIMEOUT` | `180` | WebGPU harness timeout seconds |
+| `WEBGPU_WARMUP` | benchmark warmup | WebGPU warmup runs |
+| `WEBGPU_MEASURE` | benchmark runs | WebGPU measured runs |
+| `REQUIRE_WEBGPU` | unset | Fail instead of skip when WebGPU provider is unavailable |
 
-### Performance
-
-MLX Ruby has full Metal support through the upstream MLX runtime. On Apple silicon, use `DEVICE=metal` (or `DEVICE=gpu`) to run on Metal.
-
-The table below is from:
+Quick benchmark smoke command:
 
 ```bash
-bundle exec rake benchmark WARMUP=50 ITERATIONS=1000
+bundle exec rake "benchmark:cpu[local]" RUNS=5 WARMUP=1
 ```
-
-Ratios are shown per column (`py_cpu/gpu`, `rb_cpu/gpu`, `rb/py_cpu`, `rb/py_gpu`). Parity columns come from harness checks (`input_shape`, `input_digest`, `output_shape`, `reference_output_digest`).
-
-| model | py_cpu_s | py_gpu_s | py_cpu/gpu | rb_cpu_s | rb_gpu_s | rb_cpu/gpu | rb/py_cpu | rb/py_gpu | in_shape (cpu/gpu) | in_content (cpu/gpu) | out_shape (cpu/gpu) | out_content (cpu/gpu) |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: | :---: |
-| transformer | 0.034 | 0.008 | 4.48x | 0.029 | 0.008 | 3.67x | 0.84x | 1.03x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
-| cnn | 0.004 | 0.000 | 9.54x | 0.004 | 0.001 | 4.68x | 1.05x | 2.13x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
-| mlp | 0.000 | 0.000 | 1.66x | 0.000 | 0.000 | 1.28x | 0.98x | 1.27x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
-| rnn | 0.006 | 0.004 | 1.39x | 0.007 | 0.007 | 0.91x | 1.16x | 1.79x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
-| karpathy_gpt2 | 0.058 | 0.011 | 5.06x | 0.060 | 0.016 | 3.84x | 1.03x | 1.36x | ✓/✓ | ✓/✓ | ✓/✓ | ✓/✓ |
 
 ### Build docs
 
+From the repo root:
+
 ```bash
+# One-time setup
+brew install doxygen                    # macOS (or install doxygen via apt on Linux)
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r docs/requirements.txt
-cd docs
-doxygen
-make html
+pip install -r requirements.txt
+bundle install
+
+# Generate docs
+bundle exec rake docs:build
 ```
 
-Built docs are placed under `docs/build/html`.
+Docs are written to `docs/build/html`.
+
+```bash
+# Quick local preview
+ruby -run -e httpd docs/build/html -p 8000
+```
+
+Then open `http://localhost:8000/`.
+
+The repo’s Pages workflow builds docs together with the web demo for deployment.
 
 ## Repository layout
 
-- `lib/`: Ruby API surface and compatibility layer.
-- `ext/mlx/`: native extension (`extconf.rb`, C++ bridge).
-- `mlx/`: upstream MLX submodule.
-- `test/`: unit/parity tests (including large parity phase suite).
-- `test/parity/scripts/`: report and contract generators.
-- `tasks/benchmark_task.rb`: benchmark harness.
+- `lib/`: Ruby API surface (`core`, `nn`, `optimizers`, `dsl`, distributed
+  utilities), with ONNX public facade under `lib/mlx/onnx.rb` and ONNX harness
+  helpers under `lib/mlx-onnx/**`.
+- `ext/mlx/`: core native extension build bridge (`extconf.rb`, C++ binding
+  entry).
+- `ext/mlx-onnx/`: ONNX native binding layer loaded by the core extension.
+- `submodules/mlx/`: upstream MLX submodule.
+- `submodules/mlx-onnx/`: extracted ONNX core library submodule used by Ruby
+  bindings.
+- `examples/web/`: web demo model/export helpers (GPT-2, nanoGPT, Stable Diffusion).
+- `tasks/`: rake task implementations (`build`, `test`, `docs`, `benchmark`,
+  `web`, training/assets exporters).
+- `web/`: static demo site, generated assets, ONNX WebGPU harness templates.
+- `test/`: unit/task/parity suites.
+- `test/support/parity/`: coverage/report generators.
 - `docs/`: Sphinx + Doxygen documentation sources.
 
 ## Troubleshooting
 
 - `missing MLX include dir`: initialize submodules (`git submodule update --init --recursive`).
+- `mlx/mlx-onnx revision mismatch detected`: sync the pinned submodules:
+
+```bash
+git submodule update --init --recursive submodules/mlx submodules/mlx-onnx
+```
+
 - Native extension does not load: rebuild manually:
 
 ```bash
@@ -835,22 +537,29 @@ ruby extconf.rb
 make -j4
 ```
 
+- ONNX binary export fails checker/runtime loading: regenerate with
+  `MLX::ONNX.export_onnx` / `MLX::ONNX.graph_ir_to_onnx` and validate
+  with local `onnx.checker` tooling.
 - On Apple silicon, verify native architecture:
 
 ```bash
 ruby -e 'require "rbconfig"; puts RbConfig::CONFIG["host_cpu"]'
 ```
 
+- Web smoke fails due missing runtime dependencies: run
+  `bundle exec rake deps:web` (installs/checks `onnx`, `node`/`npm`/`npx`,
+  `playwright`, and `onnxruntime-web`).
 - If CMake configure fails intermittently, rerun `ruby extconf.rb`; the build script already includes a clean-retry path.
 
 ## Contributing
 
 - Open pull requests against this repository.
-- Keep parity artifacts in `test/parity/reports/` in sync with tool/script changes.
+- Keep parity snapshots in `test/support/snapshots/parity/` in sync with contract changes.
+- Keep generated parity artifacts under `test/reports/` (not source-controlled paths).
 - Follow upstream MLX contributor guidance where applicable: [mlx/CONTRIBUTING.md](https://github.com/ml-explore/mlx/blob/main/CONTRIBUTING.md).
 
 CI currently runs on `ubuntu-22.04` and `macos-14` with Ruby `3.4` and `4.0`.
 
 ## License
 
-`mlx` gem is distributed under the MIT license (see `LICENSE`).
+`mlx` gem is distributed under the `MIT` license.

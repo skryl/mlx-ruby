@@ -1,5 +1,5 @@
-name: 'Build Documentation'
-description: 'Build documentation'
+name: "Build Pages Site"
+description: "Build docs and web demo for GitHub Pages"
 
 runs:
   using: "composite"
@@ -8,11 +8,11 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y doxygen python3-venv python3-pip
+        sudo apt-get install -y doxygen python3-venv python3-pip rsync
         python3 -m venv .venv
         source .venv/bin/activate
         python -m pip install --upgrade pip
-        pip install -r docs/requirements.txt
+        pip install -r requirements.txt
   
     - name: Build documentation
       shell: bash
@@ -22,7 +22,26 @@ runs:
         doxygen
         make html
 
+    - name: Assemble Pages artifact (docs + demo)
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -f docs/build/html/index.html
+        test -f web/index.html
+        site_dir="_site"
+        rm -rf "${site_dir}"
+        mkdir -p "${site_dir}"
+        cp -a docs/build/html/. "${site_dir}/"
+        mkdir -p "${site_dir}/demo"
+        rsync -a \
+          --exclude "node_modules" \
+          --exclude ".DS_Store" \
+          web/ "${site_dir}/demo/"
+        find "${site_dir}/demo" -name ".gitignore" -type f -delete
+        test -f "${site_dir}/index.html"
+        test -f "${site_dir}/demo/index.html"
+
     - name: Upload Pages artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: docs/build/html
+        path: _site

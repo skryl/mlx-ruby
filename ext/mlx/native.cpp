@@ -10,11 +10,14 @@
 #include <limits>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <variant>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include "mlx/array.h"
 #include "mlx/backend/metal/metal.h"
@@ -37,6 +40,7 @@
 #include "mlx/transforms.h"
 #include "mlx/utils.h"
 #include "mlx/version.h"
+#include "../mlx-onnx/native.hpp"
 
 namespace mx = mlx::core;
 namespace mxfft = mlx::core::fft;
@@ -44,6 +48,7 @@ namespace mxfast = mlx::core::fast;
 namespace mxlinalg = mlx::core::linalg;
 namespace mxmetal = mlx::core::metal;
 namespace mxdist = mlx::core::distributed;
+using OrderedJson = nlohmann::ordered_json;
 
 static VALUE mMLX;
 static VALUE mNative;
@@ -339,14 +344,7 @@ static VALUE id_to_symbol(ID id) {
 }
 
 static ID cached_intern_id(const char* name) {
-  static std::unordered_map<std::string, ID> cache;
-  auto it = cache.find(name);
-  if (it != cache.end()) {
-    return it->second;
-  }
-  const ID id = rb_intern(name);
-  cache.emplace(name, id);
-  return id;
+  return rb_intern(name);
 }
 
 static mx::Device::DeviceType device_type_from_value(VALUE value) {
@@ -928,12 +926,6 @@ struct ArrayCollector {
 
 static void collect_arrays_from_tree(VALUE value, std::vector<mx::array>& arrays);
 
-static int hash_collect_arrays_iter(VALUE, VALUE value, VALUE arg) {
-  auto* collector = reinterpret_cast<ArrayCollector*>(arg);
-  collect_arrays_from_tree(value, *collector->arrays);
-  return ST_CONTINUE;
-}
-
 static void collect_arrays_from_tree(VALUE value, std::vector<mx::array>& arrays) {
   if (rb_obj_is_kind_of(value, cArray)) {
     arrays.push_back(array_unwrap(value));
@@ -947,28 +939,37 @@ static void collect_arrays_from_tree(VALUE value, std::vector<mx::array>& arrays
     return;
   }
   if (RB_TYPE_P(value, T_HASH)) {
-    ArrayCollector collector{&arrays};
-    rb_hash_foreach(value, hash_collect_arrays_iter, reinterpret_cast<VALUE>(&collector));
+    VALUE keys = rb_funcall(value, cached_intern_id("keys"), 0);
+    const long len = RARRAY_LEN(keys);
+    for (long i = 0; i < len; ++i) {
+      VALUE key = rb_ary_entry(keys, i);
+      VALUE hash_value = rb_hash_lookup2(value, key, Qundef);
+      if (hash_value == Qundef) {
+        continue;
+      }
+      collect_arrays_from_tree(hash_value, arrays);
+    }
   }
-}
-
-struct ArrayMapBuilder {
-  std::unordered_map<std::string, mx::array> map;
-};
-
-static int hash_to_array_map_iter(VALUE key, VALUE value, VALUE arg) {
-  auto* builder = reinterpret_cast<ArrayMapBuilder*>(arg);
-  builder->map.insert_or_assign(string_from_ruby(key), array_unwrap(value));
-  return ST_CONTINUE;
 }
 
 static std::unordered_map<std::string, mx::array> array_map_from_ruby_hash(VALUE value) {
   if (!RB_TYPE_P(value, T_HASH)) {
     rb_raise(rb_eTypeError, "expected Hash mapping String/Symbol keys to MLX::Core::Array");
   }
-  ArrayMapBuilder builder;
-  rb_hash_foreach(value, hash_to_array_map_iter, reinterpret_cast<VALUE>(&builder));
-  return builder.map;
+  VALUE keys = rb_funcall(value, cached_intern_id("keys"), 0);
+  const long len = RARRAY_LEN(keys);
+  std::unordered_map<std::string, mx::array> out;
+  out.reserve(static_cast<size_t>(len));
+  for (long i = 0; i < len; ++i) {
+    VALUE key = rb_ary_entry(keys, i);
+    VALUE hash_value = rb_hash_lookup2(value, key, Qundef);
+    if (hash_value == Qundef) {
+      continue;
+    }
+    std::string ruby_key = string_from_ruby(key);
+    out.insert_or_assign(ruby_key, array_unwrap(hash_value));
+  }
+  return out;
 }
 
 static VALUE ruby_hash_of_arrays(const std::unordered_map<std::string, mx::array>& map) {
@@ -990,16 +991,6 @@ static VALUE ruby_hash_of_strings(const std::unordered_map<std::string, std::str
   return out;
 }
 
-struct StringMapBuilder {
-  std::unordered_map<std::string, std::string> map;
-};
-
-static int hash_to_string_map_iter(VALUE key, VALUE value, VALUE arg) {
-  auto* builder = reinterpret_cast<StringMapBuilder*>(arg);
-  builder->map.insert_or_assign(string_from_ruby(key), string_from_ruby(value));
-  return ST_CONTINUE;
-}
-
 static std::unordered_map<std::string, std::string> string_map_from_ruby_hash(VALUE value) {
   if (NIL_P(value)) {
     return {};
@@ -1007,9 +998,20 @@ static std::unordered_map<std::string, std::string> string_map_from_ruby_hash(VA
   if (!RB_TYPE_P(value, T_HASH)) {
     rb_raise(rb_eTypeError, "expected Hash mapping String/Symbol keys to String values");
   }
-  StringMapBuilder builder;
-  rb_hash_foreach(value, hash_to_string_map_iter, reinterpret_cast<VALUE>(&builder));
-  return builder.map;
+  VALUE keys = rb_funcall(value, cached_intern_id("keys"), 0);
+  const long len = RARRAY_LEN(keys);
+  std::unordered_map<std::string, std::string> out;
+  out.reserve(static_cast<size_t>(len));
+  for (long i = 0; i < len; ++i) {
+    VALUE key = rb_ary_entry(keys, i);
+    VALUE hash_value = rb_hash_lookup2(value, key, Qundef);
+    if (hash_value == Qundef) {
+      continue;
+    }
+    std::string ruby_key = string_from_ruby(key);
+    out.insert_or_assign(ruby_key, string_from_ruby(hash_value));
+  }
+  return out;
 }
 
 static mx::GGUFMetaData gguf_metadata_from_ruby(VALUE value) {
@@ -1038,16 +1040,6 @@ static mx::GGUFMetaData gguf_metadata_from_ruby(VALUE value) {
   return std::monostate{};
 }
 
-struct GGUFMetaMapBuilder {
-  std::unordered_map<std::string, mx::GGUFMetaData> map;
-};
-
-static int hash_to_gguf_meta_map_iter(VALUE key, VALUE value, VALUE arg) {
-  auto* builder = reinterpret_cast<GGUFMetaMapBuilder*>(arg);
-  builder->map.insert_or_assign(string_from_ruby(key), gguf_metadata_from_ruby(value));
-  return ST_CONTINUE;
-}
-
 static std::unordered_map<std::string, mx::GGUFMetaData> gguf_meta_map_from_ruby_hash(VALUE value) {
   if (NIL_P(value)) {
     return {};
@@ -1055,9 +1047,20 @@ static std::unordered_map<std::string, mx::GGUFMetaData> gguf_meta_map_from_ruby
   if (!RB_TYPE_P(value, T_HASH)) {
     rb_raise(rb_eTypeError, "expected Hash for GGUF metadata");
   }
-  GGUFMetaMapBuilder builder;
-  rb_hash_foreach(value, hash_to_gguf_meta_map_iter, reinterpret_cast<VALUE>(&builder));
-  return builder.map;
+  VALUE keys = rb_funcall(value, cached_intern_id("keys"), 0);
+  const long len = RARRAY_LEN(keys);
+  std::unordered_map<std::string, mx::GGUFMetaData> out;
+  out.reserve(static_cast<size_t>(len));
+  for (long i = 0; i < len; ++i) {
+    VALUE key = rb_ary_entry(keys, i);
+    VALUE hash_value = rb_hash_lookup2(value, key, Qundef);
+    if (hash_value == Qundef) {
+      continue;
+    }
+    std::string ruby_key = string_from_ruby(key);
+    out.insert_or_assign(ruby_key, gguf_metadata_from_ruby(hash_value));
+  }
+  return out;
 }
 
 static VALUE gguf_metadata_to_ruby(const mx::GGUFMetaData& value) {
@@ -1499,6 +1502,23 @@ args_kwargs_function_from_callable(VALUE callable) {
   return [callable](const mx::Args& args, const mx::Kwargs& kwargs) {
     return call_ruby_callable_as_array_vector(callable, args, kwargs);
   };
+}
+
+mx::array onnx_array_from_ruby(VALUE value) {
+  return array_from_ruby(value, std::nullopt);
+}
+
+std::vector<mx::array> onnx_array_vector_from_ruby(VALUE value) {
+  return array_vector_from_ruby(value);
+}
+
+std::unordered_map<std::string, mx::array> onnx_array_map_from_ruby_hash(VALUE value) {
+  return array_map_from_ruby_hash(value);
+}
+
+std::function<std::vector<mx::array>(const mx::Args&, const mx::Kwargs&)>
+onnx_args_kwargs_function_from_callable(VALUE callable) {
+  return args_kwargs_function_from_callable(callable);
 }
 
 static std::vector<int> argnums_from_value(VALUE value) {
@@ -3495,7 +3515,7 @@ static VALUE core_dequantize(int argc, VALUE* argv, VALUE) {
       dtype = optional_dtype_from_value(argv[6]);
     }
 
-    return array_wrap(mx::dequantize(w, scales, biases, group_size, bits, mode, dtype));
+    return array_wrap(mx::dequantize(w, scales, biases, group_size, bits, mode, std::nullopt, dtype));
   } catch (const std::exception& error) {
     raise_std_exception(error);
     return Qnil;
@@ -6459,6 +6479,30 @@ static VALUE core_identity(int argc, VALUE* argv, VALUE) {
   }
 }
 
+static VALUE core_hanning(int argc, VALUE* argv, VALUE) {
+  try {
+    VALUE m;
+    VALUE stream;
+    rb_scan_args(argc, argv, "11", &m, &stream);
+    return array_wrap(mx::hanning(NUM2INT(m), stream_or_device_from_value(stream)));
+  } catch (const std::exception& error) {
+    raise_std_exception(error);
+    return Qnil;
+  }
+}
+
+static VALUE core_hamming(int argc, VALUE* argv, VALUE) {
+  try {
+    VALUE m;
+    VALUE stream;
+    rb_scan_args(argc, argv, "11", &m, &stream);
+    return array_wrap(mx::hamming(NUM2INT(m), stream_or_device_from_value(stream)));
+  } catch (const std::exception& error) {
+    raise_std_exception(error);
+    return Qnil;
+  }
+}
+
 static VALUE core_tri(int argc, VALUE* argv, VALUE) {
   try {
     if (argc < 1 || argc > 4) {
@@ -7622,6 +7666,7 @@ extern "C" void Init_native(void) {
   rb_define_singleton_method(mNative, "loaded?", RUBY_METHOD_FUNC(native_loaded_p), 0);
 
   mCore = rb_define_module_under(mMLX, "Core");
+  init_onnx_native_bindings(mMLX);
   rb_define_singleton_method(mCore, "version", RUBY_METHOD_FUNC(core_version), 0);
 
   rb_define_singleton_method(mCore, "get_active_memory", RUBY_METHOD_FUNC(core_get_active_memory), 0);
@@ -7899,6 +7944,8 @@ extern "C" void Init_native(void) {
   rb_define_singleton_method(mCore, "ones_like", RUBY_METHOD_FUNC(core_ones_like), 1);
   rb_define_singleton_method(mCore, "eye", RUBY_METHOD_FUNC(core_eye), -1);
   rb_define_singleton_method(mCore, "identity", RUBY_METHOD_FUNC(core_identity), -1);
+  rb_define_singleton_method(mCore, "hanning", RUBY_METHOD_FUNC(core_hanning), -1);
+  rb_define_singleton_method(mCore, "hamming", RUBY_METHOD_FUNC(core_hamming), -1);
   rb_define_singleton_method(mCore, "tri", RUBY_METHOD_FUNC(core_tri), -1);
   rb_define_singleton_method(mCore, "tril", RUBY_METHOD_FUNC(core_tril), -1);
   rb_define_singleton_method(mCore, "triu", RUBY_METHOD_FUNC(core_triu), -1);
@@ -8026,4 +8073,5 @@ extern "C" void Init_native(void) {
       "precompiled_cuda_kernel",
       RUBY_METHOD_FUNC(core_precompiled_cuda_kernel),
       -1);
+
 }

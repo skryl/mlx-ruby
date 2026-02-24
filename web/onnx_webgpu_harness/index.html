@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MLX ONNX WebGPU Harness</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        margin: 24px;
+      }
+      h1 {
+        margin: 0 0 12px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 180px;
+        box-sizing: border-box;
+      }
+      .row {
+        margin: 12px 0;
+      }
+      button {
+        padding: 8px 12px;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        border: 1px solid #8884;
+        padding: 12px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>MLX ONNX WebGPU Harness</h1>
+    <p>
+      Edit <code>inputs.example.json</code> payload below, then run benchmark.
+      This harness tries providers in manifest order (for example, WebGPU then wasm).
+    </p>
+
+    <div class="row">
+      <label for="inputs-json">Inputs JSON</label>
+      <textarea id="inputs-json" spellcheck="false"></textarea>
+    </div>
+    <div class="row">
+      <button id="run-button" type="button">Run Benchmark</button>
+    </div>
+    <div class="row">
+      <pre id="status">Loading...</pre>
+    </div>
+
+    <script type="module" src="./harness.js"></script>
+  </body>
+</html>

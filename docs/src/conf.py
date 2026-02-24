@@ -1,5 +1,3 @@
-# Copyright © 2023 Apple Inc.
-
 # -*- coding: utf-8 -*-
 
 release = "1.0.0"
@@ -9,7 +7,7 @@ autodoc_mock_imports = ["mlx", "mlx.core"]
 # -- Project information -----------------------------------------------------
 
 project = "MLX"
-copyright = "2023, Apple"
+copyright = "MLX Contributors"
 author = "MLX Contributors"
 version = release
 

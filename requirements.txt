@@ -1,2 +1,12 @@
 # Python dependencies used by `rake benchmark:deps` / benchmark comparisons.
 mlx
+# Graph IR -> ONNX conversion support.
+onnx
+# Optional local runtime validation.
+onnxruntime
+
+# Documentation build dependencies.
+sphinx
+breathe
+sphinx-book-theme
+sphinx-copybutton

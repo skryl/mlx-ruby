@@ -1,0 +1,12 @@
+{
+  "name": "mlx-ruby-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "smoke": "node ./onnx_webgpu_harness/browser_smoke.mjs"
+  },
+  "devDependencies": {
+    "onnxruntime-web": "^1.23.0",
+    "playwright": "^1.55.0"
+  }
+}

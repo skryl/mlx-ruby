@@ -58,6 +58,10 @@ Resume sources
 - inline metadata payload hash
 - callable loader
 
+When resuming from checkpoint metadata, trainer state restores ``epoch``,
+``best_metric``, and ``stale_epochs``; training then continues from the next
+epoch (``epoch + 1``).
+
 .. code-block:: ruby
 
    trainer
