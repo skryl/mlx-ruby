@@ -21,6 +21,7 @@ module ExamplesModelsOnnxCaptureHook
     return if @installed
     return unless defined?(BenchmarkParity)
 
+    install_base64_compat!
     install_eval_hook!
     install_capture_finalizer!
 
@@ -63,6 +64,53 @@ module ExamplesModelsOnnxCaptureHook
     end
 
     @installed = true
+  end
+
+  def install_base64_compat!
+    return if @base64_compat_installed
+
+    begin
+      require "base64"
+      @base64_compat_installed = true
+      return
+    rescue LoadError
+      nil
+    end
+
+    base64_module = if defined?(::Base64)
+      ::Base64
+    else
+      ::Object.const_set(:Base64, Module.new)
+    end
+
+    unless base64_module.respond_to?(:decode64)
+      base64_module.define_singleton_method(:decode64) { |str| str.to_s.unpack1("m").to_s }
+    end
+    unless base64_module.respond_to?(:encode64)
+      base64_module.define_singleton_method(:encode64) { |bin| [bin.to_s].pack("m") }
+    end
+    unless base64_module.respond_to?(:strict_decode64)
+      base64_module.define_singleton_method(:strict_decode64) { |str| str.to_s.unpack1("m0") }
+    end
+    unless base64_module.respond_to?(:strict_encode64)
+      base64_module.define_singleton_method(:strict_encode64) { |bin| [bin.to_s].pack("m0") }
+    end
+    unless base64_module.respond_to?(:urlsafe_encode64)
+      base64_module.define_singleton_method(:urlsafe_encode64) do |bin, padding: true|
+        encoded = base64_module.strict_encode64(bin).tr("+/", "-_")
+        padding ? encoded : encoded.delete("=")
+      end
+    end
+    unless base64_module.respond_to?(:urlsafe_decode64)
+      base64_module.define_singleton_method(:urlsafe_decode64) do |str|
+        normalized = str.to_s.tr("-_", "+/")
+        normalized += "=" * ((4 - normalized.length % 4) % 4)
+        base64_module.strict_decode64(normalized)
+      end
+    end
+
+    $LOADED_FEATURES << "base64.rb" unless $LOADED_FEATURES.include?("base64.rb")
+    @base64_compat_installed = true
   end
 
   def install_capture_finalizer!
