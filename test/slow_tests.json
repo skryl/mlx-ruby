@@ -1,0 +1,47 @@
+{
+  "format": "mlx_slow_tests_v1",
+  "generated_at": "2026-02-24T05:04:09Z",
+  "threshold_seconds": 10.0,
+  "tests": {
+    "DocExamplesTest#test_ruby_doc_examples": {
+      "cpu_seconds": 13.89,
+      "gpu_seconds": 16.76,
+      "max_seconds": 16.76
+    },
+    "Gpt2DemoIntegrationTest#test_gpt2_demo_loads_metadata_and_generates": {
+      "cpu_seconds": 11.4,
+      "gpu_seconds": 11.27,
+      "max_seconds": 11.4
+    },
+    "NanogptDemoIntegrationTest#test_nanogpt_demo_loads_metadata_and_generates": {
+      "cpu_seconds": 9.97,
+      "gpu_seconds": 10.16,
+      "max_seconds": 10.16
+    },
+    "Phase314BenchmarkModelOnnxRuntimeParityTest#test_cnn_benchmark_model_onnx_runtime_parity": {
+      "cpu_seconds": 10.39,
+      "gpu_seconds": 10.64,
+      "max_seconds": 10.64
+    },
+    "Phase319GraphIrWebgpuCoverageArtifactTest#test_ir_webgpu_coverage_artifact_is_deterministic": {
+      "cpu_seconds": 15.16,
+      "gpu_seconds": 14.87,
+      "max_seconds": 15.16
+    },
+    "Phase323ExamplesSubmoduleFullExportParityTest#test_all_submodule_models_are_webgpu_export_compatible": {
+      "cpu_seconds": 90.74,
+      "gpu_seconds": 91.71,
+      "max_seconds": 91.71
+    },
+    "Phase324ExamplesSubmoduleOnnxRuntimeParityTest#test_all_examples_submodule_models_export_and_run_in_onnxruntime": {
+      "cpu_seconds": 114.93,
+      "gpu_seconds": 116.66,
+      "max_seconds": 116.66
+    },
+    "StableDiffusionDemoIntegrationTest#test_stable_diffusion_demo_loads_metadata_and_generates": {
+      "cpu_seconds": 135.79,
+      "gpu_seconds": 138.55,
+      "max_seconds": 138.55
+    }
+  }
+}

@@ -75,9 +75,9 @@ jobs:
         run: bundle exec rake deps
       - name: Run ONNX native smoke gates
         run: |
-          bundle exec ruby -Itest test/onnx/extconf_compatibility_guard_test.rb
-          bundle exec ruby -Itest test/onnx/onnx_validation_test.rb
-          bundle exec ruby -Itest test/onnx/onnx_export_contract_boundary_test.rb
+          bundle exec ruby -Itest test/onnx/integration/extconf_compatibility_guard_test.rb
+          bundle exec ruby -Itest test/onnx/bindings/onnx_validation_test.rb
+          bundle exec ruby -Itest test/onnx/bindings/onnx_export_contract_boundary_test.rb
       - name: Run Ruby test suite
         env:
           RUBYOPT: -W:deprecated -W:performance
