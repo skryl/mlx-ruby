@@ -4,6 +4,9 @@ mlx
 onnx
 # Optional local runtime validation.
 onnxruntime
+# Safetensors fallback conversion used by web asset exporters.
+numpy
+safetensors
 
 # Documentation build dependencies.
 sphinx

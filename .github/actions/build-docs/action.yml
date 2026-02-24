@@ -28,6 +28,7 @@ runs:
         WEB_ASSETS_TARGETS: gpt2,nanogpt
       run: |
         set -euo pipefail
+        source .venv/bin/activate
         bundle exec rake build
         bundle exec rake web:assets
         test -f web/assets/gpt2/model.onnx
