@@ -1,16 +1,37 @@
-const ASSET_ROOT = "../../assets/stable_diffusion";
-const META_PATH = `${ASSET_ROOT}/meta.json`;
-const PRESETS_PATH = `${ASSET_ROOT}/prompt.presets.json`;
-const SCHEDULER_CONFIG_PATH = `${ASSET_ROOT}/scheduler_config.json`;
-const VOCAB_PATH = `${ASSET_ROOT}/vocab.json`;
-const MERGES_PATH = `${ASSET_ROOT}/merges.txt`;
-const TEXT_ENCODER_PATH = `${ASSET_ROOT}/text_encoder.onnx`;
-const UNET_PATH = `${ASSET_ROOT}/unet.onnx`;
-const VAE_DECODER_PATH = `${ASSET_ROOT}/vae_decoder.onnx`;
+const ASSET_ROOT_CANDIDATES = Array.from(
+  new Set([
+    new URL("../../assets/stable_diffusion", import.meta.url).toString().replace(/\/$/, ""),
+    new URL("../assets/stable_diffusion", import.meta.url).toString().replace(/\/$/, ""),
+    new URL("./assets/stable_diffusion", import.meta.url).toString().replace(/\/$/, "")
+  ])
+);
+let ASSET_ROOT = ASSET_ROOT_CANDIDATES[0];
+let META_PATH = "";
+let PRESETS_PATH = "";
+let SCHEDULER_CONFIG_PATH = "";
+let VOCAB_PATH = "";
+let MERGES_PATH = "";
+let TEXT_ENCODER_PATH = "";
+let UNET_PATH = "";
+let VAE_DECODER_PATH = "";
 const ORT_MODULE_CANDIDATES = [
   "../../node_modules/onnxruntime-web/dist/ort.all.min.mjs",
   "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.mjs"
 ];
+
+setAssetRoot(ASSET_ROOT);
+
+function setAssetRoot(root) {
+  ASSET_ROOT = root;
+  META_PATH = `${ASSET_ROOT}/meta.json`;
+  PRESETS_PATH = `${ASSET_ROOT}/prompt.presets.json`;
+  SCHEDULER_CONFIG_PATH = `${ASSET_ROOT}/scheduler_config.json`;
+  VOCAB_PATH = `${ASSET_ROOT}/vocab.json`;
+  MERGES_PATH = `${ASSET_ROOT}/merges.txt`;
+  TEXT_ENCODER_PATH = `${ASSET_ROOT}/text_encoder.onnx`;
+  UNET_PATH = `${ASSET_ROOT}/unet.onnx`;
+  VAE_DECODER_PATH = `${ASSET_ROOT}/vae_decoder.onnx`;
+}
 
 const weightsBadge = document.getElementById("badge-weights");
 const providerBadge = document.getElementById("badge-provider");
@@ -63,6 +84,17 @@ function showError(message) {
 function clearError() {
   errorBox.style.display = "none";
   errorBox.textContent = "";
+}
+
+function missingAssetsMessage() {
+  const probes = ASSET_ROOT_CANDIDATES.map((candidate) => `${candidate}/meta.json`);
+  return [
+    "Demo assets were not found on this host.",
+    "GitHub Pages deployments often omit generated web/assets checkpoints.",
+    "Checked:",
+    ...probes.map((probe) => `- ${probe}`),
+    "Run `bundle exec rake web:assets` and serve with `bundle exec rake web:serve`."
+  ].join("\n");
 }
 
 function toNumber(value, fallback = 0) {
@@ -222,6 +254,16 @@ async function assetExists(path) {
   } catch (_error) {
     return false;
   }
+}
+
+async function resolveAssetRoot() {
+  for (const candidate of ASSET_ROOT_CANDIDATES) {
+    if (await assetExists(`${candidate}/meta.json`)) {
+      setAssetRoot(candidate);
+      return true;
+    }
+  }
+  return false;
 }
 
 async function sessionOptionsForModel(provider, modelPath) {
@@ -1084,6 +1126,20 @@ function updateStatuses() {
 
 async function initialize() {
   try {
+    const assetRootResolved = await resolveAssetRoot();
+    if (!assetRootResolved) {
+      setOnnxSizeText("ONNX Size: unavailable");
+      setParameterText(null);
+      weightsBadge.textContent = "Weights: missing";
+      providerBadge.textContent = "Provider: unavailable";
+      modelStatus.textContent = "Model: unavailable (missing demo assets)";
+      ioStatus.textContent = "I/O: unavailable";
+      outputStatus.textContent = "Output: unavailable";
+      statsStatus.textContent = "Stats: unavailable";
+      showError(missingAssetsMessage());
+      return;
+    }
+
     setOnnxSizeText("ONNX Size: probing...");
     const onnxSizeProbe = updateOnnxSizeStatus();
     modelStatus.textContent = "Runtime: loading ONNX Runtime Web...";

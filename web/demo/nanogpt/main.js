@@ -1,12 +1,29 @@
-const ASSET_ROOT = "../../assets/nanogpt";
-const MODEL_PATH = `${ASSET_ROOT}/model.onnx`;
-const META_PATH = `${ASSET_ROOT}/meta.json`;
-const PRESETS_PATH = `${ASSET_ROOT}/prompt.presets.json`;
-const TOKENIZER_PATH = `${ASSET_ROOT}/tokenizer.json`;
+const ASSET_ROOT_CANDIDATES = Array.from(
+  new Set([
+    new URL("../../assets/nanogpt", import.meta.url).toString().replace(/\/$/, ""),
+    new URL("../assets/nanogpt", import.meta.url).toString().replace(/\/$/, ""),
+    new URL("./assets/nanogpt", import.meta.url).toString().replace(/\/$/, "")
+  ])
+);
+let ASSET_ROOT = ASSET_ROOT_CANDIDATES[0];
+let MODEL_PATH = "";
+let META_PATH = "";
+let PRESETS_PATH = "";
+let TOKENIZER_PATH = "";
 const ORT_MODULE_CANDIDATES = [
   "../../node_modules/onnxruntime-web/dist/ort.all.min.mjs",
   "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.mjs"
 ];
+
+setAssetRoot(ASSET_ROOT);
+
+function setAssetRoot(root) {
+  ASSET_ROOT = root;
+  MODEL_PATH = `${ASSET_ROOT}/model.onnx`;
+  META_PATH = `${ASSET_ROOT}/meta.json`;
+  PRESETS_PATH = `${ASSET_ROOT}/prompt.presets.json`;
+  TOKENIZER_PATH = `${ASSET_ROOT}/tokenizer.json`;
+}
 
 const weightsBadge = document.getElementById("badge-weights");
 const providerBadge = document.getElementById("badge-provider");
@@ -53,6 +70,17 @@ function showError(message) {
 function clearError() {
   errorBox.style.display = "none";
   errorBox.textContent = "";
+}
+
+function missingAssetsMessage() {
+  const probes = ASSET_ROOT_CANDIDATES.map((candidate) => `${candidate}/meta.json`);
+  return [
+    "Demo assets were not found on this host.",
+    "GitHub Pages deployments often omit generated web/assets checkpoints.",
+    "Checked:",
+    ...probes.map((probe) => `- ${probe}`),
+    "Run `bundle exec rake web:assets` and serve with `bundle exec rake web:serve`."
+  ].join("\n");
 }
 
 function toNumber(value, fallback = 0) {
@@ -147,6 +175,16 @@ async function assetExists(path) {
   } catch (_error) {
     return false;
   }
+}
+
+async function resolveAssetRoot() {
+  for (const candidate of ASSET_ROOT_CANDIDATES) {
+    if (await assetExists(`${candidate}/meta.json`)) {
+      setAssetRoot(candidate);
+      return true;
+    }
+  }
+  return false;
 }
 
 function hasUsableWeights(meta) {
@@ -538,6 +576,18 @@ function installUi() {
 async function boot() {
   try {
     setGenerationEnabled(false);
+    const assetRootResolved = await resolveAssetRoot();
+    if (!assetRootResolved) {
+      setOnnxSizeText("ONNX Size: unavailable");
+      setParameterText(null);
+      setMissingWeightsState("run `bundle exec rake web:assets`");
+      modelStatus.textContent = "Model: unavailable (missing demo assets)";
+      tokenizerStatus.textContent = "Tokenizer: unavailable";
+      contextStatus.textContent = "Context size: unavailable";
+      shapeStatus.textContent = "Output shape: unavailable";
+      showError(missingAssetsMessage());
+      return;
+    }
     setOnnxSizeText("ONNX Size: probing...");
     const onnxSizeProbe = updateOnnxSizeStatus();
     modelStatus.textContent = "Runtime: loading ONNX Runtime Web...";

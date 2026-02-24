@@ -9,8 +9,11 @@ class WebDemoNanogptWiringTest < Minitest::Test
   def test_nanogpt_demo_uses_nanogpt_assets_and_tokenizer
     source = File.read(NANOGPT_MAIN_JS)
 
-    assert_includes source, 'const ASSET_ROOT = "../../assets/nanogpt"'
-    assert_includes source, "const TOKENIZER_PATH = `${ASSET_ROOT}/tokenizer.json`"
+    assert_includes source, "const ASSET_ROOT_CANDIDATES = Array.from("
+    assert_includes source, 'new URL("../../assets/nanogpt", import.meta.url)'
+    assert_includes source, 'new URL("../assets/nanogpt", import.meta.url)'
+    assert_includes source, 'new URL("./assets/nanogpt", import.meta.url)'
+    assert_includes source, "TOKENIZER_PATH = `${ASSET_ROOT}/tokenizer.json`"
     refute_includes source, "const VOCAB_PATH"
     refute_includes source, "const MERGES_PATH"
   end

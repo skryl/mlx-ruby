@@ -20,10 +20,13 @@ class WebDemoStableDiffusionWiringTest < Minitest::Test
     html_source = File.read(STABLE_DIFFUSION_INDEX_HTML)
 
     assert_includes html_source, "<title>Stable Diffusion Kanji: Web Demo</title>"
-    assert_includes main_source, 'const ASSET_ROOT = "../../assets/stable_diffusion"'
-    assert_includes main_source, "const TEXT_ENCODER_PATH = `${ASSET_ROOT}/text_encoder.onnx`"
-    assert_includes main_source, "const UNET_PATH = `${ASSET_ROOT}/unet.onnx`"
-    assert_includes main_source, "const VAE_DECODER_PATH = `${ASSET_ROOT}/vae_decoder.onnx`"
+    assert_includes main_source, "const ASSET_ROOT_CANDIDATES = Array.from("
+    assert_includes main_source, 'new URL("../../assets/stable_diffusion", import.meta.url)'
+    assert_includes main_source, 'new URL("../assets/stable_diffusion", import.meta.url)'
+    assert_includes main_source, 'new URL("./assets/stable_diffusion", import.meta.url)'
+    assert_includes main_source, "TEXT_ENCODER_PATH = `${ASSET_ROOT}/text_encoder.onnx`"
+    assert_includes main_source, "UNET_PATH = `${ASSET_ROOT}/unet.onnx`"
+    assert_includes main_source, "VAE_DECODER_PATH = `${ASSET_ROOT}/vae_decoder.onnx`"
     assert_includes main_source, 'executionProviders: [provider]'
     assert_includes main_source, "options.externalData"
     assert_includes main_source, "external_data"

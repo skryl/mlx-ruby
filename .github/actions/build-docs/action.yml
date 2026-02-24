@@ -8,11 +8,32 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y doxygen python3-venv python3-pip rsync
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libopenblas-dev \
+          liblapacke-dev \
+          doxygen \
+          python3-venv \
+          python3-pip \
+          rsync
         python3 -m venv .venv
         source .venv/bin/activate
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+
+    - name: Build native extension and generate web demo assets
+      shell: bash
+      env:
+        WEB_ASSETS_TARGETS: gpt2,nanogpt
+      run: |
+        set -euo pipefail
+        bundle exec rake build
+        bundle exec rake web:assets
+        test -f web/assets/gpt2/model.onnx
+        test -f web/assets/gpt2/meta.json
+        test -f web/assets/nanogpt/model.onnx
+        test -f web/assets/nanogpt/meta.json
   
     - name: Build documentation
       shell: bash
@@ -28,6 +49,8 @@ runs:
         set -euo pipefail
         test -f docs/build/html/index.html
         test -f web/index.html
+        test -f web/assets/gpt2/meta.json
+        test -f web/assets/nanogpt/meta.json
         site_dir="_site"
         rm -rf "${site_dir}"
         mkdir -p "${site_dir}"
@@ -35,11 +58,16 @@ runs:
         mkdir -p "${site_dir}/demo"
         rsync -a \
           --exclude "node_modules" \
+          --exclude "assets/stable_diffusion/" \
+          --exclude "assets/*/weights/" \
           --exclude ".DS_Store" \
           web/ "${site_dir}/demo/"
+        touch "${site_dir}/demo/.nojekyll"
         find "${site_dir}/demo" -name ".gitignore" -type f -delete
         test -f "${site_dir}/index.html"
         test -f "${site_dir}/demo/index.html"
+        test -f "${site_dir}/demo/assets/gpt2/meta.json"
+        test -f "${site_dir}/demo/assets/nanogpt/meta.json"
 
     - name: Upload Pages artifact
       uses: actions/upload-pages-artifact@v3
