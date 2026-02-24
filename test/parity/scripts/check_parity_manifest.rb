@@ -5,9 +5,10 @@ require "json"
 require "optparse"
 
 require "pathname"
+require_relative "report_paths"
 
-DEFAULT_CONTRACT = Pathname.new(File.expand_path("../../..", __dir__))
-  .join("test", "parity", "reports", "phase0_contract.json")
+DEFAULT_CONTRACT = ParityReportPaths.snapshot_root
+  .join("phase0_contract.json")
   .to_s
 
 options = {

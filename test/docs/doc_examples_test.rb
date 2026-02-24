@@ -7,7 +7,7 @@ require "stringio"
 require "tempfile"
 require "timeout"
 require "fileutils"
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 
 class DocExamplesTest < Minitest::Test
   BLOCK_MARKERS = [

@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PLAYWRIGHT_ENTRY = path.join(SCRIPT_DIR, "..", "..", "web", "node_modules", "playwright", "index.mjs");
+const PLAYWRIGHT_ENTRY = path.join(SCRIPT_DIR, "..", "..", "..", "web", "node_modules", "playwright", "index.mjs");
 const { chromium } = await import(pathToFileURL(PLAYWRIGHT_ENTRY).href);
 
 const DEMO_PATHS = {

@@ -5,10 +5,11 @@ require "json"
 require "open3"
 require "pathname"
 require "time"
+require_relative "report_paths"
 
-REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
+REPO_ROOT = ParityReportPaths.repo_root.freeze
 SCRIPT_ROOT = REPO_ROOT.join("test", "parity", "scripts").freeze
-PARITY_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
+PARITY_ROOT = ParityReportPaths.generated_root.freeze
 
 TOOLS = [
   SCRIPT_ROOT.join("generate_api_inventory.rb"),

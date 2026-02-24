@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] = "120"
-
 require "json"
 require "open3"
 require "rbconfig"
@@ -9,6 +7,10 @@ require "tempfile"
 require_relative "test_helper"
 
 class Phase321ExamplesOnnxCaptureHookParityTest < Minitest::Test
+  def self.current_test_timeout_seconds
+    120
+  end
+
   def setup
     TestSupport.build_native_extension!
     @repo_root = RUBY_ROOT

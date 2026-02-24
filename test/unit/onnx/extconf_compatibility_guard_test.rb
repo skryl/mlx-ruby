@@ -5,7 +5,7 @@ require "open3"
 require "rbconfig"
 
 class ExtconfCompatibilityGuardTest < Minitest::Test
-  REPO_ROOT = File.expand_path("../..", __dir__)
+  REPO_ROOT = File.expand_path("../../..", __dir__)
   EXTCONF_PATH = File.join(REPO_ROOT, "ext", "mlx", "extconf.rb")
   SHA_A = "1111111111111111111111111111111111111111"
   SHA_B = "2222222222222222222222222222222222222222"

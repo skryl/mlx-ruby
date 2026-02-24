@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 
 class WebDemoWeightsGuardrailTest < Minitest::Test
   LANGUAGE_DEMO_MAIN_JS = {

@@ -1,18 +1,20 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] = "120"
-
 require "json"
 require "open3"
 require_relative "test_helper"
 
 class Phase319GraphIrWebgpuCoverageArtifactTest < Minitest::Test
+  def self.current_test_timeout_seconds
+    120
+  end
+
   MODELS = %w[transformer cnn mlp rnn karpathy_gpt2].freeze
 
   def setup
     TestSupport.build_native_extension!
     @tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_onnx_webgpu_coverage_report.rb")
-    @out_file = File.join(RUBY_ROOT, "test", "parity", "reports", "ir_webgpu_coverage.json")
+    @out_file = TestSupport.parity_generated_report_path("ir_webgpu_coverage.json")
   end
 
   def test_ir_webgpu_coverage_artifact_schema_and_baseline

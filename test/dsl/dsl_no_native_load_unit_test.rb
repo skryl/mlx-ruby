@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 
 class DslNoNativeLoadUnitTest < Minitest::Test
   def test_model_mixin_loads_without_eager_core_dtype_resolution

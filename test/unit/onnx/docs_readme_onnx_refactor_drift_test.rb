@@ -3,7 +3,7 @@
 require_relative "test_helper"
 
 class Phase332DocsReadmeGraphIrRefactorDriftParityTest < Minitest::Test
-  REPO_ROOT = File.expand_path("../..", __dir__)
+  REPO_ROOT = RUBY_ROOT
 
   PHASE6_DOC_FILES = [
     "README.md",

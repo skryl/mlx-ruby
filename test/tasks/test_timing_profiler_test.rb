@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "tempfile"
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 require_relative "../scripts/profile_test_timings"
 
 class TestTimingProfilerTest < Minitest::Test

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "test_helper"
+require_relative "../support/test_helper"
 
 class SlowTestGateTest < Minitest::Test
   class SlowGateProbeTest < Minitest::Test
@@ -26,7 +26,8 @@ class SlowTestGateTest < Minitest::Test
 
   def test_before_setup_skips_marked_slow_tests_when_fast_mode_is_enabled
     test_id = "SlowTestGateTest::SlowGateProbeTest#test_marked_slow"
-    stub_singleton_method(:slow_test_entry) do |candidate|
+    stub_singleton_method(:slow_test_entry) do |candidate, source_path: nil|
+      _ = source_path
       candidate == test_id ? {"max_seconds" => 45.7} : nil
     end
     stub_singleton_method(:include_slow_tests?) { false }
@@ -39,7 +40,8 @@ class SlowTestGateTest < Minitest::Test
 
   def test_before_setup_allows_marked_slow_tests_when_include_slow_is_enabled
     test_id = "SlowTestGateTest::SlowGateProbeTest#test_marked_slow"
-    stub_singleton_method(:slow_test_entry) do |candidate|
+    stub_singleton_method(:slow_test_entry) do |candidate, source_path: nil|
+      _ = source_path
       candidate == test_id ? {"max_seconds" => 45.7} : nil
     end
     stub_singleton_method(:include_slow_tests?) { true }
@@ -53,6 +55,24 @@ class SlowTestGateTest < Minitest::Test
       "Phase313ModelFixtureWebgpuBrowserParityTest#test_transformer_webgpu_benchmark_model_runtime_parity_without_wasm_fallback"
     )
     refute_nil entry
+  end
+
+  def test_integration_web_path_is_forced_slow
+    source_path = File.join(RUBY_ROOT, "test", "integration", "web", "gpt2_demo_integration_test.rb")
+    assert_equal true, TestSupport.forced_slow_test_path?(source_path)
+
+    entry = TestSupport.slow_test_entry("AnySuite#test_case", source_path: source_path)
+    refute_nil entry
+    assert_equal true, entry.fetch("forced")
+  end
+
+  def test_integration_onnx_path_is_forced_slow
+    source_path = File.join(RUBY_ROOT, "test", "integration", "onnx", "benchmark_model_onnx_runtime_test.rb")
+    assert_equal true, TestSupport.forced_slow_test_path?(source_path)
+
+    entry = TestSupport.slow_test_entry("AnySuite#test_case", source_path: source_path)
+    refute_nil entry
+    assert_equal true, entry.fetch("forced")
   end
 
   private

@@ -11,7 +11,7 @@ class Phase207FunctionalHarnessLayersTest < Minitest::Test
 
   def test_harness_layers_section
     tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_functional_golden_report.rb")
-    out_file = File.join(RUBY_ROOT, "test", "parity", "reports", "functional_golden_report.json")
+    out_file = TestSupport.parity_generated_report_path("functional_golden_report.json")
     _stdout, stderr, status = Open3.capture3("ruby", tool)
     assert status.success?, "functional golden harness failed\nstderr:\n#{stderr}"
 

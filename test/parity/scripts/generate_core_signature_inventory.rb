@@ -4,9 +4,10 @@
 require "json"
 require "pathname"
 require "time"
+require_relative "report_paths"
 
-REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
-PARITY_REPORTS_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
+REPO_ROOT = ParityReportPaths.repo_root.freeze
+PARITY_REPORTS_ROOT = ParityReportPaths.generated_root.freeze
 PYTHON_SRC_ROOT = [REPO_ROOT.join("python", "src"), REPO_ROOT.join("submodules", "mlx", "python", "src")].find(&:directory?)
 RUBY_NATIVE_CPP = REPO_ROOT.join("ext", "mlx", "native.cpp").freeze
 OUT_FILE = PARITY_REPORTS_ROOT.join("core_signature_inventory.json").freeze

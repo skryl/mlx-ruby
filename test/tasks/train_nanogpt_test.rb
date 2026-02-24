@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 require_relative "../../tasks/training_task/train_nanogpt_shakespeare"
 
 class WebTrainNanogptShakespeareOptionsTest < Minitest::Test

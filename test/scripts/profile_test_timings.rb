@@ -11,7 +11,7 @@ module TestTimingProfiler
 
   REPO_ROOT = File.expand_path("../..", __dir__).freeze
   DEFAULT_THRESHOLD_SECONDS = 30.0
-  DEFAULT_TIMINGS_OUT = File.join(REPO_ROOT, "test", "parity", "reports", "test_timings.json").freeze
+  DEFAULT_TIMINGS_OUT = File.join(REPO_ROOT, "test", "tmp", "reports", "parity", "test_timings.json").freeze
   DEFAULT_SLOW_OUT = File.join(REPO_ROOT, "test", "slow_tests.json").freeze
   TEST_TIMING_LINE = /^\s*([A-Za-z0-9_:]+#\S+)\s*=\s*([0-9]+(?:\.[0-9]+)?) s =/.freeze
 

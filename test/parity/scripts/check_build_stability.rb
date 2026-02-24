@@ -4,10 +4,11 @@
 require "json"
 require "pathname"
 require "time"
+require_relative "report_paths"
 
-REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
+REPO_ROOT = ParityReportPaths.repo_root.freeze
 EXTCONF = REPO_ROOT.join("ext", "mlx", "extconf.rb").freeze
-OUT_FILE = REPO_ROOT.join("test", "parity", "reports", "build_stability.json").freeze
+OUT_FILE = ParityReportPaths.generated_root.join("build_stability.json").freeze
 
 source = File.read(EXTCONF)
 

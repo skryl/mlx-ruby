@@ -7,10 +7,11 @@ require "pathname"
 require "rbconfig"
 require "stringio"
 require "tempfile"
+require_relative "report_paths"
 
-REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
+REPO_ROOT = ParityReportPaths.repo_root.freeze
 LIB_ROOT = REPO_ROOT.join("lib").freeze
-PARITY_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
+PARITY_ROOT = ParityReportPaths.generated_root.freeze
 OUT_FILE = PARITY_ROOT.join("ir_webgpu_coverage.json").freeze
 SUBMODULE_ROOT = REPO_ROOT.join("submodules", "mlx-ruby-examples").freeze
 SUBMODULE_RUNNER = SUBMODULE_ROOT.join("benchmark", "runner.rb").freeze

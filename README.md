@@ -554,7 +554,8 @@ ruby -e 'require "rbconfig"; puts RbConfig::CONFIG["host_cpu"]'
 ## Contributing
 
 - Open pull requests against this repository.
-- Keep parity artifacts in `test/parity/reports/` in sync with tool/script changes.
+- Keep parity snapshots in `test/snapshots/parity/` in sync with contract changes.
+- Keep generated parity artifacts under `test/tmp/reports/parity/` (not source-controlled paths).
 - Follow upstream MLX contributor guidance where applicable: [mlx/CONTRIBUTING.md](https://github.com/ml-explore/mlx/blob/main/CONTRIBUTING.md).
 
 CI currently runs on `ubuntu-22.04` and `macos-14` with Ruby `3.4` and `4.0`.

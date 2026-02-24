@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 
 class WebDemoStableDiffusionWiringTest < Minitest::Test
   WEB_INDEX_HTML = File.join(RUBY_ROOT, "web", "index.html")

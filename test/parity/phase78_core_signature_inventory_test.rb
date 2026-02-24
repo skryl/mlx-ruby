@@ -9,7 +9,7 @@ class Phase78CoreSignatureInventoryTest < Minitest::Test
     skip "Python sources are unavailable in this environment" unless TestSupport.python_sources_available?
 
     tool = File.join(RUBY_ROOT, "test", "parity", "scripts", "generate_core_signature_inventory.rb")
-    out_file = File.join(RUBY_ROOT, "test", "parity", "reports", "core_signature_inventory.json")
+    out_file = TestSupport.parity_generated_report_path("core_signature_inventory.json")
 
     stdout, stderr, status = Open3.capture3("ruby", tool)
     assert status.success?, "generator failed\nstdout:\n#{stdout}\nstderr:\n#{stderr}"

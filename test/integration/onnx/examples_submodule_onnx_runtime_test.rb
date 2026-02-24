@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] = "1200"
-
 require "json"
 require "open3"
 require "rbconfig"
@@ -11,6 +9,10 @@ require "tmpdir"
 require_relative "test_helper"
 
 class Phase324ExamplesSubmoduleOnnxRuntimeParityTest < Minitest::Test
+  def self.current_test_timeout_seconds
+    1200
+  end
+
   PY_RUN_ONNX_TYPED = <<~PY.freeze
     import json
     import sys

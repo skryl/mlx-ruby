@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 require_relative "../../examples/benchmark/benchmark_mlx_examples"
 
 class Phase325ExamplesAdapterBooleanDiffParityTest < Minitest::Test

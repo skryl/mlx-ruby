@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "stringio"
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 require_relative "../../tasks/web_assets_task"
 
 class WebAssetsTaskTest < Minitest::Test

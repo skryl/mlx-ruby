@@ -4,10 +4,11 @@
 require "json"
 require "pathname"
 require "time"
+require_relative "report_paths"
 
-REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
+REPO_ROOT = ParityReportPaths.repo_root.freeze
 RUBY_MLX_ROOT = REPO_ROOT.join("lib", "mlx").freeze
-PARITY_REPORTS_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
+PARITY_REPORTS_ROOT = ParityReportPaths.generated_root.freeze
 PYTHON_MLX_ROOT = [REPO_ROOT.join("python", "mlx"), REPO_ROOT.join("submodules", "mlx", "python", "mlx")].find(&:directory?)
 OUT_FILE = PARITY_REPORTS_ROOT.join("package_inventory.json").freeze
 

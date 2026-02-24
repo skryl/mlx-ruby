@@ -78,8 +78,7 @@ uv.lock
 *.pdb
 
 # Generated parity reports
-/test/parity/reports/*.json
-!/test/parity/reports/phase0_contract.json
+/test/parity/reports/
 /test/tmp/
 
 # Generated web demo assets (`rake web:assets`)

@@ -4,9 +4,10 @@
 require "json"
 require "pathname"
 require "time"
+require_relative "report_paths"
 
-REPO_ROOT = Pathname.new(File.expand_path("../../..", __dir__)).freeze
-PARITY_REPORTS_ROOT = REPO_ROOT.join("test", "parity", "reports").freeze
+REPO_ROOT = ParityReportPaths.repo_root.freeze
+PARITY_REPORTS_ROOT = ParityReportPaths.generated_root.freeze
 PYTHON_ROOT = [REPO_ROOT.join("python"), REPO_ROOT.join("submodules", "mlx", "python")].find(&:directory?)
 PYTHON_MLX_ROOT = PYTHON_ROOT&.join("mlx")
 PYTHON_SRC_ROOT = PYTHON_ROOT&.join("src")

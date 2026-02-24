@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "rake"
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 
 class RakeTasksSmokeTest < Minitest::Test
   PROJECT_TASK_INVOCATIONS = [

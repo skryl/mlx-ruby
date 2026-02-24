@@ -5,11 +5,11 @@ require "net/http"
 require "open3"
 require "socket"
 require "timeout"
-require_relative "../test_helper"
+require_relative "../../support/test_helper"
 
 module WebDemoIntegrationTestHelper
   WEB_DEMO_HOST = "127.0.0.1".freeze
-  PROBE_SCRIPT = File.join(RUBY_ROOT, "test", "web", "demo_page_probe.mjs").freeze
+  PROBE_SCRIPT = File.join(RUBY_ROOT, "test", "integration", "web", "demo_page_probe.mjs").freeze
 
   def run
     run_without_timeout

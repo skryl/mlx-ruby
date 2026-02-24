@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../test_helper"
+require_relative "../support/test_helper"
 
 class BenchmarkTaskLoadTest < Minitest::Test
   def test_loading_benchmark_task_does_not_require_mlx

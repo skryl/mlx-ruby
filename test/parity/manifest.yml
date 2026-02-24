@@ -1,0 +1,1631 @@
+---
+format: mlx_parity_phase_manifest_v1
+generated_at: '2026-02-23T22:56:31Z'
+phases:
+  '0':
+    file: test/parity/phase0_manifest_test.rb
+    domain: core
+    methods:
+    - test_contract_checker_accepts_generated_manifest
+    - test_generates_manifest_with_expected_surface
+  '1':
+    file: test/parity/phase1_bootstrap_test.rb
+    domain: core
+    methods:
+    - test_extension_build_files_exist
+    - test_gemspec_exists_and_declares_native_extension
+    - test_library_loads_without_native_extension
+  '10':
+    file: test/parity/phase10_bool_compare_select_test.rb
+    domain: core
+    methods:
+    - test_elementwise_comparisons
+    - test_where_selects_values_and_supports_broadcast
+  '100':
+    file: test/parity/phase100_array_name_parity_contract_test.rb
+    domain: core
+    methods:
+    - test_python_array_names_have_no_missing_entries_in_ruby_inventory
+  '101':
+    file: test/parity/phase101_parity_report_checks_test.rb
+    domain: core
+    methods:
+    - test_report_emits_array_and_overall_parity_checks
+  '102':
+    file: test/parity/phase102_extension_module_presence_test.rb
+    domain: nn
+    methods:
+    - test_extension_module_is_present
+  '103':
+    file: test/parity/phase103_module_name_parity_contract_test.rb
+    domain: nn
+    methods:
+    - test_top_level_module_name_parity_has_no_missing_entries
+  '104':
+    file: test/parity/phase104_parity_report_module_checks_test.rb
+    domain: nn
+    methods:
+    - test_report_tracks_top_level_module_parity
+  '105':
+    file: test/parity/phase105_core_class_surface_parity_test.rb
+    domain: core
+    methods:
+    - test_array_at_and_iterator_classes
+    - test_array_like_and_info_classes
+    - test_missing_core_classes_are_present
+  '106':
+    file: test/parity/phase106_package_inventory_contract_test.rb
+    domain: core
+    methods:
+    - test_package_inventory_generator_writes_contract_artifact
+  '107':
+    file: test/parity/phase107_package_report_contract_test.rb
+    domain: core
+    methods:
+    - test_package_parity_report_is_generated
+  '108':
+    file: test/parity/phase108_package_skeleton_test.rb
+    domain: core
+    methods:
+    - test_ruby_package_tree_contains_python_mlx_equivalent_files
+  '109':
+    file: test/parity/phase109_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_109_contract
+  '11':
+    file: test/parity/phase11_compare_close_test.rb
+    domain: core
+    methods:
+    - test_isclose_and_array_equal_handle_nan_controls
+    - test_less_equal_and_greater_equal_with_scalar_broadcast
+  '110':
+    file: test/parity/phase110_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_110_contract
+  '111':
+    file: test/parity/phase111_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_111_contract
+  '112':
+    file: test/parity/phase112_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_112_contract
+  '113':
+    file: test/parity/phase113_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_113_contract
+  '114':
+    file: test/parity/phase114_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_114_contract
+  '115':
+    file: test/parity/phase115_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_115_contract
+  '116':
+    file: test/parity/phase116_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_116_contract
+  '117':
+    file: test/parity/phase117_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_117_contract
+  '118':
+    file: test/parity/phase118_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_118_contract
+  '119':
+    file: test/parity/phase119_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_119_contract
+  '12':
+    file: test/parity/phase12_nan_inf_predicates_test.rb
+    domain: core
+    methods:
+    - test_nan_and_inf_predicates_on_scalar_inputs
+    - test_nan_and_inf_predicates_on_vector
+  '120':
+    file: test/parity/phase120_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_120_contract
+  '121':
+    file: test/parity/phase121_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_121_contract
+  '122':
+    file: test/parity/phase122_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_122_contract
+  '123':
+    file: test/parity/phase123_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_123_contract
+  '124':
+    file: test/parity/phase124_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_124_contract
+  '125':
+    file: test/parity/phase125_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_125_contract
+  '126':
+    file: test/parity/phase126_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_126_contract
+  '127':
+    file: test/parity/phase127_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_127_contract
+  '128':
+    file: test/parity/phase128_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_128_contract
+  '129':
+    file: test/parity/phase129_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_129_contract
+  '13':
+    file: test/parity/phase13_elementwise_clip_test.rb
+    domain: core
+    methods:
+    - test_clip_with_optional_bounds
+    - test_floor_and_ceil
+    - test_minimum_and_maximum_with_broadcast
+  '130':
+    file: test/parity/phase130_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_130_contract
+  '131':
+    file: test/parity/phase131_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_131_contract
+  '132':
+    file: test/parity/phase132_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_132_contract
+  '133':
+    file: test/parity/phase133_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_133_contract
+  '134':
+    file: test/parity/phase134_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_134_contract
+  '135':
+    file: test/parity/phase135_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_135_contract
+  '136':
+    file: test/parity/phase136_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_136_contract
+  '137':
+    file: test/parity/phase137_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_137_contract
+  '138':
+    file: test/parity/phase138_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_138_contract
+  '139':
+    file: test/parity/phase139_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_139_contract
+  '14':
+    file: test/parity/phase14_boolean_reductions_test.rb
+    domain: core
+    methods:
+    - test_all_and_any_global
+    - test_all_and_any_with_axis_and_keepdims
+  '140':
+    file: test/parity/phase140_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_140_contract
+  '141':
+    file: test/parity/phase141_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_141_contract
+  '142':
+    file: test/parity/phase142_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_142_contract
+  '143':
+    file: test/parity/phase143_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_143_contract
+  '144':
+    file: test/parity/phase144_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_144_contract
+  '145':
+    file: test/parity/phase145_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_145_contract
+  '146':
+    file: test/parity/phase146_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_146_contract
+  '147':
+    file: test/parity/phase147_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_147_contract
+  '148':
+    file: test/parity/phase148_package_parity_test.rb
+    domain: core
+    methods:
+    - test_phase_148_contract
+  '149':
+    file: test/parity/phase149_scheduler_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_join_schedules_uses_step_offset_after_boundary
+    - test_join_schedules_validates_input
+    - test_linear_schedule_validates_steps
+  '15':
+    file: test/parity/phase15_axis_manipulation_test.rb
+    domain: core
+    methods:
+    - test_moveaxis_matches_transpose_equivalent
+    - test_swapaxes_matches_transpose_equivalent
+  '150':
+    file: test/parity/phase150_optimizer_scheduler_integration_test.rb
+    domain: optimizers
+    methods:
+    - test_constant_learning_rate_is_in_optimizer_state
+    - test_learning_rate_schedule_uses_pre_increment_step
+  '151':
+    file: test/parity/phase151_optimizer_state_and_update_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_init_single_is_called_once_per_parameter_leaf
+    - test_update_calls_model_update_with_optimizer_output
+  '152':
+    file: test/parity/phase152_optimizer_gradient_tree_init_test.rb
+    domain: optimizers
+    methods:
+    - test_assigning_state_forces_reinitialization_on_next_apply
+    - test_lazy_init_uses_gradient_tree_not_full_parameter_tree
+  '153':
+    file: test/parity/phase153_multi_optimizer_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_multi_optimizer_filter_count_validation
+    - test_multi_optimizer_splits_gradient_tree_using_filters
+    - test_multi_optimizer_state_contract
+  '154':
+    file: test/parity/phase154_clip_grad_norm_functional_test.rb
+    domain: optimizers
+    methods:
+    - test_clip_grad_norm_keeps_small_gradients_unchanged
+    - test_clip_grad_norm_scales_by_global_norm
+  '156':
+    file: test/parity/phase156_sgd_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_sgd_nesterov_requires_positive_momentum_and_zero_dampening
+    - test_sgd_weight_decay
+    - test_sgd_with_momentum_accumulates_velocity
+    - test_sgd_without_momentum
+  '157':
+    file: test/parity/phase157_rmsprop_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_rmsprop_step_updates_and_state
+    - test_rmsprop_validates_alpha_and_eps
+  '158':
+    file: test/parity/phase158_adagrad_adadelta_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_adadelta_updates_and_state
+    - test_adagrad_and_adadelta_validate_params
+    - test_adagrad_updates_and_state
+  '159':
+    file: test/parity/phase159_optimizer_validation_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_optimizer_constructor_validations
+  '16':
+    file: test/parity/phase16_repeat_tile_test.rb
+    domain: core
+    methods:
+    - test_repeat_with_and_without_axis
+    - test_tile_with_scalar_and_vector_reps
+  '160':
+    file: test/parity/phase160_adam_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_adam_bias_correction_uses_incremented_step
+    - test_adam_updates_and_state_without_bias_correction
+  '161':
+    file: test/parity/phase161_adamw_adamax_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_adamax_updates_and_state
+    - test_adamax_validates_eps
+    - test_adamw_applies_decoupled_weight_decay
+  '162':
+    file: test/parity/phase162_lion_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_lion_applies_weight_decay
+    - test_lion_updates_and_state
+  '163':
+    file: test/parity/phase163_optimizer_state_serialization_test.rb
+    domain: optimizers
+    methods:
+    - test_adam_resume_from_state_matches_continuation
+    - test_multi_optimizer_state_roundtrip
+  '164':
+    file: test/parity/phase164_adafactor_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_adafactor_beta1_tracks_first_moment
+    - test_adafactor_factored_state_and_first_step
+    - test_adafactor_unfactored_state_and_first_step
+  '165':
+    file: test/parity/phase165_muon_functional_parity_test.rb
+    domain: optimizers
+    methods:
+    - test_muon_1d_default_nesterov_update
+    - test_muon_1d_without_nesterov
+    - test_muon_2d_newton_schulz_path
+  '166':
+    file: test/parity/phase166_advanced_optimizer_integration_test.rb
+    domain: optimizers
+    methods:
+    - test_adafactor_and_muon_update_nested_trees
+    - test_multi_optimizer_routes_advanced_optimizers_by_path
+  '167':
+    file: test/parity/phase167_module_state_behavior_test.rb
+    domain: nn
+    methods:
+    - test_module_values_can_be_nested_in_state
+    - test_state_is_reference_and_setter_moves_values_between_state_and_attrs
+    - test_state_tracks_array_and_container_assignments
+  '168':
+    file: test/parity/phase168_module_parameters_freeze_test.rb
+    domain: nn
+    methods:
+    - test_freeze_unfreeze_keys_and_strict_validation
+    - test_parameters_include_nested_arrays_and_exclude_plain_attrs
+    - test_recursive_freeze_affects_child_modules
+  '169':
+    file: test/parity/phase169_module_traversal_test.rb
+    domain: nn
+    methods:
+    - test_children_preserve_direct_module_structure
+    - test_leaf_modules_only_returns_leaf_submodules
+    - test_modules_and_named_modules_traverse_all_modules
+  '17':
+    file: test/parity/phase17_meshgrid_test.rb
+    domain: core
+    methods:
+    - test_meshgrid_default_xy
+    - test_meshgrid_ij_and_sparse
+  '170':
+    file: test/parity/phase170_module_update_strictness_test.rb
+    domain: nn
+    methods:
+    - test_update_modules_strict_validation_and_replacement
+    - test_update_strict_nested_and_type_validation
+  '171':
+    file: test/parity/phase171_module_load_save_weights_test.rb
+    domain: nn
+    methods:
+    - test_load_weights_from_list_with_strict_validation
+    - test_save_and_load_npz_weights_roundtrip
+    - test_save_weights_rejects_unsupported_extension
+  '172':
+    file: test/parity/phase172_nn_utils_value_and_grad_test.rb
+    domain: nn
+    methods:
+    - test_value_and_grad_tracks_model_trainable_parameters
+  '173':
+    file: test/parity/phase173_nn_utils_checkpoint_test.rb
+    domain: nn
+    methods:
+    - test_checkpoint_defaults_to_module_call
+    - test_checkpoint_with_explicit_fn
+  '174':
+    file: test/parity/phase174_nn_utils_average_gradients_test.rb
+    domain: nn
+    methods:
+    - test_average_gradients_is_noop_for_single_process_group
+  '175':
+    file: test/parity/phase175_losses_reduction_validation_test.rb
+    domain: nn
+    methods:
+    - test_l1_and_mse_shape_validation
+    - test_reduction_modes_and_invalid_reduction
+  '176':
+    file: test/parity/phase176_cross_entropy_loss_test.rb
+    domain: nn
+    methods:
+    - test_cross_entropy_validates_shapes_weights_and_label_smoothing
+    - test_cross_entropy_with_class_indices_and_probs
+  '177':
+    file: test/parity/phase177_binary_cross_entropy_loss_test.rb
+    domain: nn
+    methods:
+    - test_binary_cross_entropy_logits_and_probabilities
+    - test_binary_cross_entropy_shape_and_weight_validation
+  '178':
+    file: test/parity/phase178_basic_distribution_losses_test.rb
+    domain: nn
+    methods:
+    - test_l1_and_mse_values
+    - test_nll_and_kl_values
+  '179':
+    file: test/parity/phase179_gaussian_nll_loss_test.rb
+    domain: nn
+    methods:
+    - test_gaussian_nll_loss_shape_validation
+    - test_gaussian_nll_loss_values
+  '18':
+    file: test/parity/phase18_inner_outer_test.rb
+    domain: core
+    methods:
+    - test_inner_product_for_vectors
+    - test_outer_product_for_vectors
+  '180':
+    file: test/parity/phase180_smooth_l1_triplet_loss_test.rb
+    domain: nn
+    methods:
+    - test_smooth_l1_values
+    - test_triplet_loss_values
+  '181':
+    file: test/parity/phase181_remaining_losses_test.rb
+    domain: nn
+    methods:
+    - test_hinge_huber_log_cosh_and_cosine_similarity
+    - test_margin_ranking_loss_and_shape_validation
+  '182':
+    file: test/parity/phase182_init_base_initializers_test.rb
+    domain: nn
+    methods:
+    - test_constant_normal_and_uniform_initializers
+    - test_identity_initializer_validates_square_matrix
+  '183':
+    file: test/parity/phase183_init_fan_in_out_test.rb
+    domain: core
+    methods:
+    - test_calculate_fan_in_fan_out_for_linear_and_conv_shapes
+    - test_calculate_fan_in_fan_out_validates_ndim
+  '184':
+    file: test/parity/phase184_glorot_he_initializers_test.rb
+    domain: nn
+    methods:
+    - test_glorot_and_he_normal_scale
+    - test_glorot_and_he_uniform_bounds
+  '185':
+    file: test/parity/phase185_sparse_orthogonal_initializers_test.rb
+    domain: nn
+    methods:
+    - test_orthogonal_initializer_returns_orthogonal_matrix_scaled_by_gain
+    - test_sparse_initializer_sets_expected_zeros_per_row
+  '186':
+    file: test/parity/phase186_initializer_validation_test.rb
+    domain: nn
+    methods:
+    - test_he_mode_validation
+    - test_sparse_and_orthogonal_ndim_validation
+  '187':
+    file: test/parity/phase187_linear_layers_parity_test.rb
+    domain: nn
+    methods:
+    - test_bilinear_initializes_shapes_and_applies_transform
+    - test_identity_is_passthrough
+    - test_linear_initializes_shapes_and_applies_affine_transform
+    - test_linear_supports_no_bias
+  '188':
+    file: test/parity/phase188_embedding_container_parity_test.rb
+    domain: nn
+    methods:
+    - test_embedding_lookup_and_as_linear
+    - test_sequential_applies_layers_in_order
+  '189':
+    file: test/parity/phase189_dropout_parity_test.rb
+    domain: nn
+    methods:
+    - test_dropout2d_channelwise_masking_and_ndim_validation
+    - test_dropout3d_channelwise_masking_and_ndim_validation
+    - test_dropout_probability_validation_and_eval_passthrough
+    - test_dropout_training_scales_kept_values
+  '19':
+    file: test/parity/phase19_logical_ops_test.rb
+    domain: core
+    methods:
+    - test_logical_ops_support_scalar_inputs
+    - test_logical_unary_and_binary_ops
+  '190':
+    file: test/parity/phase190_activations_parity_test.rb
+    domain: nn
+    methods:
+    - test_glu_prelu_and_gelu_module_behavior
+    - test_relu_family_and_leaky_relu
+    - test_shrink_threshold_and_tanh_family
+    - test_softmax_log_softmax_and_softmin
+    - test_softplus_sigmoid_family
+  '191':
+    file: test/parity/phase191_positional_encoding_parity_test.rb
+    domain: nn
+    methods:
+    - test_alibi_slope_matrix_and_call
+    - test_rope_matches_core_rope
+    - test_sinusoidal_positional_encoding_shape_and_order
+  '192':
+    file: test/parity/phase192_quantized_scaffolding_parity_test.rb
+    domain: core
+    methods:
+    - test_from_linear_and_from_embedding_scaffolding
+    - test_quantize_model_updates_leaf_modules
+    - test_to_quantized_routes_for_linear_and_embedding
+  '193':
+    file: test/parity/phase193_convolution_layers_parity_test.rb
+    domain: nn
+    methods:
+    - test_conv1d_group_validation_and_forward
+    - test_conv2d_group_validation_and_forward
+    - test_conv3d_forward
+  '194':
+    file: test/parity/phase194_convolution_transpose_layers_parity_test.rb
+    domain: nn
+    methods:
+    - test_conv_transpose1d_forward_with_bias
+    - test_conv_transpose2d_forward_with_bias
+    - test_conv_transpose3d_forward_without_bias
+  '195':
+    file: test/parity/phase195_pooling_layers_parity_test.rb
+    domain: nn
+    methods:
+    - test_pool1d_max_and_avg
+    - test_pool2d_max_and_avg
+    - test_pool3d_max_and_avg
+    - test_pool_argument_validation
+  '196':
+    file: test/parity/phase196_normalization_layers_parity_test.rb
+    domain: nn
+    methods:
+    - test_batch_norm_input_rank_validation
+    - test_batch_norm_training_updates_running_stats_and_eval_uses_them
+    - test_group_norm_forward_paths
+    - test_instance_norm_normalizes_per_instance
+    - test_layer_norm_and_rms_norm_match_core_ops
+  '197':
+    file: test/parity/phase197_recurrent_layers_parity_test.rb
+    domain: nn
+    methods:
+    - test_gru_forward_zero_weights
+    - test_lstm_forward_zero_weights
+    - test_rnn_forward_with_custom_nonlinearity
+  '198':
+    file: test/parity/phase198_transformer_layers_parity_test.rb
+    domain: nn
+    methods:
+    - test_multihead_attention_validation_and_shape
+    - test_transformer_encoder_decoder_layer_shapes
+    - test_transformer_end_to_end_shape
+  '199':
+    file: test/parity/phase199_upsample_parity_test.rb
+    domain: nn
+    methods:
+    - test_linear_and_cubic_modes_expand_shape
+    - test_upsample_module_validation_and_mode_dispatch
+    - test_upsample_nearest_integer_scale
+  '2':
+    file: test/parity/phase2_core_native_test.rb
+    domain: core
+    methods:
+    - test_native_core_version_and_memory_entrypoints
+    - test_native_device_and_stream_entrypoints
+  '20':
+    file: test/parity/phase20_bitwise_ops_test.rb
+    domain: core
+    methods:
+    - test_bitwise_binary_ops
+    - test_bitwise_supports_scalar_and_invert
+  '200':
+    file: test/parity/phase200_distributed_helpers_parity_test.rb
+    domain: distributed
+    methods:
+    - test_shard_inplace_noop_on_single_rank_group
+    - test_shard_inplace_validates_sharding_string
+    - test_sum_gradients_is_identity_for_single_rank
+  '201':
+    file: test/parity/phase201_distributed_linear_classes_parity_test.rb
+    domain: distributed
+    methods:
+    - test_all_to_sharded_linear_from_linear_matches_linear_on_single_rank
+    - test_sharded_to_all_linear_from_linear_matches_linear_on_single_rank
+  '202':
+    file: test/parity/phase202_quantized_distributed_classes_parity_test.rb
+    domain: distributed
+    methods:
+    - test_quantized_distributed_from_quantized_linear_single_rank
+    - test_shard_linear_dispatches_quantized_wrappers
+  '203':
+    file: test/parity/phase203_distributed_utils_common_parity_test.rb
+    domain: distributed
+    methods:
+    - test_hostfile_from_file_parses_formats
+    - test_hostfile_from_list_and_to_json
+    - test_positive_number_and_optional_bool_action
+  '204':
+    file: test/parity/phase204_distributed_utils_config_parity_test.rb
+    domain: distributed
+    methods:
+    - test_connectivity_matrix_and_ring_extraction
+    - test_mesh_ring_validation_and_auto_setup
+    - test_parse_hardware_ports
+  '205':
+    file: test/parity/phase205_distributed_utils_launch_parity_test.rb
+    domain: distributed
+    methods:
+    - test_command_process_interface_contract
+    - test_get_mpi_libname_shape
+    - test_remote_process_launch_and_kill_script_generation
+  '206':
+    file: test/parity/phase206_functional_harness_optimizer_loss_module_test.rb
+    domain: optimizers
+    methods:
+    - test_harness_optimizer_loss_module_section
+  '207':
+    file: test/parity/phase207_functional_harness_layers_test.rb
+    domain: core
+    methods:
+    - test_harness_layers_section
+  '208':
+    file: test/parity/phase208_functional_harness_distributed_utils_test.rb
+    domain: distributed
+    methods:
+    - test_harness_distributed_utils_section
+  '209':
+    file: test/parity/phase209_consolidated_parity_report_test.rb
+    domain: core
+    methods:
+    - test_consolidated_report_contains_uncovered_behavior_list
+  '21':
+    file: test/parity/phase21_sort_argsort_test.rb
+    domain: core
+    methods:
+    - test_argsort_default_and_axis
+    - test_sort_default_and_axis
+  '211':
+    file: test/parity/phase211_dlpack_runtime_parity_test.rb
+    domain: distributed
+    methods:
+    - test_dlpack_export_and_roundtrip_contract
+    - test_dlpack_stream_argument_validation
+  '212':
+    file: test/parity/phase212_distributed_remote_process_runtime_test.rb
+    domain: distributed
+    methods:
+    - test_remote_process_spawns_and_reports_exit_status
+    - test_remote_process_terminate_sets_killed_flag
+  '213':
+    file: test/parity/phase213_distributed_launch_backend_parity_test.rb
+    domain: distributed
+    methods:
+    - test_launch_jaccl_writes_rdma_file_and_ring_flag
+    - test_launch_nccl_adds_world_and_rank_env
+    - test_launch_ring_builds_hostfile_and_env
+    - test_launch_ring_requires_ips
+  '214':
+    file: test/parity/phase214_distributed_launch_mpi_parity_test.rb
+    domain: distributed
+    methods:
+    - test_get_mpi_libname_returns_nil_or_string
+    - test_launch_mpi_builds_expected_command
+  '215':
+    file: test/parity/phase215_distributed_launch_main_parity_test.rb
+    domain: distributed
+    methods:
+    - test_main_dispatches_backend_and_resolves_command
+    - test_main_requires_script_or_command
+    - test_main_uses_hostfile_backend_and_env
+  '216':
+    file: test/parity/phase216_distributed_config_runtime_parity_test.rb
+    domain: distributed
+    methods:
+    - test_add_ips_and_check_rdma_use_runner
+    - test_check_ssh_connections_reports_sudo_flags
+    - test_ip_configurator_assigns_pairwise_ips
+  '217':
+    file: test/parity/phase217_distributed_config_pipeline_parity_test.rb
+    domain: distributed
+    methods:
+    - test_configure_ring_jaccl_and_jaccl_ring_emit_hostfiles
+    - test_prepare_ethernet_hostfile_uses_add_ips
+  '218':
+    file: test/parity/phase218_distributed_config_main_parity_test.rb
+    domain: distributed
+    methods:
+    - test_main_dispatches_ethernet_path
+    - test_main_dispatches_thunderbolt_path
+  '219':
+    file: test/parity/phase219_distributed_dlpack_harness_test.rb
+    domain: distributed
+    methods:
+    - test_distributed_and_dlpack_golden_harness
+  '22':
+    file: test/parity/phase22_min_max_arg_reductions_test.rb
+    domain: core
+    methods:
+    - test_argmin_and_argmax_reductions
+    - test_min_and_max_reductions
+  '220':
+    file: test/parity/phase220_gap_baseline_artifact_test.rb
+    domain: core
+    methods:
+    - test_gap_baseline_artifact_contains_method_and_module_coverage
+  '221':
+    file: test/parity/phase221_array_numpy_conversion_parity_test.rb
+    domain: core
+    methods:
+    - test_numpy_generated_npy_roundtrip_and_dtype_preservation
+    - test_numpy_origin_array_participates_in_ruby_arithmetic
+  '222':
+    file: test/parity/phase222_array_noncontiguous_copy_parity_test.rb
+    domain: core
+    methods:
+    - test_copy_like_state_is_not_shared_between_instances
+    - test_loads_numpy_noncontiguous_view_values
+  '223':
+    file: test/parity/phase223_array_pickle_state_parity_test.rb
+    domain: core
+    methods:
+    - test_python_pickle_numpy_payload_can_be_loaded_through_npy
+    - test_state_protocol_roundtrip_preserves_values_and_dtype
+  '224':
+    file: test/parity/phase224_array_buffer_protocol_parity_test.rb
+    domain: core
+    methods:
+    - test_dlpack_capsule_roundtrip_survives_source_release
+    - test_dlpack_device_tuple_contract
+  '225':
+    file: test/parity/phase225_array_indexing_update_edge_parity_test.rb
+    domain: core
+    methods:
+    - test_setitem_supports_boolean_masks
+    - test_setitem_supports_integer_index_lists
+  '226':
+    file: test/parity/phase226_array_graph_index_stress_parity_test.rb
+    domain: core
+    methods:
+    - test_deep_graph_chain_evaluates
+    - test_large_index_access
+    - test_siblings_can_be_evaluated_independently
+  '227':
+    file: test/parity/phase227_autograd_scatter_overwrite_parity_test.rb
+    domain: core
+    methods:
+    - test_put_along_axis_overwrite_vjp_matches_expected_masking
+  '228':
+    file: test/parity/phase228_autograd_scatter_extrema_tie_parity_test.rb
+    domain: core
+    methods:
+    - test_maximum_vjp_routes_gradient_to_selected_branch
+    - test_minimum_vjp_routes_gradient_to_selected_branch
+  '229':
+    file: test/parity/phase229_autograd_indexing_gradient_parity_test.rb
+    domain: core
+    methods:
+    - test_put_along_axis_grad_and_slice_grad
+    - test_topk_grad
+  '23':
+    file: test/parity/phase23_prod_cumulative_test.rb
+    domain: core
+    methods:
+    - test_cumsum_and_cumprod
+    - test_prod_reduction
+  '230':
+    file: test/parity/phase230_autograd_structure_type_parity_test.rb
+    domain: core
+    methods:
+    - test_matmul_jvp
+    - test_vjp_over_concatenate_tree_output
+  '231':
+    file: test/parity/phase231_autograd_stability_parity_test.rb
+    domain: core
+    methods:
+    - test_reduce_jvp_and_cumprod_grad
+    - test_repeated_grad_calls_are_stable
+  '235':
+    file: test/parity/phase235_compile_type_constant_validation_parity_test.rb
+    domain: distributed
+    methods:
+    - test_compile_accepts_none_and_scalar_constants
+    - test_compile_rejects_unsupported_input_types
+  '236':
+    file: test/parity/phase236_compile_changing_structure_parity_test.rb
+    domain: distributed
+    methods:
+    - test_compile_allows_output_structure_change_by_constant_kwargs
+    - test_compile_output_with_siblings
+  '237':
+    file: test/parity/phase237_compile_runtime_stability_parity_test.rb
+    domain: distributed
+    methods:
+    - test_compiled_callable_can_be_wrapped_and_reused
+    - test_repeated_compile_invocation_is_stable
+  '238':
+    file: test/parity/phase238_quantized_matvec_scenarios_parity_test.rb
+    domain: core
+    methods:
+    - test_qqmm_mode_path_matches_dequantized_reference
+    - test_quantized_matmul_qmv_like_path
+    - test_quantized_matmul_qvm_like_path
+  '239':
+    file: test/parity/phase239_quantized_mode_shape_error_parity_test.rb
+    domain: core
+    methods:
+    - test_mode_error_cases
+    - test_non_multiple_dimensions_for_nvfp4
+  '24':
+    file: test/parity/phase24_var_std_test.rb
+    domain: core
+    methods:
+    - test_var_and_std_global
+    - test_var_and_std_with_axis
+  '240':
+    file: test/parity/phase240_quantized_gradient_parity_i_test.rb
+    domain: core
+    methods:
+    - test_qmm_jvp_matches_quantized_matmul_of_tangent
+    - test_qmm_vjp_matches_quantized_matmul_of_cotangent
+  '241':
+    file: test/parity/phase241_quantized_gradient_parity_ii_test.rb
+    domain: core
+    methods:
+    - test_affine_vjp_wrt_scales_and_biases
+    - test_fp_vjp_scales_throws_for_mxfp8
+    - test_gather_qmm_grad_matches_shape_expectation
+    - test_quantize_strided_array
+  '242':
+    file: test/parity/phase242_fast_sdpa_mask_layout_parity_test.rb
+    domain: core
+    methods:
+    - test_sdpa_broadcast_mask_and_promoted_mask_types
+    - test_sdpa_noncontiguous_inputs_and_attention_sinks
+  '243':
+    file: test/parity/phase243_fast_sdpa_numeric_edge_parity_test.rb
+    domain: core
+    methods:
+    - test_sdpa_few_query_and_sliced_inputs
+    - test_sdpa_fully_masked_and_inf_score_paths_stay_finite
+  '244':
+    file: test/parity/phase244_fast_sdpa_autodiff_parity_test.rb
+    domain: core
+    methods:
+    - test_sdpa_grad_with_sliced_query
+    - test_sdpa_vjp_and_grad_shapes
+  '245':
+    file: test/parity/phase245_vmap_foundational_behavior_parity_test.rb
+    domain: core
+    methods:
+    - test_vmap_mismatch_input_sizes_raises
+    - test_vmap_unary_binary_tree_index_reduce_argreduce_mean
+  '246':
+    file: test/parity/phase246_vmap_linalg_gather_scatter_parity_test.rb
+    domain: core
+    methods:
+    - test_vmap_matmul_svd_inverse
+    - test_vmap_take_and_put_along_axis_scatter_like
+  '247':
+    file: test/parity/phase247_vmap_stability_type_parity_test.rb
+    domain: core
+    methods:
+    - test_vmap_concatenate_split_flatten_and_conv
+    - test_vmap_dtype_stability_over_repeated_calls
+  '248':
+    file: test/parity/phase248_memory_control_accounting_parity_test.rb
+    domain: core
+    methods:
+    - test_memory_info_controls_and_counters
+    - test_wired_memory_limit_and_active_memory_count_stability
+  '249':
+    file: test/parity/phase249_graph_export_filelike_parity_test.rb
+    domain: core
+    methods:
+    - test_export_to_dot_accepts_file_like_targets
+    - test_export_to_dot_still_supports_path_targets
+  '25':
+    file: test/parity/phase25_median_test.rb
+    domain: core
+    methods:
+    - test_median_axis
+    - test_median_global
+  '250':
+    file: test/parity/phase250_load_save_edge_parity_test.rb
+    domain: core
+    methods:
+    - test_gguf_metadata_and_fp8_load_path_or_feature_error
+    - test_load_npy_dtype_and_complex_error
+    - test_non_contiguous_roundtrip_and_optional_container_formats
+  '251':
+    file: test/parity/phase251_export_import_advanced_parity_test.rb
+    domain: core
+    methods:
+    - test_export_import_with_variable_inputs_and_control_flow_mask
+    - test_exporter_multi_signature_and_duplicate_signature_rejection
+  '253':
+    file: test/parity/phase253_device_matrix_runtime_test.rb
+    domain: core
+    methods:
+    - test_device_env_cpu_selects_cpu_default
+    - test_device_env_gpu_selects_gpu_default_when_available
+    - test_nested_array_construction_does_not_abort_on_gpu
+  '255':
+    file: test/parity/phase255_value_and_grad_single_forward_perf_test.rb
+    domain: perf
+    methods:
+    - test_value_and_grad_executes_wrapped_forward_once_per_call
+  '256':
+    file: test/parity/phase256_clip_grad_norm_device_only_perf_test.rb
+    domain: perf
+    methods:
+    - test_clip_grad_norm_does_not_materialize_gradients_to_host
+  '257':
+    file: test/parity/phase257_average_gradients_grouping_perf_test.rb
+    domain: perf
+    methods:
+    - test_average_gradients_groups_small_arrays_into_single_all_sum
+    - test_average_gradients_with_non_positive_group_size_avoids_grouping
+  '258':
+    file: test/parity/phase258_transformer_checkpoint_wrapper_cache_perf_test.rb
+    domain: perf
+    methods:
+    - test_transformer_encoder_checkpoint_wrappers_are_not_rebuilt_per_call
+  '259':
+    file: test/parity/phase259_from_dlpack_zero_copy_perf_test.rb
+    domain: perf
+    methods:
+    - test_from_dlpack_array_input_avoids_host_materialization
+    - test_from_dlpack_capsule_input_avoids_host_materialization
+  '26':
+    file: test/parity/phase26_arithmetic_function_ops_test.rb
+    domain: core
+    methods:
+    - test_module_level_binary_arithmetic_ops
+    - test_module_level_power_and_remainder_with_scalar
+  '260':
+    file: test/parity/phase260_array_setitem_device_path_perf_test.rb
+    domain: perf
+    methods:
+    - test_setitem_integer_index_on_1d_avoids_to_a
+    - test_setitem_integer_list_on_1d_avoids_to_a
+  '261':
+    file: test/parity/phase261_boolean_scalar_eval_barrier_perf_test.rb
+    domain: perf
+    methods:
+    - test_core_allclose_does_not_force_explicit_eval
+    - test_core_array_equal_does_not_force_explicit_eval
+  '262':
+    file: test/parity/phase262_nn_value_and_grad_tree_scan_perf_test.rb
+    domain: perf
+    methods:
+    - test_value_and_grad_no_param_path_does_not_require_tree_flatten
+  '263':
+    file: test/parity/phase263_transform_cache_key_no_marshal_perf_test.rb
+    domain: perf
+    methods:
+    - test_checkpoint_cache_key_does_not_use_marshal_dump
+    - test_compile_cache_key_does_not_use_marshal_dump
+  '265':
+    file: test/parity/phase265_native_symbol_id_cache_perf_test.rb
+    domain: perf
+    methods:
+    - test_targeted_conversion_functions_avoid_direct_rb_intern_calls
+  '266':
+    file: test/parity/phase266_to_a_materialization_path_perf_test.rb
+    domain: perf
+    methods:
+    - test_array_to_a_avoids_unconditional_pre_eval_for_non_scalar_paths
+  '267':
+    file: test/parity/phase267_gvl_release_entrypoints_perf_test.rb
+    domain: perf
+    methods:
+    - test_core_async_eval_has_no_gvl_path
+    - test_core_eval_has_no_gvl_path
+    - test_function_call_has_no_gvl_path
+  '268':
+    file: test/parity/phase268_nested_array_ingest_fast_path_perf_test.rb
+    domain: perf
+    methods:
+    - test_tensor_array_from_ruby_has_typed_float_fast_path
+  '269':
+    file: test/parity/phase269_runtime_symbol_cache_perf_test.rb
+    domain: perf
+    methods:
+    - test_runtime_hot_paths_avoid_direct_rb_intern_calls
+  '27':
+    file: test/parity/phase27_unary_math_extended_test.rb
+    domain: core
+    methods:
+    - test_log1p_and_expm1
+    - test_sign_negative_square_and_reciprocal
+    - test_trig_hyperbolic_and_sqrt_related_ops
+  '270':
+    file: test/parity/phase270_to_a_vector_fast_path_perf_test.rb
+    domain: perf
+    methods:
+    - test_array_to_a_has_dedicated_1d_fast_path
+  '271':
+    file: test/parity/phase271_function_release_gvl_plumbing_perf_test.rb
+    domain: perf
+    methods:
+    - test_function_wrap_helpers_accept_release_gvl_flag
+    - test_native_only_wrappers_enable_release_gvl
+  '272':
+    file: test/parity/phase272_nested_ingest_reserve_perf_test.rb
+    domain: perf
+    methods:
+    - test_infer_shape_and_flatten_typed_reserves_capacity_for_known_subtrees
+  '273':
+    file: test/parity/phase273_adafactor_device_scalar_perf_test.rb
+    domain: perf
+    methods:
+    - test_adafactor_avoids_item_to_f_scalar_host_sync
+  '274':
+    file: test/parity/phase274_setitem_mlx_index_fast_path_perf_test.rb
+    domain: perf
+    methods:
+    - test_setitem_mlx_boolean_mask_vector_avoids_to_a_fallback
+    - test_setitem_mlx_integer_index_vector_avoids_to_a_fallback
+  '275':
+    file: test/parity/phase275_multi_optimizer_split_cache_perf_test.rb
+    domain: perf
+    methods:
+    - test_multi_optimizer_caches_filter_assignments_for_stable_paths
+  '276':
+    file: test/parity/phase276_blocking_io_gvl_release_perf_test.rb
+    domain: perf
+    methods:
+    - test_core_load_npy_branch_releases_gvl
+    - test_core_save_releases_gvl
+    - test_core_synchronize_releases_gvl
+  '277':
+    file: test/parity/phase277_core_op_gvl_release_perf_test.rb
+    domain: perf
+    methods:
+    - test_high_traffic_core_ops_use_shared_no_gvl_array_helper
+  '28':
+    file: test/parity/phase28_inverse_trig_conversion_test.rb
+    domain: core
+    methods:
+    - test_degrees_and_radians
+    - test_inverse_trig_ops
+  '29':
+    file: test/parity/phase29_log_round_div_shift_test.rb
+    domain: core
+    methods:
+    - test_floor_divide_and_bit_shifts
+    - test_log2_log10_and_round
+  '3':
+    file: test/parity/phase3_dtype_constants_test.rb
+    domain: core
+    methods:
+    - test_dtype_objects_and_categories
+    - test_math_and_indexing_constants
+  '30':
+    file: test/parity/phase30_shape_manipulation_test.rb
+    domain: core
+    methods:
+    - test_atleast_nd_from_scalar
+    - test_flatten_squeeze_and_expand_dims
+  '31':
+    file: test/parity/phase31_construct_like_tri_test.rb
+    domain: core
+    methods:
+    - test_eye_identity_tri_tril_triu
+    - test_full_and_like_constructors
+  '32':
+    file: test/parity/phase32_diag_trace_test.rb
+    domain: core
+    methods:
+    - test_diag_for_vector_and_matrix
+    - test_diagonal_and_trace
+  '327':
+    file: test/parity/phase327_value_and_grad_native_cache_parity_test.rb
+    domain: core
+    methods:
+    - test_grad_sees_updated_non_target_arguments_across_calls
+    - test_value_and_grad_reentrant_call_with_same_selection_key_is_safe
+    - test_value_and_grad_reuses_native_transform_for_same_structure
+  '328':
+    file: test/parity/phase328_gpt2_example_weight_mapping_test.rb
+    domain: core
+    methods:
+    - test_forward_shape_matches_gpt2_logits
+    - test_from_hf_directory_falls_back_to_npz_when_native_safetensors_is_disabled
+    - test_load_hf_state_dict_maps_conv1d_weights_to_mlx_linear
+  '33':
+    file: test/parity/phase33_topk_partition_test.rb
+    domain: core
+    methods:
+    - test_partition_and_argpartition_invariants
+    - test_topk_on_flattened_array
+  '330':
+    file: test/parity/phase330_stable_diffusion_example_weight_mapping_test.rb
+    domain: core
+    methods:
+    - test_map_clip_text_encoder_weights_normalizes_names
+    - test_map_unet_weights_remaps_core_keys_without_slicing
+    - test_map_vae_weights_remaps_and_transposes_expected_tensors
+  '339':
+    file: test/parity/phase339_nanogpt_example_weight_mapping_test.rb
+    domain: core
+    methods:
+    - test_config_from_hf_config_parses_nanogpt_shakespeare_payload
+    - test_from_hf_directory_falls_back_to_npz_when_native_safetensors_is_disabled
+    - test_load_hf_state_dict_maps_qkv_and_mlp_weights
+  '34':
+    file: test/parity/phase34_roll_test.rb
+    domain: core
+    methods:
+    - test_roll_flattened
+    - test_roll_with_multi_axis_shifts
+    - test_roll_with_single_axis
+  '340':
+    file: test/parity/phase340_phase_manifest_contract_test.rb
+    domain: core
+    methods:
+    - test_phase_manifest_domains_are_known
+    - test_phase_manifest_matches_phase_test_inventory
+  '35':
+    file: test/parity/phase35_take_ops_test.rb
+    domain: core
+    methods:
+    - test_take_along_axis
+    - test_take_flattened_and_axis
+  '36':
+    file: test/parity/phase36_nan_to_num_test.rb
+    domain: core
+    methods:
+    - test_nan_to_num_with_explicit_replacements
+  '37':
+    file: test/parity/phase37_softmax_logsumexp_test.rb
+    domain: core
+    methods:
+    - test_logsumexp_and_logcumsumexp
+    - test_sigmoid_and_softmax
+  '38':
+    file: test/parity/phase38_kron_test.rb
+    domain: core
+    methods:
+    - test_kron_product
+  '39':
+    file: test/parity/phase39_view_like_ops_test.rb
+    domain: core
+    methods:
+    - test_contiguous_preserves_values
+    - test_real_imag_conjugate_and_stop_gradient
+  '4':
+    file: test/parity/phase4_array_bootstrap_test.rb
+    domain: core
+    methods:
+    - test_basic_array_arithmetic
+    - test_scalar_and_vector_construction
+  '40':
+    file: test/parity/phase40_shape_alias_ops_test.rb
+    domain: core
+    methods:
+    - test_asarray_and_concat_alias
+    - test_broadcast_shapes
+    - test_permute_unflatten_view_and_as_strided
+  '41':
+    file: test/parity/phase41_special_math_cumext_test.rb
+    domain: core
+    methods:
+    - test_cummax_and_cummin
+    - test_divmod_logaddexp_and_rsqrt
+    - test_erf_erfinv_and_inverse_hyperbolic
+  '42':
+    file: test/parity/phase42_index_update_pad_test.rb
+    domain: core
+    methods:
+    - test_pad_constant
+    - test_put_along_axis
+    - test_slice_update
+  '43':
+    file: test/parity/phase43_tensordot_einsum_test.rb
+    domain: core
+    methods:
+    - test_einsum_and_einsum_path
+    - test_tensordot_with_integer_axes
+  '44':
+    file: test/parity/phase44_gemm_helpers_test.rb
+    domain: core
+    methods:
+    - test_addmm_and_gather_mm
+    - test_block_masked_mm_and_segmented_mm
+    - test_hadamard_transform
+  '45':
+    file: test/parity/phase45_quantization_basics_test.rb
+    domain: core
+    methods:
+    - test_quantize_dequantize_and_quantized_matmul_affine
+    - test_to_fp8_and_from_fp8_roundtrip
+  '46':
+    file: test/parity/phase46_quantized_gather_test.rb
+    domain: core
+    methods:
+    - test_gather_qmm_matches_quantized_matmul
+    - test_qqmm_matches_float_matmul_approximately
+  '47':
+    file: test/parity/phase47_convolution_basics_test.rb
+    domain: nn
+    methods:
+    - test_conv1d
+    - test_conv2d_and_conv3d
+    - test_convolve_full_mode
+  '48':
+    file: test/parity/phase48_convolution_advanced_test.rb
+    domain: nn
+    methods:
+    - test_conv_general
+    - test_conv_transpose1d
+    - test_conv_transpose2d_and_conv_transpose3d
+  '49':
+    file: test/parity/phase49_depends_and_npy_io_test.rb
+    domain: core
+    methods:
+    - test_depends_for_single_array_and_array_list
+    - test_save_and_load_npy
+  '5':
+    file: test/parity/phase5_core_ops_test.rb
+    domain: core
+    methods:
+    - test_random_uniform_with_seed
+    - test_reshape_transpose_and_reductions
+  '50':
+    file: test/parity/phase50_io_formats_test.rb
+    domain: core
+    methods:
+    - test_save_gguf_roundtrip_or_feature_error
+    - test_save_safetensors_roundtrip_or_feature_error
+    - test_savez_methods_roundtrip
+  '51':
+    file: test/parity/phase51_random_core_test.rb
+    domain: core
+    methods:
+    - test_seed_key_and_split
+    - test_uniform_normal_and_randint
+  '52':
+    file: test/parity/phase52_random_extended_test.rb
+    domain: core
+    methods:
+    - test_bernoulli_and_truncated_normal
+    - test_gumbel_categorical_laplace_and_permutation
+    - test_multivariate_normal
+  '53':
+    file: test/parity/phase53_fft_complex_test.rb
+    domain: core
+    methods:
+    - test_fft2_and_nd_transforms
+    - test_fft_ifft_roundtrip
+    - test_fftn_requires_axes_when_shape_given
+  '54':
+    file: test/parity/phase54_fft_real_shift_test.rb
+    domain: core
+    methods:
+    - test_fftshift_and_ifftshift
+    - test_rfft2_rfftn_and_inverse
+    - test_rfft_irfft_roundtrip
+  '55':
+    file: test/parity/phase55_linalg_decompositions_test.rb
+    domain: core
+    methods:
+    - test_norm_variants
+    - test_qr_and_svd
+  '56':
+    file: test/parity/phase56_linalg_solve_inverse_test.rb
+    domain: core
+    methods:
+    - test_cholesky_cholesky_inv_and_pinv
+    - test_inv_solve_and_solve_triangular
+  '57':
+    file: test/parity/phase57_linalg_factor_eigen_test.rb
+    domain: core
+    methods:
+    - test_cross_and_eigen_family
+    - test_lu_and_lu_factor
+  '58':
+    file: test/parity/phase58_runtime_eval_compile_test.rb
+    domain: distributed
+    methods:
+    - test_compile_toggles_exist_and_are_callable
+    - test_eval_and_async_eval_accept_arrays_and_trees
+  '59':
+    file: test/parity/phase59_fast_ops_test.rb
+    domain: core
+    methods:
+    - test_rms_norm_and_layer_norm
+    - test_rope_and_scaled_dot_product_attention
+  '6':
+    file: test/parity/phase6_creation_ops_test.rb
+    domain: core
+    methods:
+    - test_arange_and_linspace
+    - test_zeros_ones_and_astype
+  '60':
+    file: test/parity/phase60_transforms_autodiff_test.rb
+    domain: core
+    methods:
+    - test_compile_checkpoint_and_vmap_return_callable
+    - test_grad_and_value_and_grad
+    - test_jvp_and_vjp
+  '61':
+    file: test/parity/phase61_export_graph_test.rb
+    domain: core
+    methods:
+    - test_export_function_and_import_function_roundtrip
+    - test_exporter_and_export_to_dot
+  '62':
+    file: test/parity/phase62_metal_surface_test.rb
+    domain: core
+    methods:
+    - test_metal_entrypoints
+  '63':
+    file: test/parity/phase63_distributed_surface_test.rb
+    domain: distributed
+    methods:
+    - test_distributed_group_and_collectives
+  '64':
+    file: test/parity/phase64_parity_surface_test.rb
+    domain: core
+    methods:
+    - test_python_vs_ruby_binding_name_parity_is_empty
+    - test_stream_context_and_kernel_surface
+  '65':
+    file: test/parity/phase65_io_npz_load_test.rb
+    domain: core
+    methods:
+    - test_load_npz_roundtrip_from_zipped_npy_files
+  '66':
+    file: test/parity/phase66_io_savez_test.rb
+    domain: core
+    methods:
+    - test_savez_compressed_roundtrip
+    - test_savez_rejects_arr_i_keyword_collision
+    - test_savez_roundtrip_with_args_and_kwargs
+  '67':
+    file: test/parity/phase67_stream_fft_test.rb
+    domain: core
+    methods:
+    - test_fft_family_accepts_stream_or_device_argument
+  '68':
+    file: test/parity/phase68_stream_linalg_fast_dist_test.rb
+    domain: core
+    methods:
+    - test_distributed_collectives_accept_stream
+    - test_linalg_and_fast_accept_stream_or_device
+  '69':
+    file: test/parity/phase69_metal_kernel_test.rb
+    domain: core
+    methods:
+    - test_metal_kernel_surface_and_call_contract
+  '7':
+    file: test/parity/phase7_index_concat_stack_split_test.rb
+    domain: core
+    methods:
+    - test_concatenate_stack_and_split
+    - test_slice_and_array_indexing
+  '70':
+    file: test/parity/phase70_cuda_kernel_surface_test.rb
+    domain: core
+    methods:
+    - test_cuda_kernel_no_longer_not_implemented
+  '71':
+    file: test/parity/phase71_precompiled_cuda_kernel_test.rb
+    domain: distributed
+    methods:
+    - test_precompiled_cuda_kernel_surface
+  '72':
+    file: test/parity/phase72_transforms_argnames_tree_test.rb
+    domain: core
+    methods:
+    - test_grad_supports_keyword_argnames
+    - test_grad_supports_tree_positional_argument
+    - test_value_and_grad_preserves_aux_outputs_with_keyword_grads
+  '73':
+    file: test/parity/phase73_compile_checkpoint_tree_kwargs_test.rb
+    domain: distributed
+    methods:
+    - test_checkpoint_handles_tree_inputs_and_keywords
+    - test_compile_handles_tree_inputs_keywords_and_preserves_structure
+  '74':
+    file: test/parity/phase74_export_kwargs_roundtrip_test.rb
+    domain: core
+    methods:
+    - test_export_function_and_import_function_support_kwargs
+    - test_exporter_supports_kwargs
+  '75':
+    file: test/parity/phase75_custom_function_surface_test.rb
+    domain: core
+    methods:
+    - test_custom_function_callable_surface
+    - test_custom_function_transform_setters_accept_blocks_and_callables
+  '76':
+    file: test/parity/phase76_export_kwargs_only_test.rb
+    domain: core
+    methods:
+    - test_export_and_import_with_kwargs_only_signature
+    - test_exporter_call_with_kwargs_only
+  '77':
+    file: test/parity/phase77_api_inventory_contract_test.rb
+    domain: core
+    methods:
+    - test_api_inventory_generator_writes_contract_artifact
+  '78':
+    file: test/parity/phase78_core_signature_inventory_test.rb
+    domain: core
+    methods:
+    - test_core_signature_inventory_contract
+  '79':
+    file: test/parity/phase79_array_instance_surface_test.rb
+    domain: core
+    methods:
+    - test_array_exposes_python_style_instance_methods
+    - test_array_instance_method_results_match_core_functions
+  '8':
+    file: test/parity/phase8_unary_logical_ops_test.rb
+    domain: core
+    methods:
+    - test_logical_and_comparison_helpers
+    - test_unary_math_ops
+  '80':
+    file: test/parity/phase80_module_presence_test.rb
+    domain: nn
+    methods:
+    - test_top_level_modules_are_present
+    - test_utils_tree_helpers_surface_exists
+  '81':
+    file: test/parity/phase81_build_stability_contract_test.rb
+    domain: core
+    methods:
+    - test_build_stability_contract
+  '82':
+    file: test/parity/phase82_parity_report_artifact_test.rb
+    domain: core
+    methods:
+    - test_consolidated_parity_report_is_generated
+  '83':
+    file: test/parity/phase83_device_type_surface_test.rb
+    domain: core
+    methods:
+    - test_device_type_surface_and_interop
+  '84':
+    file: test/parity/phase84_stream_context_surface_test.rb
+    domain: core
+    methods:
+    - test_stream_block_form_still_works
+    - test_stream_returns_context_object_without_block
+  '85':
+    file: test/parity/phase85_device_equality_compat_test.rb
+    domain: core
+    methods:
+    - test_device_compares_equal_to_device_type_symbols
+  '86':
+    file: test/parity/phase86_array_protocol_compat_test.rb
+    domain: core
+    methods:
+    - test_python_style_protocol_methods_exist_and_work
+  '87':
+    file: test/parity/phase87_array_dunder_arithmetic_test.rb
+    domain: core
+    methods:
+    - test_inplace_dunders_return_arrays
+    - test_integer_dunders_for_bitwise_and_shift
+    - test_right_hand_and_unary_dunders
+  '88':
+    file: test/parity/phase88_array_getsetitem_test.rb
+    domain: core
+    methods:
+    - test_getitem_and_setitem_surface
+  '89':
+    file: test/parity/phase89_array_state_protocol_test.rb
+    domain: core
+    methods:
+    - test_copy_and_state_protocol_surface
+  '9':
+    file: test/parity/phase9_linalg_broadcast_test.rb
+    domain: core
+    methods:
+    - test_broadcast_to_and_broadcast_arrays
+    - test_matmul_and_default_transpose
+  '90':
+    file: test/parity/phase90_array_dlpack_surface_test.rb
+    domain: distributed
+    methods:
+    - test_dlpack_surface_methods_exist
+  '91':
+    file: test/parity/phase91_custom_function_grad_integration_test.rb
+    domain: core
+    methods:
+    - test_custom_function_vjp_overrides_grad_and_value_and_grad
+  '92':
+    file: test/parity/phase92_custom_function_jvp_vjp_integration_test.rb
+    domain: core
+    methods:
+    - test_custom_function_jvp_override_is_used
+    - test_custom_function_vjp_override_is_used
+  '93':
+    file: test/parity/phase93_custom_function_vmap_integration_test.rb
+    domain: core
+    methods:
+    - test_custom_function_vmap_override_is_used
+  '94':
+    file: test/parity/phase94_grad_arg_validation_test.rb
+    domain: core
+    methods:
+    - test_argnums_and_argnames_validation
+    - test_keyword_target_must_be_present_at_call_time
+  '95':
+    file: test/parity/phase95_compile_constant_validation_test.rb
+    domain: distributed
+    methods:
+    - test_compile_accepts_supported_constant_leaves
+    - test_compile_rejects_unsupported_constant_leaf
+  '96':
+    file: test/parity/phase96_utils_tree_map_test.rb
+    domain: core
+    methods:
+    - test_tree_map_basic_and_multi_tree
+    - test_tree_map_is_leaf_override
+  '97':
+    file: test/parity/phase97_utils_tree_map_with_path_test.rb
+    domain: core
+    methods:
+    - test_tree_map_with_path_reports_expected_paths
+  '98':
+    file: test/parity/phase98_array_remaining_surface_test.rb
+    domain: core
+    methods:
+    - test_remaining_python_style_array_methods_are_present
+    - test_remaining_wrappers_delegate_to_core
+  '99':
+    file: test/parity/phase99_array_property_surface_test.rb
+    domain: core
+    methods:
+    - test_property_wrappers_match_expected_behavior
+    - test_remaining_python_style_array_properties_are_present

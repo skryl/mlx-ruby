@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 require_relative "test_helper"
-require_relative "../../tasks/benchmark_task"
-require_relative "../../tasks/examples_models_benchmark_adapter"
+require_relative "../../../tasks/benchmark_task"
+require_relative "../../../tasks/examples_models_benchmark_adapter"
 
 class Phase326WebgpuPythonParityMetricsTest < Minitest::Test
   def setup

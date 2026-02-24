@@ -1,19 +1,21 @@
 # frozen_string_literal: true
 
-ENV["MLX_TEST_TIMEOUT"] = "240"
-
 require "json"
 require "open3"
 require "stringio"
 require "tmpdir"
 require_relative "test_helper"
-require_relative "../../examples/benchmark/transformer_example"
-require_relative "../../examples/benchmark/cnn_example"
-require_relative "../../examples/benchmark/mlp_example"
-require_relative "../../examples/benchmark/rnn_example"
-require_relative "../../examples/benchmark/gpt2mini_example"
+require_relative "../../../examples/benchmark/transformer_example"
+require_relative "../../../examples/benchmark/cnn_example"
+require_relative "../../../examples/benchmark/mlp_example"
+require_relative "../../../examples/benchmark/rnn_example"
+require_relative "../../../examples/benchmark/gpt2mini_example"
 
 class Phase313ModelFixtureWebgpuBrowserParityTest < Minitest::Test
+  def self.current_test_timeout_seconds
+    240
+  end
+
   MODELS = %i[transformer cnn mlp rnn karpathy_gpt2].freeze
 
   def setup
@@ -92,7 +94,7 @@ class Phase313ModelFixtureWebgpuBrowserParityTest < Minitest::Test
         dims: 32,
         num_heads: 4,
         num_layers: 1,
-        repo_root: File.expand_path("../..", __dir__)
+        repo_root: File.expand_path("../../..", __dir__)
       )
       model = example.instance_variable_get(:@model)
       sample_input, = example.send(:batch_for_step, 0)
