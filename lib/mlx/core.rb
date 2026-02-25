@@ -582,19 +582,45 @@ module MLX
       private
 
       def resolve_array_dtype(positional_dtype, keyword_dtype)
-        return keyword_dtype if positional_dtype.nil?
-        return positional_dtype if keyword_dtype.nil?
+        normalized_positional = normalize_dtype_alias(positional_dtype)
+        normalized_keyword = normalize_dtype_alias(keyword_dtype)
+        return normalized_keyword if normalized_positional.nil?
+        return normalized_positional if normalized_keyword.nil?
 
-        if dtype_name_for_compare(positional_dtype) != dtype_name_for_compare(keyword_dtype)
+        if dtype_name_for_compare(normalized_positional) != dtype_name_for_compare(normalized_keyword)
           raise ArgumentError,
                 "array received conflicting dtype arguments (positional=#{positional_dtype.inspect}, keyword=#{keyword_dtype.inspect})"
         end
 
-        positional_dtype
+        normalized_positional
+      end
+
+      def normalize_dtype_alias(dtype)
+        return nil if dtype.nil?
+        return dtype if dtype.respond_to?(:name)
+        return dtype unless dtype.is_a?(::Symbol) || dtype.is_a?(::String)
+
+        case dtype.to_s.strip.downcase
+        when "bool", "bool_"
+          :bool_
+        when "f16", "fp16", "float16"
+          :float16
+        when "bf16", "bfloat16"
+          :bfloat16
+        when "f32", "fp32", "float32"
+          :float32
+        when "f64", "fp64", "float64"
+          :float64
+        when "c64", "complex64"
+          :complex64
+        else
+          dtype
+        end
       end
 
       def dtype_name_for_compare(dtype)
         return nil if dtype.nil?
+        dtype = normalize_dtype_alias(dtype)
 
         if dtype.respond_to?(:name)
           dtype.name.to_s
@@ -1476,6 +1502,10 @@ module MLX
         MLX::Core.negative(self)
       end
 
+      def -@
+        __neg__
+      end
+
       def __pow__(other)
         MLX::Core.power(self, other)
       end
@@ -1544,16 +1574,32 @@ module MLX
         MLX::Core.less(self, other)
       end
 
+      def <(other)
+        __lt__(other)
+      end
+
       def __le__(other)
         MLX::Core.less_equal(self, other)
+      end
+
+      def <=(other)
+        __le__(other)
       end
 
       def __gt__(other)
         MLX::Core.greater(self, other)
       end
 
+      def >(other)
+        __gt__(other)
+      end
+
       def __ge__(other)
         MLX::Core.greater_equal(self, other)
+      end
+
+      def >=(other)
+        __ge__(other)
       end
 
       def __iadd__(other)

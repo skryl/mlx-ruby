@@ -49,6 +49,28 @@ class CoreApiGapRegressionTest < Minitest::Test
     assert_nested_close [2.0, 1.0], (2 / array).to_a
   end
 
+  def test_array_supports_unary_negation_operator
+    array = MLX::Core.array([1.0, -2.0], MLX::Core.float32)
+    assert_nested_close [-1.0, 2.0], (-array).to_a
+  end
+
+  def test_array_supports_comparison_operators
+    array = MLX::Core.array([1.0, 2.0, 3.0], MLX::Core.float32)
+
+    assert_equal [false, false, true], (array > 2.0).to_a
+    assert_equal [true, false, false], (array < 2.0).to_a
+    assert_equal [true, true, false], (array <= 2.0).to_a
+    assert_equal [false, true, true], (array >= 2.0).to_a
+  end
+
+  def test_array_accepts_f32_dtype_alias_strings_from_safetensors_tooling
+    array = MLX::Core.array([1.0, 2.0], "F32")
+    assert_equal :float32, array.dtype.name
+
+    both = MLX::Core.array([3.0, 4.0], "float32", dtype: "F32")
+    assert_equal :float32, both.dtype.name
+  end
+
   private
 
   def assert_nested_close(expected, actual, atol = 1e-5)
