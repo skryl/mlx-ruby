@@ -15,6 +15,17 @@ class WebDemoStableDiffusionWiringTest < Minitest::Test
     assert_includes source, "Stable Diffusion Kanji"
   end
 
+  def test_demo_index_disables_stable_diffusion_link_when_assets_are_missing
+    source = File.read(WEB_INDEX_HTML)
+
+    assert_includes source, 'id="card-stable-diffusion"'
+    assert_includes source, 'id="stable-diffusion-note"'
+    assert_includes source, "configureStableDiffusionCard"
+    assert_includes source, 'new URL("./assets/stable_diffusion/meta.json", baseUrl)'
+    assert_includes source, 'new URL("../assets/stable_diffusion/meta.json", baseUrl)'
+    assert_includes source, "card.removeAttribute(\"href\")"
+  end
+
   def test_stable_diffusion_demo_points_at_stable_diffusion_assets
     main_source = File.read(STABLE_DIFFUSION_MAIN_JS)
     html_source = File.read(STABLE_DIFFUSION_INDEX_HTML)
@@ -30,6 +41,7 @@ class WebDemoStableDiffusionWiringTest < Minitest::Test
     assert_includes main_source, 'executionProviders: [provider]'
     assert_includes main_source, "options.externalData"
     assert_includes main_source, "external_data"
+    assert_includes main_source, "intentionally omit Stable Diffusion checkpoints."
   end
 
   def test_stable_diffusion_demo_exposes_multistep_generate_controls

@@ -378,6 +378,10 @@ bundle exec rake web:assets
 bundle exec rake web:serve
 ```
 
+GitHub Pages note: the published demo site includes GPT-2 and nanoGPT assets,
+but excludes Stable Diffusion checkpoints due size/runtime constraints. Run the
+Stable Diffusion demo locally after `web:assets`.
+
 Then open:
 
 - `http://127.0.0.1:3030/`

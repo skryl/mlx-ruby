@@ -1,0 +1,13 @@
+{
+  "min_binding_defs_total": 400,
+  "min_binding_m_def_total": 250,
+  "required_functions": [
+    "reshape",
+    "value_and_grad",
+    "all_sum",
+    "export_function"
+  ],
+  "min_nn_class_count": 70,
+  "min_python_tests_total": 650,
+  "min_test_ops_cases": 100
+}

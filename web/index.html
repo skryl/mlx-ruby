@@ -59,6 +59,21 @@
         box-shadow: 0 8px 24px rgba(10, 34, 72, 0.13);
       }
 
+      .card.card-disabled {
+        border-style: dashed;
+        border-color: #c9d4e4;
+        background: rgba(250, 252, 255, 0.92);
+        box-shadow: none;
+        opacity: 0.75;
+        cursor: default;
+      }
+
+      .card.card-disabled:hover {
+        transform: none;
+        border-color: #c9d4e4;
+        box-shadow: none;
+      }
+
       .tag {
         display: inline-block;
         padding: 3px 8px;
@@ -81,6 +96,12 @@
         margin-top: 8px;
         line-height: 1.4;
       }
+
+      .card-note {
+        margin-top: 10px;
+        font-size: 13px;
+        color: #5e4a17;
+      }
     </style>
   </head>
   <body>
@@ -102,14 +123,78 @@
             Character-level Tiny Shakespeare text generation using nanoGPT architecture.
           </div>
         </a>
-        <a class="card" href="./demo/stable_diffusion/">
+        <a class="card" id="card-stable-diffusion" href="./demo/stable_diffusion/">
           <span class="tag">Demo</span>
           <div class="title">Stable Diffusion Kanji</div>
           <div class="desc">
             Stable Diffusion Kanji text-to-image pipeline using pretrained Hugging Face weights exported locally to ONNX.
           </div>
+          <div class="card-note" id="stable-diffusion-note" hidden>
+            Local-only on GitHub Pages. Run bundle exec rake web:assets and bundle exec rake web:serve.
+          </div>
         </a>
       </section>
     </main>
+    <script>
+      async function assetExists(path) {
+        try {
+          const response = await fetch(path, { method: "HEAD", cache: "no-store" });
+          if (response.ok) {
+            return true;
+          }
+          if (response.status === 405 || response.status === 501) {
+            const fallback = await fetch(path, { cache: "no-store" });
+            return fallback.ok;
+          }
+          return false;
+        } catch (_error) {
+          return false;
+        }
+      }
+
+      async function stableDiffusionAssetsAvailable() {
+        const baseUrl = window.location.href;
+        const probes = Array.from(
+          new Set([
+            new URL("./assets/stable_diffusion/meta.json", baseUrl).toString(),
+            new URL("../assets/stable_diffusion/meta.json", baseUrl).toString(),
+            new URL("./demo/assets/stable_diffusion/meta.json", baseUrl).toString()
+          ])
+        );
+
+        for (const probe of probes) {
+          if (await assetExists(probe)) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      async function configureStableDiffusionCard() {
+        const card = document.getElementById("card-stable-diffusion");
+        const note = document.getElementById("stable-diffusion-note");
+        if (!card || !note) {
+          return;
+        }
+
+        const stableDiffusionHref = card.getAttribute("href");
+        card.removeAttribute("href");
+
+        if (await stableDiffusionAssetsAvailable()) {
+          if (stableDiffusionHref) {
+            card.setAttribute("href", stableDiffusionHref);
+          }
+          return;
+        }
+
+        card.classList.add("card-disabled");
+        card.setAttribute("aria-disabled", "true");
+        card.setAttribute("title", "Stable Diffusion assets are not published on this host.");
+        card.removeAttribute("href");
+        note.hidden = false;
+      }
+
+      configureStableDiffusionCard();
+    </script>
   </body>
 </html>
