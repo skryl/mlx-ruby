@@ -14,7 +14,7 @@ source = File.read(EXTCONF)
 
 checks = {
   "gguf_disabled" => source.include?("-DMLX_BUILD_GGUF=OFF"),
-  "safetensors_disabled" => source.include?("-DMLX_BUILD_SAFETENSORS=OFF"),
+  "safetensors_enabled" => source.include?("-DMLX_BUILD_SAFETENSORS=ON"),
   "configure_retry_present" => source.include?("initial CMake configure failed"),
   "retry_cleans_build_root" => source.include?("FileUtils.rm_rf(build_root)")
 }

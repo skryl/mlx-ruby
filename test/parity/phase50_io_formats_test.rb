@@ -19,14 +19,10 @@ class Phase50IoFormatsTest < Minitest::Test
     TestSupport.mktmpdir do |dir|
       path = File.join(dir, "weights.safetensors")
 
-      begin
-        MLX::Core.save_safetensors(path, { "x" => x }, { "note" => "ok" })
-        arrays, metadata = MLX::Core.load(path, "safetensors", true)
-        assert MLX::Core.array_equal(x, arrays["x"])
-        assert_equal "ok", metadata["note"] if metadata.key?("note")
-      rescue RuntimeError => e
-        assert_match(/SAFETENSORS|safetensors/i, e.message)
-      end
+      MLX::Core.save_safetensors(path, { "x" => x }, { "note" => "ok" })
+      arrays, metadata = MLX::Core.load(path, "safetensors", true)
+      assert MLX::Core.array_equal(x, arrays["x"])
+      assert_equal "ok", metadata["note"]
     end
   end
 

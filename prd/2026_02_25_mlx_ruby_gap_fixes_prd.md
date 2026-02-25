@@ -2,7 +2,7 @@
 
 - Date: 2026-02-25
 - Owner: Codex + @skryl
-- Status: Completed
+- Status: Completed (amended 2026-02-25 for safetensors default-on follow-up)
 - Scope Type: Upstream `mlx-ruby` compatibility and ergonomics
 
 ## 1) Problem Statement
@@ -27,7 +27,7 @@ Most impactful categories:
 
 1. Rewriting `mlx-ruby-lm` model architectures in this PRD.
 2. Full MoE feature parity beyond scoped API fixes (for example complete `SwitchGLU` implementation in this pass unless separately approved).
-3. Changing CI packaging defaults unless explicitly approved (for example enabling safetensors at build time in all environments).
+3. Changing CI packaging defaults unless explicitly approved.
 
 ## 4) Scope Matrix (From Reported Issues)
 
@@ -39,13 +39,13 @@ Most impactful categories:
 4. Confirm/patch `update_modules_impl` recursion for `Module -> Hash/Array` replacement path.
 5. Add ONNX lowering coverage for `GreaterEqual` (Issue 14).
 6. Strengthen docs on module child registration (`self.x = ...` vs `@x = ...`).
+7. Enable `MLX_BUILD_SAFETENSORS=ON` in this repo's native build defaults and require safetensors roundtrip tests to pass.
 
 ## 4.2 Out of Scope (tracked, not implemented in this PRD unless requested)
 
 1. Add `SwitchGLU` layer implementation.
-2. Force-enable `MLX_BUILD_SAFETENSORS=ON` as the default build setting.
-3. Dropout constructor API expansion (`Dropout.new(p: ...)`) unless explicitly requested for compatibility.
-4. Integer dtype support in `random_uniform` unless upstream MLX behavior and API contract are aligned for deterministic semantics.
+2. Dropout constructor API expansion (`Dropout.new(p: ...)`) unless explicitly requested for compatibility.
+3. Integer dtype support in `random_uniform` unless upstream MLX behavior and API contract are aligned for deterministic semantics.
 
 ## 5) Detailed Requirements
 
@@ -112,6 +112,7 @@ Most impactful categories:
 
 - [x] Run targeted tests for touched files/features.
 - [x] Run broader suite covering core/nn/onnx touched areas.
+- [x] Safetensors default-on follow-up: flip build flag and verify native safetensors roundtrip behavior in parity tests.
 - [x] Update PRD status to `Completed` only when all checklist items are done.
 
 ## 6.1) Baseline Repro Notes (2026-02-25)
@@ -168,4 +169,4 @@ Completion sweep:
 
 1. Should `Dropout.new(p: 0.5)` keyword support be included now or deferred?
 2. Should integer `random_uniform` support be emulated in Ruby or left as explicit unsupported behavior?
-3. Should safetensors default build flags be changed in CI/release pipelines in this effort?
+3. Should safetensors default build flags be changed in CI/release pipelines in this effort? Resolved for this repo on 2026-02-25: native build default switched to `MLX_BUILD_SAFETENSORS=ON`.

@@ -45,16 +45,18 @@ class Phase171ModuleLoadSaveWeightsTest < Minitest::Test
     mod = WeightsModule.new
 
     TestSupport.mktmpdir("mlx-ruby-weights") do |dir|
-      path = File.join(dir, "weights.npz")
-      mod.save_weights(path)
+      ["weights.npz", "weights.safetensors"].each do |filename|
+        path = File.join(dir, filename)
+        mod.save_weights(path)
 
-      other = WeightsModule.new
-      other.weight = MLX::Core.array([[0.0, 0.0], [0.0, 0.0]], MLX::Core.float32)
-      other.bias = MLX::Core.array([0.0, 0.0], MLX::Core.float32)
-      other.load_weights(path, strict: true)
+        other = WeightsModule.new
+        other.weight = MLX::Core.array([[0.0, 0.0], [0.0, 0.0]], MLX::Core.float32)
+        other.bias = MLX::Core.array([0.0, 0.0], MLX::Core.float32)
+        other.load_weights(path, strict: true)
 
-      assert_nested_close mod.weight.to_a, other.weight.to_a
-      assert_nested_close mod.bias.to_a, other.bias.to_a
+        assert_nested_close mod.weight.to_a, other.weight.to_a
+        assert_nested_close mod.bias.to_a, other.bias.to_a
+      end
     end
   end
 
