@@ -49,12 +49,8 @@ class Phase250LoadSaveEdgeParityTest < Minitest::Test
       transposed = MLX::Core.swapaxes(MLX::Core.reshape(MLX::Core.arange(0, 4, 1, MLX::Core.int32), [2, 2]), 0, 1)
 
       safetensors = File.join(dir, "a.safetensors")
-      begin
-        MLX::Core.save_safetensors(safetensors, {"a" => transposed})
-        assert MLX::Core.array_equal(transposed, MLX::Core.load(safetensors)["a"])
-      rescue RuntimeError => e
-        assert_match(/SAFETENSORS|safetensors/i, e.message)
-      end
+      MLX::Core.save_safetensors(safetensors, {"a" => transposed})
+      assert MLX::Core.array_equal(transposed, MLX::Core.load(safetensors)["a"])
 
       gguf = File.join(dir, "a.gguf")
       begin

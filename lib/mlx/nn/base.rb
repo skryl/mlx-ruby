@@ -323,6 +323,8 @@ module MLX
               current_value = dst[k]
               if current_value.is_a?(Module) && new_value.is_a?(Module)
                 dst[k] = new_value
+              elsif current_value.is_a?(Module) && (new_value.is_a?(Hash) || new_value.is_a?(Array))
+                update_modules_impl(current_value, new_value, strict)
               elsif current_value.is_a?(Hash) || current_value.is_a?(Array)
                 update_modules_impl(current_value, new_value, strict)
               elsif strict && new_value != {}
@@ -337,6 +339,8 @@ module MLX
             current_value = dst[i]
             if current_value.is_a?(Module) && new_value.is_a?(Module)
               dst[i] = new_value
+            elsif current_value.is_a?(Module) && (new_value.is_a?(Hash) || new_value.is_a?(Array))
+              update_modules_impl(current_value, new_value, strict)
             elsif current_value.is_a?(Hash) || current_value.is_a?(Array)
               update_modules_impl(current_value, new_value, strict)
             elsif strict && new_value != {}

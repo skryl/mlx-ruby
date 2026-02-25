@@ -17,7 +17,7 @@ class Phase81BuildStabilityContractTest < Minitest::Test
     checks = payload.fetch("checks")
 
     assert_equal true, checks.fetch("gguf_disabled")
-    assert_equal true, checks.fetch("safetensors_disabled")
+    assert_equal true, checks.fetch("safetensors_enabled")
     assert_equal true, checks.fetch("configure_retry_present")
     assert_equal true, checks.fetch("retry_cleans_build_root")
   end
