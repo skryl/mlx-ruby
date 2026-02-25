@@ -90,6 +90,44 @@ def patch_mlx_onnx_gcc_optional_shape_initlist!(mlx_onnx_root)
   puts "patched mlx-onnx lowering.cpp optional Shape initlists for GCC compatibility"
 end
 
+def patch_mlx_onnx_greater_equal_support!(mlx_onnx_root)
+  mappings_cpp = File.join(mlx_onnx_root, "src", "mappings.cpp")
+  lowering_cpp = File.join(mlx_onnx_root, "src", "lowering.cpp")
+  return unless File.file?(mappings_cpp) && File.file?(lowering_cpp)
+
+  mappings_source = File.read(mappings_cpp)
+  mappings_patched = mappings_source
+  unless mappings_patched.include?('{"GreaterEqual", "GreaterOrEqual"}')
+    target = '{"Greater", "Greater"},'
+    replacement = <<~TEXT.chomp
+      {"Greater", "Greater"},
+          {"GreaterEqual", "GreaterOrEqual"},
+    TEXT
+    mappings_patched = mappings_patched.sub(target, replacement)
+  end
+  mappings_patched = mappings_patched.sub(
+    "constexpr std::array<std::pair<const char*, const char*>, 54> kOnnxOpPairs = {{",
+    "constexpr std::array<std::pair<const char*, const char*>, 55> kOnnxOpPairs = {{"
+  )
+
+  if mappings_patched != mappings_source
+    File.write(mappings_cpp, mappings_patched)
+    puts "patched mlx-onnx mappings.cpp to support GreaterEqual -> GreaterOrEqual"
+  end
+
+  lowering_source = File.read(lowering_cpp)
+  lowering_patched = lowering_source
+  lowering_patched = lowering_patched.sub(
+    'if (op == "Greater" || op == "Less") {',
+    'if (op == "Greater" || op == "Less" || op == "GreaterEqual") {'
+  )
+
+  return if lowering_patched == lowering_source
+
+  File.write(lowering_cpp, lowering_patched)
+  puts "patched mlx-onnx lowering.cpp to support GreaterEqual dtype promotion/lowering"
+end
+
 def rpath_flag(path)
   case RUBY_PLATFORM
   when /darwin/
@@ -210,6 +248,7 @@ jobs = [Etc.nprocessors, 1].max
 
 enforce_mlx_onnx_compatibility!(mlx_root: mlx_root, mlx_onnx_root: mlx_onnx_root)
 patch_mlx_onnx_gcc_optional_shape_initlist!(mlx_onnx_root)
+patch_mlx_onnx_greater_equal_support!(mlx_onnx_root)
 if ENV["MLX_EXTCONF_VALIDATE_ONLY"] == "1"
   puts "mlx-onnx compatibility check passed"
   exit 0

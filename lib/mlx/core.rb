@@ -335,6 +335,8 @@ module MLX
       alias_method :native_vmap, :vmap if method_defined?(:vmap) && !method_defined?(:native_vmap)
       alias_method :native_export_to_dot,
                    :export_to_dot if method_defined?(:export_to_dot) && !method_defined?(:native_export_to_dot)
+      alias_method :native_array, :array if method_defined?(:array) && !method_defined?(:native_array)
+      alias_method :native_mean, :mean if method_defined?(:mean) && !method_defined?(:native_mean)
 
       %i[savez savez_compressed].each do |method_name|
         if method_defined?(method_name) && instance_method(method_name).owner == self
@@ -343,6 +345,24 @@ module MLX
       end
 
       ARRAY_LEAF = :__mlx_array_leaf__
+
+      def array(value, positional_dtype = nil, dtype: nil)
+        ensure_native!
+        target_dtype = resolve_array_dtype(positional_dtype, dtype)
+        native_array(value, target_dtype)
+      end
+
+      def mean(array, axis = nil, positional_keepdims = nil, keepdims: nil)
+        ensure_native!
+        keepdims_v = resolve_keepdims_argument(positional_keepdims, keepdims)
+        reduced = reduce_mean(array, axis)
+        return reduced unless keepdims_v
+
+        normalize_reduction_axes(array, axis).each do |axis_index|
+          reduced = expand_dims(reduced, axis_index)
+        end
+        reduced
+      end
 
       def load(file, format = nil, return_metadata = false)
         ensure_native!
@@ -560,6 +580,71 @@ module MLX
       end
 
       private
+
+      def resolve_array_dtype(positional_dtype, keyword_dtype)
+        return keyword_dtype if positional_dtype.nil?
+        return positional_dtype if keyword_dtype.nil?
+
+        if dtype_name_for_compare(positional_dtype) != dtype_name_for_compare(keyword_dtype)
+          raise ArgumentError,
+                "array received conflicting dtype arguments (positional=#{positional_dtype.inspect}, keyword=#{keyword_dtype.inspect})"
+        end
+
+        positional_dtype
+      end
+
+      def dtype_name_for_compare(dtype)
+        return nil if dtype.nil?
+
+        if dtype.respond_to?(:name)
+          dtype.name.to_s
+        else
+          dtype.to_s
+        end
+      end
+
+      def resolve_keepdims_argument(positional_keepdims, keyword_keepdims)
+        if !positional_keepdims.nil? && !keyword_keepdims.nil? && !!positional_keepdims != !!keyword_keepdims
+          raise ArgumentError,
+                "mean received conflicting keepdims arguments (positional=#{positional_keepdims.inspect}, keyword=#{keyword_keepdims.inspect})"
+        end
+        return !!keyword_keepdims unless keyword_keepdims.nil?
+        return !!positional_keepdims unless positional_keepdims.nil?
+
+        false
+      end
+
+      def reduce_mean(array, axis)
+        if axis.is_a?(::Array)
+          normalize_reduction_axes(array, axis).reverse_each.reduce(array) do |acc, axis_index|
+            native_mean(acc, axis_index)
+          end
+        else
+          native_mean(array, axis)
+        end
+      end
+
+      def normalize_reduction_axes(array, axis)
+        ndim = array.ndim
+        return (0...ndim).to_a if axis.nil?
+
+        raw_axes = axis.is_a?(::Array) ? axis : [axis]
+        axes = raw_axes.map { |entry| normalize_axis_index(entry, ndim) }.sort
+        raise ArgumentError, "axis contains duplicate values: #{raw_axes.inspect}" if axes.uniq.length != axes.length
+
+        axes
+      end
+
+      def normalize_axis_index(axis, ndim)
+        raise TypeError, "axis entries must be Integer" unless axis.is_a?(::Integer)
+
+        out = axis
+        out += ndim if out.negative?
+        if out.negative? || out >= ndim
+          raise ArgumentError, "axis #{axis} is out of bounds for array of dimension #{ndim}"
+        end
+        out
+      end
 
       def infer_format(file)
         path = file_path(file)
@@ -1118,8 +1203,8 @@ module MLX
         MLX::Core.cos(self)
       end
 
-      def mean(axis = nil)
-        MLX::Core.mean(self, axis)
+      def mean(axis = nil, keepdims_positional = nil, keepdims: nil)
+        MLX::Core.mean(self, axis, keepdims_positional, keepdims: keepdims)
       end
 
       def sum(axis = nil)
@@ -1521,6 +1606,16 @@ module MLX
 
       def __rfloordiv__(other)
         MLX::Core.floor_divide(other, self)
+      end
+
+      def coerce(other)
+        if other.is_a?(MLX::Core::Array)
+          [other, self]
+        elsif other.is_a?(::Numeric)
+          [MLX::Core.array(other, dtype), self]
+        else
+          raise TypeError, "#{other.class} can't be coerced into MLX::Core::Array"
+        end
       end
 
       def __getitem__(index)

@@ -60,7 +60,10 @@ Key methods:
 - Persistence: ``save_weights``, ``load_weights``
 
 Important pattern: register trainable members with ``self.<name> = ...`` so
-they are tracked by module state and optimizer updates.
+they are tracked by module state and optimizer updates. Direct ivar assignment
+(``@name = ...``) bypasses module-state registration and those members will be
+missed by traversal helpers (for example ``children``/``parameters``),
+``load_weights``, and quantization updates.
 
 See implementation:
 
@@ -126,6 +129,10 @@ Graph IR / ONNX / WebGPU entry points in ``MLX::ONNX``:
 - ``export_onnx_compatibility_report``
 - ``MLX::ONNX::WebGPUHarness.export_onnx_webgpu_harness``
 - ``MLX::ONNX::WebGPUHarness.smoke_test_onnx_webgpu_harness``
+
+``save_safetensors`` requires a native MLX build with
+``MLX_BUILD_SAFETENSORS=ON``. If safetensors support is unavailable, use
+``savez``/``savez_compressed`` or a Ruby safetensors serializer fallback.
 
 .. _distributed:
 
