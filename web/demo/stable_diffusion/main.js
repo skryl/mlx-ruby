@@ -90,7 +90,7 @@ function missingAssetsMessage() {
   const probes = ASSET_ROOT_CANDIDATES.map((candidate) => `${candidate}/meta.json`);
   return [
     "Demo assets were not found on this host.",
-    "GitHub Pages deployments for this project intentionally omit Stable Diffusion checkpoints.",
+    "Stable Diffusion demo assets are required to run this page.",
     "Checked:",
     ...probes.map((probe) => `- ${probe}`),
     "Run `bundle exec rake web:assets` and serve with `bundle exec rake web:serve`."

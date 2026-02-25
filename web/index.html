@@ -130,7 +130,7 @@
             Stable Diffusion Kanji text-to-image pipeline using pretrained Hugging Face weights exported locally to ONNX.
           </div>
           <div class="card-note" id="stable-diffusion-note" hidden>
-            Local-only on GitHub Pages. Run bundle exec rake web:assets and bundle exec rake web:serve.
+            Stable Diffusion assets are unavailable on this host. Run bundle exec rake web:assets and bundle exec rake web:serve.
           </div>
         </a>
       </section>
@@ -189,7 +189,7 @@
 
         card.classList.add("card-disabled");
         card.setAttribute("aria-disabled", "true");
-        card.setAttribute("title", "Stable Diffusion assets are not published on this host.");
+        card.setAttribute("title", "Stable Diffusion assets are unavailable on this host.");
         card.removeAttribute("href");
         note.hidden = false;
       }

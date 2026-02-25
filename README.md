@@ -378,9 +378,9 @@ bundle exec rake web:assets
 bundle exec rake web:serve
 ```
 
-GitHub Pages note: the published demo site includes GPT-2 and nanoGPT assets,
-but excludes Stable Diffusion checkpoints due size/runtime constraints. Run the
-Stable Diffusion demo locally after `web:assets`.
+GitHub Pages note: the published demo site includes GPT-2, nanoGPT, and Stable
+Diffusion assets. The Stable Diffusion page may take longer to initialize due
+to larger model files.
 
 Then open:
 

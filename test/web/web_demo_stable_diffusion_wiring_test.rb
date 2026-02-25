@@ -5,6 +5,7 @@ require_relative "../support/test_helper"
 class WebDemoStableDiffusionWiringTest < Minitest::Test
   WEB_INDEX_HTML = File.join(RUBY_ROOT, "web", "index.html")
   WEB_TASK = File.join(RUBY_ROOT, "tasks", "web_task.rb")
+  BUILD_DOCS_ACTION = File.join(RUBY_ROOT, ".github", "actions", "build-docs", "action.yml")
   STABLE_DIFFUSION_INDEX_HTML = File.join(RUBY_ROOT, "web", "demo", "stable_diffusion", "index.html")
   STABLE_DIFFUSION_MAIN_JS = File.join(RUBY_ROOT, "web", "demo", "stable_diffusion", "main.js")
 
@@ -24,6 +25,7 @@ class WebDemoStableDiffusionWiringTest < Minitest::Test
     assert_includes source, 'new URL("./assets/stable_diffusion/meta.json", baseUrl)'
     assert_includes source, 'new URL("../assets/stable_diffusion/meta.json", baseUrl)'
     assert_includes source, "card.removeAttribute(\"href\")"
+    assert_includes source, "Stable Diffusion assets are unavailable on this host."
   end
 
   def test_stable_diffusion_demo_points_at_stable_diffusion_assets
@@ -41,7 +43,15 @@ class WebDemoStableDiffusionWiringTest < Minitest::Test
     assert_includes main_source, 'executionProviders: [provider]'
     assert_includes main_source, "options.externalData"
     assert_includes main_source, "external_data"
-    assert_includes main_source, "intentionally omit Stable Diffusion checkpoints."
+    assert_includes main_source, "Stable Diffusion demo assets are required to run this page."
+  end
+
+  def test_pages_build_action_exports_and_publishes_stable_diffusion_assets
+    source = File.read(BUILD_DOCS_ACTION)
+    assert_includes source, "WEB_ASSETS_TARGETS: gpt2,nanogpt,stable_diffusion"
+    assert_includes source, "test -f web/assets/stable_diffusion/meta.json"
+    assert_includes source, 'test -f "${site_dir}/demo/assets/stable_diffusion/meta.json"'
+    refute_includes source, '--exclude "assets/stable_diffusion/"'
   end
 
   def test_stable_diffusion_demo_exposes_multistep_generate_controls

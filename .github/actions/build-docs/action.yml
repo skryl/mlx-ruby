@@ -25,7 +25,7 @@ runs:
     - name: Build native extension and generate web demo assets
       shell: bash
       env:
-        WEB_ASSETS_TARGETS: gpt2,nanogpt
+        WEB_ASSETS_TARGETS: gpt2,nanogpt,stable_diffusion
       run: |
         set -euo pipefail
         source .venv/bin/activate
@@ -35,6 +35,10 @@ runs:
         test -f web/assets/gpt2/meta.json
         test -f web/assets/nanogpt/model.onnx
         test -f web/assets/nanogpt/meta.json
+        test -f web/assets/stable_diffusion/text_encoder.onnx
+        test -f web/assets/stable_diffusion/unet.onnx
+        test -f web/assets/stable_diffusion/vae_decoder.onnx
+        test -f web/assets/stable_diffusion/meta.json
   
     - name: Build documentation
       shell: bash
@@ -59,7 +63,6 @@ runs:
         mkdir -p "${site_dir}/demo"
         rsync -a \
           --exclude "node_modules" \
-          --exclude "assets/stable_diffusion/" \
           --exclude "assets/*/weights/" \
           --exclude ".DS_Store" \
           web/ "${site_dir}/demo/"
@@ -69,6 +72,7 @@ runs:
         test -f "${site_dir}/demo/index.html"
         test -f "${site_dir}/demo/assets/gpt2/meta.json"
         test -f "${site_dir}/demo/assets/nanogpt/meta.json"
+        test -f "${site_dir}/demo/assets/stable_diffusion/meta.json"
 
     - name: Upload Pages artifact
       uses: actions/upload-pages-artifact@v3
