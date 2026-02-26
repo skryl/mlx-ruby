@@ -79,6 +79,8 @@ Direct op mapping table
      - ``Cast``
    * - ``Exp``
      - ``Exp``
+   * - ``Expm1``
+     - ``Exp + Sub decomposition``
    * - ``Log``
      - ``Log``
    * - ``Sin``
@@ -87,6 +89,8 @@ Direct op mapping table
      - ``Cos``
    * - ``Erf``
      - ``Erf``
+   * - ``ErfInv``
+     - ``ErfInv``
    * - ``Sqrt``
      - ``Sqrt``
    * - ``Abs``
@@ -101,18 +105,28 @@ Direct op mapping table
      - ``Sigmoid``
    * - ``Tanh``
      - ``Tanh``
+   * - ``LayerNorm``
+     - ``LayerNormalization``
    * - ``Softmax``
      - ``Softmax``
    * - ``Greater``
      - ``Greater``
+   * - ``GreaterEqual``
+     - ``GreaterOrEqual``
    * - ``Less``
      - ``Less``
+   * - ``LessEqual``
+     - ``LessOrEqual``
    * - ``Equal``
      - ``Equal``
+   * - ``LogicalAnd``
+     - ``And``
    * - ``Select``
      - ``Where``
    * - ``Full``
      - ``Identity``
+   * - ``RandomBits``
+     - ``RandomUniform``
    * - ``Matmul``
      - ``MatMul``
    * - ``Reshape``
@@ -129,10 +143,16 @@ Direct op mapping table
      - ``Unsqueeze``
    * - ``Broadcast``
      - ``Expand``
+   * - ``BitwiseBinary``
+     - ``BitwiseAnd / BitwiseOr / BitwiseXor / BitShift``
    * - ``Arange``
      - ``Constant``
+   * - ``ArgPartition``
+     - ``TopK (indices output cast to uint32)``
    * - ``AsStrided``
      - ``Gather``
+   * - ``RoPE``
+     - ``Identity``
    * - ``Concatenate``
      - ``Concat``
    * - ``Convolution``
@@ -143,10 +163,16 @@ Direct op mapping table
      - ``Gather``
    * - ``GatherAxis``
      - ``GatherElements``
+   * - ``GatherMM``
+     - ``Reshape + Gather + MatMul decomposition``
    * - ``Slice``
      - ``Slice``
+   * - ``SliceUpdate``
+     - ``ScatterND``
    * - ``Split``
      - ``Split``
+   * - ``LogAddExp``
+     - ``Max + Sub + Exp + Add + Log + Add decomposition``
    * - ``LogSumExp``
      - ``ReduceLogSumExp``
    * - ``Pad``
