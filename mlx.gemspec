@@ -25,7 +25,11 @@ Gem::Specification.new do |spec|
       "submodules/mlx/CMakeLists.txt",
       "submodules/mlx/mlx.pc.in",
       "submodules/mlx/cmake/**/*",
-      "submodules/mlx/mlx/**/*"
+      "submodules/mlx/mlx/**/*",
+      "submodules/mlx-onnx/CMakeLists.txt",
+      "submodules/mlx-onnx/LICENSE",
+      "submodules/mlx-onnx/include/**/*",
+      "submodules/mlx-onnx/src/**/*"
     ]
 
     Dir.glob(include_globs, File::FNM_DOTMATCH)

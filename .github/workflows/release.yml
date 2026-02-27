@@ -47,6 +47,10 @@ jobs:
         env:
           RUBYOPT: -W:deprecated -W:performance
         run: bundle exec rake test:all
+      - name: Smoke test packaged gem install and load
+        env:
+          TEST: test/gem/gem_test.rb
+        run: bundle exec rake test:gem
       - name: Show Ruby crash report (if present)
         if: always()
         run: |
